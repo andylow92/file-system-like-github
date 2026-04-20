@@ -34,13 +34,19 @@ function collectFilePaths(nodes: FileNode[]): string[] {
   });
 }
 
+function addFileToRoot(nodes: FileNode[], path: string): FileNode[] {
+  const name = path.split('/').at(-1) ?? path;
+  return [...nodes, { name, path, isDirectory: false }];
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewerTabKey>('preview');
+  const [tree, setTree] = useState<FileNode[]>(initialTree);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [savedContents, setSavedContents] = useState<Record<string, string>>(initialContents);
   const [draftContents, setDraftContents] = useState<Record<string, string>>({});
 
-  const allFilePaths = useMemo(() => collectFilePaths(demoTree), []);
+  const allFilePaths = useMemo(() => collectFilePaths(tree), [tree]);
 
   const currentSavedMarkdown = selectedFilePath ? savedContents[selectedFilePath] ?? '' : '';
   const currentDraftMarkdown = selectedFilePath
@@ -104,7 +110,7 @@ export function App() {
   return (
     <div className="layout">
       <FileTreeSidebar
-        tree={demoTree}
+        tree={tree}
         activeFilePath={selectedFilePath}
         onSelectFile={(nextPath) => {
           if (selectedFilePath && isCurrentFileDirty && selectedFilePath !== nextPath) {
@@ -123,7 +129,12 @@ export function App() {
           }
 
           setSelectedFilePath(nextPath);
-          if (allFilePaths.includes(nextPath) && !savedContents[nextPath]) {
+
+          if (!allFilePaths.includes(nextPath)) {
+            setTree((current) => addFileToRoot(current, nextPath));
+          }
+
+          if (!savedContents[nextPath]) {
             setSavedContents((current) => ({ ...current, [nextPath]: '' }));
           }
         }}
