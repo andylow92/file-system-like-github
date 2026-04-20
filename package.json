@@ -1,0 +1,13 @@
+{
+  "name": "file-system-like-github",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @repo/web run dev",
+    "dev:api": "npm --workspace @repo/api run dev",
+    "build": "npm run -ws build"
+  }
+}
