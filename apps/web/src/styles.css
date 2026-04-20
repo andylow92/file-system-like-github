@@ -13,8 +13,9 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 320px 1fr;
   min-height: 100vh;
+  position: relative;
 }
 
 .left-panel {
@@ -27,19 +28,128 @@ body {
   padding: 1.5rem;
 }
 
-.tabs {
-  display: flex;
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
+.primary-btn,
+.danger-btn,
+.save-btn,
+.inline-form-actions button,
+.tree-item button,
+.tree-item a,
 .tab {
   border: 1px solid #d1d5db;
   background: white;
   color: #374151;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.7rem;
   border-radius: 0.5rem;
   cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+}
+
+.save-btn {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.danger-btn {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.primary-btn:focus-visible,
+.danger-btn:focus-visible,
+.save-btn:focus-visible,
+.inline-form-actions button:focus-visible,
+.tree-item button:focus-visible,
+.tree-item a:focus-visible,
+.tab:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.inline-form {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.inline-form label {
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 0.3rem;
+}
+
+.inline-form input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.inline-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.validation-msg {
+  margin: 0.4rem 0 0;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.tree {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tree-item button,
+.tree-item a {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+}
+
+.tree-item.selected {
+  background: #eff6ff;
+  border-radius: 0.5rem;
+}
+
+.onboarding-panel {
+  border: 1px dashed #93c5fd;
+  border-radius: 0.5rem;
+  padding: 0.9rem;
+  background: #f8fbff;
+}
+
+.onboarding-panel h3 {
+  margin-top: 0;
+}
+
+.loading-text {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .tab.active {
@@ -51,4 +161,35 @@ body {
 .tab-content textarea {
   width: 100%;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tab-content pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.toast {
+  color: white;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  min-width: 220px;
+}
+
+.toast.success {
+  background: #047857;
+}
+
+.toast.error {
+  background: #b91c1c;
 }
