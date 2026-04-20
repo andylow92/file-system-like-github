@@ -1,107 +1,162 @@
-import { useEffect, useState } from 'react';
-import { Route, Routes, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import type { FileNode } from '@repo/shared';
-import { GlobalLayout } from './components/GlobalLayout';
-import { TabView } from './components/TabView';
+import { FileTreeSidebar } from './components/FileTreeSidebar';
+import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
+import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
+import { RichTextEditorPane } from './components/RichTextEditorPane';
 
 const initialTree: FileNode[] = [
   {
     name: 'docs',
     path: 'docs',
     isDirectory: true,
-    children: [{ name: 'welcome.md', path: 'docs/welcome.md', isDirectory: false }],
+    children: [
+      { name: 'welcome.md', path: 'docs/welcome.md', isDirectory: false },
+      { name: 'getting-started.md', path: 'docs/getting-started.md', isDirectory: false },
+    ],
   },
   { name: 'README.md', path: 'README.md', isDirectory: false },
 ];
 
-function useFilePathFromRoute() {
-  const { filePath } = useParams();
-  return filePath ? decodeURIComponent(filePath) : '';
-}
+const initialContents: Record<string, string> = {
+  'README.md': '# Project\nA simple markdown workspace.',
+  'docs/welcome.md': '# Welcome\n- Browse files\n- Preview markdown\n- Edit and save',
+  'docs/getting-started.md': '',
+};
 
-function Workspace() {
-  const routeFilePath = useFilePathFromRoute();
-  const [tree, setTree] = useState<FileNode[]>([]);
-  const [treeLoading, setTreeLoading] = useState(true);
-  const [selectedFilePath, setSelectedFilePath] = useState(routeFilePath || 'README.md');
-  const [fileLoading, setFileLoading] = useState(false);
-  const [fileContent, setFileContent] = useState('# Welcome\nChoose or create a file.');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setTree(initialTree);
-      setTreeLoading(false);
-    }, 700);
-
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!routeFilePath) {
-      return;
+function collectFilePaths(nodes: FileNode[]): string[] {
+  return nodes.flatMap((node) => {
+    if (!node.isDirectory) {
+      return [node.path];
     }
 
-    setSelectedFilePath(routeFilePath);
-  }, [routeFilePath]);
-
-  useEffect(() => {
-    if (!selectedFilePath) {
-      return;
-    }
-
-    setFileLoading(true);
-    const timer = window.setTimeout(() => {
-      setFileContent(`# ${selectedFilePath}\n\nLoaded file content for editing.`);
-      setFileLoading(false);
-    }, 650);
-
-    return () => window.clearTimeout(timer);
-  }, [selectedFilePath]);
-
-  return (
-    <GlobalLayout
-      tree={tree}
-      treeLoading={treeLoading}
-      selectedFilePath={selectedFilePath}
-      onSelectFile={setSelectedFilePath}
-      onTreeChange={setTree}
-      onSave={() => {
-        // Pretend the save call succeeded. Toast feedback lives in GlobalLayout.
-      }}
-    >
-      <TabView
-        preview={
-          fileLoading ? (
-            <p className="loading-text">Loading file preview...</p>
-          ) : (
-            <article>
-              <h3>{selectedFilePath || 'No file selected'}</h3>
-              <pre>{fileContent}</pre>
-            </article>
-          )
-        }
-        edit={
-          fileLoading ? (
-            <p className="loading-text">Loading file editor...</p>
-          ) : (
-            <textarea
-              value={fileContent}
-              onChange={(event) => setFileContent(event.target.value)}
-              rows={12}
-              aria-label="File editor"
-            />
-          )
-        }
-      />
-    </GlobalLayout>
-  );
+    return collectFilePaths(node.children ?? []);
+  });
 }
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<ViewerTabKey>('preview');
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [savedContents, setSavedContents] = useState<Record<string, string>>(initialContents);
+  const [draftContents, setDraftContents] = useState<Record<string, string>>({});
+
+  const allFilePaths = useMemo(() => collectFilePaths(demoTree), []);
+
+  const currentSavedMarkdown = selectedFilePath ? savedContents[selectedFilePath] ?? '' : '';
+  const currentDraftMarkdown = selectedFilePath
+    ? draftContents[selectedFilePath] ?? currentSavedMarkdown
+    : '';
+
+  const hasUnsavedChanges = useMemo(
+    () =>
+      Object.keys(draftContents).some(
+        (path) => (draftContents[path] ?? '') !== (savedContents[path] ?? ''),
+      ),
+    [draftContents, savedContents],
+  );
+
+  const isCurrentFileDirty = selectedFilePath
+    ? currentDraftMarkdown !== currentSavedMarkdown
+    : false;
+
+  const saveCurrentFile = () => {
+    if (!selectedFilePath || !isCurrentFileDirty) {
+      return;
+    }
+
+    setSavedContents((current) => ({ ...current, [selectedFilePath]: currentDraftMarkdown }));
+    setDraftContents((current) => {
+      const next = { ...current };
+      delete next[selectedFilePath];
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isSaveHotkey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
+      if (!isSaveHotkey) {
+        return;
+      }
+
+      event.preventDefault();
+      saveCurrentFile();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   return (
-    <Routes>
-      <Route path="/" element={<Workspace />} />
-      <Route path="/file/:filePath" element={<Workspace />} />
-    </Routes>
+    <div className="layout">
+      <FileTreeSidebar
+        tree={demoTree}
+        activeFilePath={selectedFilePath}
+        onSelectFile={(nextPath) => {
+          if (selectedFilePath && isCurrentFileDirty && selectedFilePath !== nextPath) {
+            const shouldDiscard = window.confirm(
+              'You have unsaved changes. Switch files and discard edits?',
+            );
+            if (!shouldDiscard) {
+              return;
+            }
+
+            setDraftContents((current) => {
+              const next = { ...current };
+              delete next[selectedFilePath];
+              return next;
+            });
+          }
+
+          setSelectedFilePath(nextPath);
+          if (allFilePaths.includes(nextPath) && !savedContents[nextPath]) {
+            setSavedContents((current) => ({ ...current, [nextPath]: '' }));
+          }
+        }}
+      />
+
+      <main className="right-panel">
+        <FileViewerTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          preview={
+            <MarkdownPreviewPane
+              filePath={selectedFilePath}
+              markdown={selectedFilePath ? currentDraftMarkdown : ''}
+            />
+          }
+          edit={
+            <RichTextEditorPane
+              filePath={selectedFilePath}
+              markdown={selectedFilePath ? currentDraftMarkdown : ''}
+              savedMarkdown={selectedFilePath ? currentSavedMarkdown : ''}
+              isDirty={isCurrentFileDirty}
+              onSave={saveCurrentFile}
+              onChangeMarkdown={(nextMarkdown) => {
+                if (!selectedFilePath) {
+                  return;
+                }
+
+                setDraftContents((current) => ({ ...current, [selectedFilePath]: nextMarkdown }));
+              }}
+            />
+          }
+        />
+      </main>
+    </div>
   );
 }

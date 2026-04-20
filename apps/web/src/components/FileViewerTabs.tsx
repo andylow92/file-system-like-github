@@ -1,0 +1,38 @@
+import type { ReactNode } from 'react';
+
+export type ViewerTabKey = 'preview' | 'edit';
+
+interface FileViewerTabsProps {
+  activeTab: ViewerTabKey;
+  onTabChange: (tab: ViewerTabKey) => void;
+  preview: ReactNode;
+  edit: ReactNode;
+}
+
+export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileViewerTabsProps) {
+  return (
+    <section>
+      <div className="tabs" role="tablist" aria-label="File tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'preview'}
+          className={activeTab === 'preview' ? 'tab active' : 'tab'}
+          onClick={() => onTabChange('preview')}
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'edit'}
+          className={activeTab === 'edit' ? 'tab active' : 'tab'}
+          onClick={() => onTabChange('edit')}
+        >
+          Edit
+        </button>
+      </div>
+      <div className="tab-content">{activeTab === 'preview' ? preview : edit}</div>
+    </section>
+  );
+}
