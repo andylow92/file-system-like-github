@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { createPathResolver, PathResolver, StoragePathError } from './pathResolver';
+import { PathResolver, StoragePathError } from './pathResolver';
 
 export type TreeNodeType = 'file' | 'dir';
 
@@ -27,7 +27,7 @@ export interface FileRepository {
   listTree(logicalPath?: string): Promise<TreeNode[]>;
 }
 
-export function createFileRepository(pathResolver: PathResolver = createPathResolver()): FileRepository {
+export function createFileRepository(pathResolver: PathResolver): FileRepository {
   async function statOrUndefined(absolutePath: string) {
     try {
       return await fs.stat(absolutePath);
