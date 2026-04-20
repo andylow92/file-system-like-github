@@ -9,22 +9,60 @@
 body {
   margin: 0;
   color: #1f2937;
+  background: #fff;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 300px 1fr;
   min-height: 100vh;
 }
 
 .left-panel {
   border-right: 1px solid #e5e7eb;
   padding: 1rem;
-  background: #f9fafb;
+  background: #f8fafc;
 }
 
 .right-panel {
   padding: 1.5rem;
+}
+
+.tree-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 0.4rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+  color: #334155;
+  margin: 0.1rem 0;
+}
+
+.tree-item:hover {
+  background: #eef2ff;
+}
+
+.tree-item.active {
+  background: #dbeafe;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.tree-folder-arrow {
+  display: inline-block;
+  width: 0.9rem;
+  margin-right: 0.25rem;
+  color: #64748b;
 }
 
 .tabs {
@@ -48,7 +86,102 @@ body {
   color: #1d4ed8;
 }
 
-.tab-content textarea {
+.tab-content {
+  min-height: 420px;
+}
+
+.empty-state {
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  padding: 1rem;
+}
+
+.github-markdown {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  max-width: 900px;
+  line-height: 1.6;
+}
+
+.github-markdown h1,
+.github-markdown h2 {
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.3rem;
+}
+
+.github-markdown pre {
+  background: #111827;
+  color: #f9fafb;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.github-markdown blockquote {
+  border-left: 4px solid #cbd5e1;
+  margin: 0;
+  padding-left: 0.75rem;
+  color: #475569;
+}
+
+.editor-pane {
+  max-width: 980px;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.editor-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.save-button {
+  background: #2563eb;
+  border: none;
+  color: #fff;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.save-button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.rich-editor {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background: white;
+}
+
+.editor-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 36px;
+  align-items: start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.block-input {
   width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  resize: vertical;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.block-input.code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
