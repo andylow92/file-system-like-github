@@ -218,11 +218,19 @@ async function handlePatchPath({ req, res }: RequestContext): Promise<void> {
   const fromPath = requireString(body.fromPath, 'fromPath');
   const toPath = requireString(body.toPath, 'toPath');
 
-  const sourceAbsolutePath = pathResolver.resolvePath(fromPath);
-  const destinationAbsolutePath = pathResolver.resolvePath(toPath);
+  const sourceCandidatePath = pathResolver.resolvePath(fromPath);
+  const sourceStat = await fs.stat(sourceCandidatePath);
 
-  const sourceStat = await fs.stat(sourceAbsolutePath);
-  if (!sourceStat.isDirectory() && !fromPath.toLowerCase().endsWith('.md')) {
+  let sourceAbsolutePath = sourceCandidatePath;
+  let destinationAbsolutePath = pathResolver.resolvePath(toPath);
+
+  if (sourceStat.isDirectory()) {
+    sourceAbsolutePath = sourceCandidatePath;
+    destinationAbsolutePath = pathResolver.resolvePath(toPath);
+  } else if (sourceStat.isFile()) {
+    sourceAbsolutePath = pathResolver.resolveMarkdownPath(fromPath);
+    destinationAbsolutePath = pathResolver.resolveMarkdownPath(toPath);
+  } else {
     throw new StoragePathError('Only directories and .md files can be moved');
   }
 
