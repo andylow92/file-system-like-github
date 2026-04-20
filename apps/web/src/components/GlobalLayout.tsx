@@ -6,9 +6,12 @@ interface GlobalLayoutProps extends PropsWithChildren {
   tree: FileNode[];
   treeLoading?: boolean;
   selectedFilePath?: string;
-  onSelectFile: (path: string) => void;
-  onTreeChange: (nextTree: FileNode[]) => void;
-  onSave: () => void;
+  onSelectFile: (path: string) => Promise<void> | void;
+  onCreateFile: (path: string) => Promise<void>;
+  onCreateFolder: (path: string) => Promise<void>;
+  onRenamePath: (fromPath: string, toPath: string) => Promise<void>;
+  onDeletePath: (path: string, recursive?: boolean) => Promise<void>;
+  onSave: () => Promise<void>;
 }
 
 type ActionMode = 'newFile' | 'newFolder' | 'rename' | null;
@@ -19,65 +22,11 @@ interface FlatTreeNode {
   depth: number;
 }
 
-function cloneTree(tree: FileNode[]): FileNode[] {
-  return tree.map((node) => ({
-    ...node,
-    children: node.children ? cloneTree(node.children) : undefined,
-  }));
-}
-
 function flattenTree(nodes: FileNode[], depth = 1): FlatTreeNode[] {
   return nodes.flatMap((node) => [
     { node, depth },
     ...(node.children ? flattenTree(node.children, depth + 1) : []),
   ]);
-}
-
-function insertIntoDirectory(tree: FileNode[], parentPath: string | null, newNode: FileNode): FileNode[] {
-  if (!parentPath) {
-    return [...tree, newNode];
-  }
-
-  return tree.map((node) => {
-    if (node.path === parentPath && node.isDirectory) {
-      const children = node.children ? [...node.children, newNode] : [newNode];
-      return { ...node, children };
-    }
-
-    if (node.children) {
-      return { ...node, children: insertIntoDirectory(node.children, parentPath, newNode) };
-    }
-
-    return node;
-  });
-}
-
-function removeNode(tree: FileNode[], targetPath: string): FileNode[] {
-  return tree
-    .filter((node) => node.path !== targetPath)
-    .map((node) => ({
-      ...node,
-      children: node.children ? removeNode(node.children, targetPath) : undefined,
-    }));
-}
-
-function renameNode(tree: FileNode[], targetPath: string, name: string): FileNode[] {
-  function walk(nodes: FileNode[], parentPath = ''): FileNode[] {
-    return nodes.map((node) => {
-      const isTarget = node.path === targetPath;
-      const nextName = isTarget ? name : node.name;
-      const nextPath = parentPath ? `${parentPath}/${nextName}` : nextName;
-      const nextChildren = node.children ? walk(node.children, nextPath) : undefined;
-      return {
-        ...node,
-        name: nextName,
-        path: nextPath,
-        children: nextChildren,
-      };
-    });
-  }
-
-  return walk(tree);
 }
 
 function getParentDirectoryPath(path: string): string | null {
@@ -94,7 +43,10 @@ export function GlobalLayout({
   treeLoading = false,
   selectedFilePath,
   onSelectFile,
-  onTreeChange,
+  onCreateFile,
+  onCreateFolder,
+  onRenamePath,
+  onDeletePath,
   onSave,
 }: GlobalLayoutProps) {
   const [selectedPath, setSelectedPath] = useState(selectedFilePath ?? tree[0]?.path ?? '');
@@ -140,11 +92,11 @@ export function GlobalLayout({
     setToasts((prev) => [...prev, { id: Date.now() + prev.length, type, message }]);
   }
 
-  function selectNode(path: string) {
+  async function selectNode(path: string) {
     setSelectedPath(path);
     const target = flatTree.find((entry) => entry.node.path === path)?.node;
     if (target && !target.isDirectory) {
-      onSelectFile(path);
+      await onSelectFile(path);
     }
   }
 
@@ -164,61 +116,66 @@ export function GlobalLayout({
     return true;
   }
 
-  function submitCurrentMode() {
+  async function submitCurrentMode() {
     if (!mode || !validateInput()) {
       return;
     }
 
-    const nextTree = cloneTree(tree);
     const selectedNode = flatTree.find((entry) => entry.node.path === selectedPath)?.node;
     const cleanName = inputValue.trim();
 
-    if (mode === 'rename') {
-      if (!selectedNode) {
-        setValidationMessage('Select a file or folder to rename.');
-        return;
+    try {
+      if (mode === 'rename') {
+        if (!selectedNode) {
+          setValidationMessage('Select a file or folder to rename.');
+          return;
+        }
+
+        const parentPath = getParentDirectoryPath(selectedNode.path);
+        const nextPath = parentPath ? `${parentPath}/${cleanName}` : cleanName;
+
+        await onRenamePath(selectedNode.path, nextPath);
+        setSelectedPath(nextPath);
+
+        if (!selectedNode.isDirectory) {
+          await onSelectFile(nextPath);
+        }
+
+        showToast('success', `Renamed to ${cleanName}.`);
       }
 
-      const renamed = renameNode(nextTree, selectedNode.path, cleanName);
-      onTreeChange(renamed);
-      const parentPath = getParentDirectoryPath(selectedNode.path);
-      const nextPath = parentPath ? `${parentPath}/${cleanName}` : cleanName;
-      setSelectedPath(nextPath);
-      if (!selectedNode.isDirectory) {
-        onSelectFile(nextPath);
+      if (mode === 'newFile' || mode === 'newFolder') {
+        const parentPath = selectedNode?.isDirectory
+          ? selectedNode.path
+          : selectedNode
+            ? getParentDirectoryPath(selectedNode.path)
+            : null;
+
+        const newPath = parentPath ? `${parentPath}/${cleanName}` : cleanName;
+
+        if (mode === 'newFolder') {
+          await onCreateFolder(newPath);
+        } else {
+          await onCreateFile(newPath);
+        }
+
+        setSelectedPath(newPath);
+
+        if (mode === 'newFile') {
+          await onSelectFile(newPath);
+        }
+
+        showToast('success', `${mode === 'newFolder' ? 'Folder' : 'File'} created.`);
       }
-      showToast('success', `Renamed to ${cleanName}.`);
+
+      setMode(null);
+      setInputValue('');
+    } catch (error: unknown) {
+      showToast('error', error instanceof Error ? error.message : 'Action failed.');
     }
-
-    if (mode === 'newFile' || mode === 'newFolder') {
-      const parentPath = selectedNode?.isDirectory
-        ? selectedNode.path
-        : selectedNode
-          ? getParentDirectoryPath(selectedNode.path)
-          : null;
-
-      const newPath = parentPath ? `${parentPath}/${cleanName}` : cleanName;
-      const newNode: FileNode = {
-        name: cleanName,
-        path: newPath,
-        isDirectory: mode === 'newFolder',
-        children: mode === 'newFolder' ? [] : undefined,
-      };
-
-      const created = insertIntoDirectory(nextTree, parentPath, newNode);
-      onTreeChange(created);
-      setSelectedPath(newPath);
-      if (!newNode.isDirectory) {
-        onSelectFile(newPath);
-      }
-      showToast('success', `${mode === 'newFolder' ? 'Folder' : 'File'} created.`);
-    }
-
-    setMode(null);
-    setInputValue('');
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!selectedPath) {
       showToast('error', 'Select a file or folder before deleting.');
       return;
@@ -234,9 +191,12 @@ export function GlobalLayout({
       return;
     }
 
-    const nextTree = removeNode(cloneTree(tree), selectedPath);
-    onTreeChange(nextTree);
-    showToast('success', `${selectedNode.name} deleted.`);
+    try {
+      await onDeletePath(selectedPath, selectedNode.isDirectory);
+      showToast('success', `${selectedNode.name} deleted.`);
+    } catch (error: unknown) {
+      showToast('error', error instanceof Error ? error.message : 'Delete failed.');
+    }
   }
 
   function onTreeKeyDown(event: KeyboardEvent<HTMLUListElement>) {
@@ -249,7 +209,7 @@ export function GlobalLayout({
       event.preventDefault();
       const next = flatTree[Math.min(currentIndex + 1, flatTree.length - 1)]?.node.path;
       if (next) {
-        selectNode(next);
+        void selectNode(next);
       }
     }
 
@@ -257,14 +217,14 @@ export function GlobalLayout({
       event.preventDefault();
       const next = flatTree[Math.max(currentIndex - 1, 0)]?.node.path;
       if (next) {
-        selectNode(next);
+        void selectNode(next);
       }
     }
 
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       if (selectedPath) {
-        selectNode(selectedPath);
+        void selectNode(selectedPath);
       }
     }
   }
@@ -283,15 +243,19 @@ export function GlobalLayout({
           <button type="button" className="primary-btn" onClick={() => setMode('rename')}>
             Rename
           </button>
-          <button type="button" className="danger-btn" onClick={handleDelete}>
+          <button type="button" className="danger-btn" onClick={() => void handleDelete()}>
             Delete
           </button>
           <button
             type="button"
             className="save-btn"
-            onClick={() => {
-              onSave();
-              showToast('success', 'File saved successfully.');
+            onClick={async () => {
+              try {
+                await onSave();
+                showToast('success', 'File saved successfully.');
+              } catch (error: unknown) {
+                showToast('error', error instanceof Error ? error.message : 'Save failed.');
+              }
             }}
           >
             Save
@@ -309,7 +273,7 @@ export function GlobalLayout({
             />
             {validationMessage ? <p className="validation-msg">{validationMessage}</p> : null}
             <div className="inline-form-actions">
-              <button type="button" onClick={submitCurrentMode}>
+              <button type="button" onClick={() => void submitCurrentMode()}>
                 Confirm
               </button>
               <button
@@ -350,16 +314,12 @@ export function GlobalLayout({
                 className={selectedPath === node.path ? 'tree-item selected' : 'tree-item'}
               >
                 {node.isDirectory ? (
-                  <button type="button" style={{ paddingLeft: `${depth * 12}px` }} onClick={() => selectNode(node.path)}>
+                  <button type="button" style={{ paddingLeft: `${depth * 12}px` }} onClick={() => void selectNode(node.path)}>
                     <span aria-hidden="true">📁 </span>
-                    {node.name}
+                    {node.name}/
                   </button>
                 ) : (
-                  <Link
-                    to={`/file/${encodeURIComponent(node.path)}`}
-                    style={{ paddingLeft: `${depth * 12}px` }}
-                    onClick={() => selectNode(node.path)}
-                  >
+                  <Link to={`/file/${encodeURIComponent(node.path)}`} style={{ paddingLeft: `${depth * 12}px` }} onClick={() => void selectNode(node.path)}>
                     <span aria-hidden="true">📄 </span>
                     {node.name}
                   </Link>

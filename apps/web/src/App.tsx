@@ -1,48 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FileNode } from '@repo/shared';
-import { FileTreeSidebar } from './components/FileTreeSidebar';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
+import { GlobalLayout } from './components/GlobalLayout';
 import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
 import { RichTextEditorPane } from './components/RichTextEditorPane';
-
-const initialTree: FileNode[] = [
-  {
-    name: 'docs',
-    path: 'docs',
-    isDirectory: true,
-    children: [
-      { name: 'welcome.md', path: 'docs/welcome.md', isDirectory: false },
-      { name: 'getting-started.md', path: 'docs/getting-started.md', isDirectory: false },
-    ],
-  },
-  { name: 'README.md', path: 'README.md', isDirectory: false },
-];
-
-const initialContents: Record<string, string> = {
-  'README.md': '# Project\nA simple markdown workspace.',
-  'docs/welcome.md': '# Welcome\n- Browse files\n- Preview markdown\n- Edit and save',
-  'docs/getting-started.md': '',
-};
-
-function collectFilePaths(nodes: FileNode[]): string[] {
-  return nodes.flatMap((node) => {
-    if (!node.isDirectory) {
-      return [node.path];
-    }
-
-    return collectFilePaths(node.children ?? []);
-  });
-}
+import {
+  createDirectory,
+  createFile,
+  deletePath,
+  fetchFile,
+  fetchTree,
+  getErrorMessage,
+  renamePath,
+  type RemoteFile,
+  updateFile,
+} from './api/files';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewerTabKey>('preview');
+  const [tree, setTree] = useState<FileNode[]>([]);
+  const [treeLoading, setTreeLoading] = useState(true);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [savedContents, setSavedContents] = useState<Record<string, string>>(initialContents);
+  const [savedFiles, setSavedFiles] = useState<Record<string, RemoteFile>>({});
   const [draftContents, setDraftContents] = useState<Record<string, string>>({});
 
-  const allFilePaths = useMemo(() => collectFilePaths(demoTree), []);
-
-  const currentSavedMarkdown = selectedFilePath ? savedContents[selectedFilePath] ?? '' : '';
+  const currentSavedFile = selectedFilePath ? savedFiles[selectedFilePath] : undefined;
+  const currentSavedMarkdown = currentSavedFile?.content ?? '';
   const currentDraftMarkdown = selectedFilePath
     ? draftContents[selectedFilePath] ?? currentSavedMarkdown
     : '';
@@ -50,27 +33,50 @@ export function App() {
   const hasUnsavedChanges = useMemo(
     () =>
       Object.keys(draftContents).some(
-        (path) => (draftContents[path] ?? '') !== (savedContents[path] ?? ''),
+        (path) => (draftContents[path] ?? '') !== (savedFiles[path]?.content ?? ''),
       ),
-    [draftContents, savedContents],
+    [draftContents, savedFiles],
   );
 
   const isCurrentFileDirty = selectedFilePath
     ? currentDraftMarkdown !== currentSavedMarkdown
     : false;
 
-  const saveCurrentFile = () => {
-    if (!selectedFilePath || !isCurrentFileDirty) {
+  async function refreshTree() {
+    const nextTree = await fetchTree();
+    setTree(nextTree);
+  }
+
+  async function refreshCurrentFile(path = selectedFilePath) {
+    if (!path) {
       return;
     }
 
-    setSavedContents((current) => ({ ...current, [selectedFilePath]: currentDraftMarkdown }));
+    const latest = await fetchFile(path);
+    setSavedFiles((current) => ({ ...current, [path]: latest }));
     setDraftContents((current) => {
       const next = { ...current };
-      delete next[selectedFilePath];
+      delete next[path];
       return next;
     });
-  };
+  }
+
+  async function refreshTreeAndCurrentFile(path = selectedFilePath) {
+    await refreshTree();
+    await refreshCurrentFile(path);
+  }
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        await refreshTree();
+      } catch (error: unknown) {
+        window.alert(getErrorMessage(error));
+      } finally {
+        setTreeLoading(false);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -94,69 +100,151 @@ export function App() {
       }
 
       event.preventDefault();
-      saveCurrentFile();
+      void saveCurrentFile();
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
-  return (
-    <div className="layout">
-      <FileTreeSidebar
-        tree={demoTree}
-        activeFilePath={selectedFilePath}
-        onSelectFile={(nextPath) => {
-          if (selectedFilePath && isCurrentFileDirty && selectedFilePath !== nextPath) {
-            const shouldDiscard = window.confirm(
-              'You have unsaved changes. Switch files and discard edits?',
-            );
-            if (!shouldDiscard) {
-              return;
-            }
+  async function handleSelectFile(nextPath: string) {
+    if (selectedFilePath && isCurrentFileDirty && selectedFilePath !== nextPath) {
+      const shouldDiscard = window.confirm('You have unsaved changes. Switch files and discard edits?');
+      if (!shouldDiscard) {
+        return;
+      }
 
+      setDraftContents((current) => {
+        const next = { ...current };
+        delete next[selectedFilePath];
+        return next;
+      });
+    }
+
+    const previousPath = selectedFilePath;
+    setSelectedFilePath(nextPath);
+
+    try {
+      const file = await fetchFile(nextPath);
+      setSavedFiles((current) => ({ ...current, [nextPath]: file }));
+    } catch (error: unknown) {
+      setSelectedFilePath(previousPath);
+      throw new Error(getErrorMessage(error));
+    }
+  }
+
+  async function saveCurrentFile() {
+    if (!selectedFilePath || !isCurrentFileDirty) {
+      return;
+    }
+
+    const current = savedFiles[selectedFilePath];
+    const updated = await updateFile({
+      path: selectedFilePath,
+      content: currentDraftMarkdown,
+      etag: current?.etag,
+      lastModified: current?.lastModified,
+    });
+
+    setSavedFiles((files) => ({ ...files, [selectedFilePath]: updated }));
+    setDraftContents((currentDrafts) => {
+      const next = { ...currentDrafts };
+      delete next[selectedFilePath];
+      return next;
+    });
+
+    await refreshTreeAndCurrentFile(selectedFilePath);
+  }
+
+  return (
+    <GlobalLayout
+      tree={tree}
+      treeLoading={treeLoading}
+      selectedFilePath={selectedFilePath ?? undefined}
+      onSelectFile={handleSelectFile}
+      onSave={saveCurrentFile}
+      onCreateFile={async (path) => {
+        setSelectedFilePath(path);
+
+        try {
+          await createFile(path, '');
+          await refreshTreeAndCurrentFile(path);
+        } catch (error: unknown) {
+          setSelectedFilePath((current) => (current === path ? null : current));
+          throw new Error(getErrorMessage(error));
+        }
+      }}
+      onCreateFolder={async (path) => {
+        await createDirectory(path);
+        await refreshTree();
+      }}
+      onRenamePath={async (fromPath, toPath) => {
+        const previousSelected = selectedFilePath;
+
+        if (previousSelected === fromPath) {
+          setSelectedFilePath(toPath);
+        }
+
+        try {
+          await renamePath(fromPath, toPath);
+          await refreshTreeAndCurrentFile(previousSelected === fromPath ? toPath : selectedFilePath);
+        } catch (error: unknown) {
+          setSelectedFilePath(previousSelected);
+          throw new Error(getErrorMessage(error));
+        }
+      }}
+      onDeletePath={async (path, recursive = false) => {
+        const previousSelected = selectedFilePath;
+
+        if (previousSelected === path) {
+          setSelectedFilePath(null);
+        }
+
+        try {
+          await deletePath(path, recursive);
+          await refreshTree();
+
+          if (previousSelected === path) {
             setDraftContents((current) => {
               const next = { ...current };
-              delete next[selectedFilePath];
+              delete next[path];
+              return next;
+            });
+            setSavedFiles((current) => {
+              const next = { ...current };
+              delete next[path];
               return next;
             });
           }
+        } catch (error: unknown) {
+          setSelectedFilePath(previousSelected);
+          throw new Error(getErrorMessage(error));
+        }
+      }}
+    >
+      <FileViewerTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        preview={<MarkdownPreviewPane filePath={selectedFilePath} markdown={currentDraftMarkdown} />}
+        edit={
+          <RichTextEditorPane
+            filePath={selectedFilePath}
+            markdown={currentDraftMarkdown}
+            savedMarkdown={currentSavedMarkdown}
+            isDirty={isCurrentFileDirty}
+            onSave={() => {
+              void saveCurrentFile();
+            }}
+            onChangeMarkdown={(nextMarkdown) => {
+              if (!selectedFilePath) {
+                return;
+              }
 
-          setSelectedFilePath(nextPath);
-          if (allFilePaths.includes(nextPath) && !savedContents[nextPath]) {
-            setSavedContents((current) => ({ ...current, [nextPath]: '' }));
-          }
-        }}
+              setDraftContents((current) => ({ ...current, [selectedFilePath]: nextMarkdown }));
+            }}
+          />
+        }
       />
-
-      <main className="right-panel">
-        <FileViewerTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          preview={
-            <MarkdownPreviewPane
-              filePath={selectedFilePath}
-              markdown={selectedFilePath ? currentDraftMarkdown : ''}
-            />
-          }
-          edit={
-            <RichTextEditorPane
-              filePath={selectedFilePath}
-              markdown={selectedFilePath ? currentDraftMarkdown : ''}
-              savedMarkdown={selectedFilePath ? currentSavedMarkdown : ''}
-              isDirty={isCurrentFileDirty}
-              onSave={saveCurrentFile}
-              onChangeMarkdown={(nextMarkdown) => {
-                if (!selectedFilePath) {
-                  return;
-                }
-
-                setDraftContents((current) => ({ ...current, [selectedFilePath]: nextMarkdown }));
-              }}
-            />
-          }
-        />
-      </main>
-    </div>
+    </GlobalLayout>
   );
 }
