@@ -5,7 +5,7 @@ import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
 import { RichTextEditorPane } from './components/RichTextEditorPane';
 
-const demoTree: FileNode[] = [
+const initialTree: FileNode[] = [
   {
     name: 'docs',
     path: 'docs',
