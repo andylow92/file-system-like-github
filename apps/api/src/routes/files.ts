@@ -6,8 +6,9 @@ import { URL } from 'node:url';
 
 import type { ApiResponse } from '@repo/shared';
 
-import { createFileRepository } from '../storage/fileRepository.js';
-import { createPathResolver, StoragePathError } from '../storage/pathResolver.js';
+import type { FileRepository } from '../storage/fileRepository.js';
+import type { PathResolver } from '../storage/pathResolver.js';
+import { StoragePathError } from '../storage/pathResolver.js';
 
 interface RouteResult {
   handled: boolean;
@@ -17,6 +18,8 @@ interface RequestContext {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   url: URL;
+  repository: FileRepository;
+  pathResolver: PathResolver;
 }
 
 type ErrorCode =
@@ -41,8 +44,10 @@ interface FileResponse {
   etag: string;
 }
 
-const repository = createFileRepository();
-const pathResolver = createPathResolver();
+export interface FileRouteDependencies {
+  repository: FileRepository;
+  pathResolver: PathResolver;
+}
 
 function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -123,8 +128,8 @@ function toEtag(content: string, lastModified: string): string {
   return createHash('sha1').update(content).update(lastModified).digest('hex');
 }
 
-async function loadFile(logicalPath: string): Promise<FileResponse> {
-  const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
+async function loadFileFromContext(context: RequestContext, logicalPath: string): Promise<FileResponse> {
+  const absolutePath = context.pathResolver.resolveMarkdownPath(logicalPath);
   const stat = await fs.stat(absolutePath);
 
   if (!stat.isFile()) {
@@ -143,26 +148,28 @@ async function loadFile(logicalPath: string): Promise<FileResponse> {
   };
 }
 
-async function handleGetTree({ res, url }: RequestContext): Promise<void> {
+async function handleGetTree({ res, url, repository }: RequestContext): Promise<void> {
   const logicalPath = url.searchParams.get('path') ?? '';
   const data = await repository.listTree(logicalPath);
   sendJson(res, 200, { success: true, data });
 }
 
-async function handleGetFile({ res, url }: RequestContext): Promise<void> {
+async function handleGetFile(context: RequestContext): Promise<void> {
+  const { res, url } = context;
   const logicalPath = requireString(url.searchParams.get('path'), 'path');
-  const data = await loadFile(logicalPath);
+  const data = await loadFileFromContext(context, logicalPath);
   sendJson(res, 200, { success: true, data });
 }
 
-async function handlePutFile({ req, res }: RequestContext): Promise<void> {
+async function handlePutFile(context: RequestContext): Promise<void> {
+  const { req, res, repository } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
   const logicalPath = requireString(body.path, 'path');
   const content = requireOptionalString(body.content, 'content') ?? '';
   const expectedEtag = requireOptionalString(body.etag, 'etag');
   const expectedLastModified = requireOptionalString(body.lastModified, 'lastModified');
 
-  const current = await loadFile(logicalPath);
+  const current = await loadFileFromContext(context, logicalPath);
 
   if (expectedEtag && expectedEtag !== current.etag) {
     sendError(res, 409, {
@@ -181,11 +188,12 @@ async function handlePutFile({ req, res }: RequestContext): Promise<void> {
   }
 
   await repository.updateMarkdownFile(logicalPath, content);
-  const updated = await loadFile(logicalPath);
+  const updated = await loadFileFromContext(context, logicalPath);
   sendJson(res, 200, { success: true, data: updated });
 }
 
-async function handlePostFile({ req, res }: RequestContext): Promise<void> {
+async function handlePostFile(context: RequestContext): Promise<void> {
+  const { req, res, repository } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
   const logicalPath = requireString(body.path, 'path');
   const content = requireOptionalString(body.content, 'content') ?? '';
@@ -201,11 +209,11 @@ async function handlePostFile({ req, res }: RequestContext): Promise<void> {
     throw error;
   }
 
-  const created = await loadFile(logicalPath);
+  const created = await loadFileFromContext(context, logicalPath);
   sendJson(res, 201, { success: true, data: created });
 }
 
-async function handlePostDir({ req, res }: RequestContext): Promise<void> {
+async function handlePostDir({ req, res, repository }: RequestContext): Promise<void> {
   const body = await readJsonBody<Record<string, unknown>>(req);
   const logicalPath = requireString(body.path, 'path');
 
@@ -213,16 +221,24 @@ async function handlePostDir({ req, res }: RequestContext): Promise<void> {
   sendJson(res, 201, { success: true, data: { path: logicalPath } });
 }
 
-async function handlePatchPath({ req, res }: RequestContext): Promise<void> {
+async function handlePatchPath({ req, res, pathResolver }: RequestContext): Promise<void> {
   const body = await readJsonBody<Record<string, unknown>>(req);
   const fromPath = requireString(body.fromPath, 'fromPath');
   const toPath = requireString(body.toPath, 'toPath');
 
-  const sourceAbsolutePath = pathResolver.resolvePath(fromPath);
-  const destinationAbsolutePath = pathResolver.resolvePath(toPath);
+  const sourceCandidatePath = pathResolver.resolvePath(fromPath);
+  const sourceStat = await fs.stat(sourceCandidatePath);
 
-  const sourceStat = await fs.stat(sourceAbsolutePath);
-  if (!sourceStat.isDirectory() && !fromPath.toLowerCase().endsWith('.md')) {
+  let sourceAbsolutePath = sourceCandidatePath;
+  let destinationAbsolutePath = pathResolver.resolvePath(toPath);
+
+  if (sourceStat.isDirectory()) {
+    sourceAbsolutePath = sourceCandidatePath;
+    destinationAbsolutePath = pathResolver.resolvePath(toPath);
+  } else if (sourceStat.isFile()) {
+    sourceAbsolutePath = pathResolver.resolveMarkdownPath(fromPath);
+    destinationAbsolutePath = pathResolver.resolveMarkdownPath(toPath);
+  } else {
     throw new StoragePathError('Only directories and .md files can be moved');
   }
 
@@ -248,7 +264,7 @@ async function handlePatchPath({ req, res }: RequestContext): Promise<void> {
   });
 }
 
-async function handleDeletePath({ req, res, url }: RequestContext): Promise<void> {
+async function handleDeletePath({ req, res, url, repository }: RequestContext): Promise<void> {
   const logicalPath = requireString(url.searchParams.get('path'), 'path');
   const recursiveFlag = url.searchParams.get('recursive');
   const recursive = recursiveFlag === '1' || recursiveFlag === 'true';
@@ -280,13 +296,17 @@ async function executeHandler(context: RequestContext, handler: (ctx: RequestCon
   }
 }
 
-export async function handleFileRoutes(req: http.IncomingMessage, res: http.ServerResponse): Promise<RouteResult> {
+export async function handleFileRoutes(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  dependencies: FileRouteDependencies,
+): Promise<RouteResult> {
   if (!req.url || !req.method) {
     return { handled: false };
   }
 
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
-  const context: RequestContext = { req, res, url };
+  const context: RequestContext = { req, res, url, ...dependencies };
 
   if (req.method === 'GET' && url.pathname === '/api/tree') {
     await executeHandler(context, handleGetTree);

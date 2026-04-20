@@ -17,7 +17,7 @@ export interface PathResolver {
   ensureInsideRoot(absolutePath: string): void;
 }
 
-export function createPathResolver(contentRoot: string | undefined = process.env.CONTENT_ROOT): PathResolver {
+export function createPathResolver(contentRoot: string | undefined): PathResolver {
   if (!contentRoot) {
     throw new StoragePathError('CONTENT_ROOT must be defined');
   }
