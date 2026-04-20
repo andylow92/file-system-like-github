@@ -1,0 +1,55 @@
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createFileRepository } from '../fileRepository';
+import { createPathResolver, StoragePathError } from '../pathResolver';
+
+describe('fileRepository', () => {
+  let contentRoot = '';
+
+  beforeEach(async () => {
+    contentRoot = await mkdtemp(path.join(os.tmpdir(), 'content-root-'));
+  });
+
+  afterEach(async () => {
+    await rm(contentRoot, { recursive: true, force: true });
+  });
+
+  it('supports markdown file CRUD', async () => {
+    const repository = createFileRepository(createPathResolver(contentRoot));
+
+    await repository.createDirectory('docs');
+    await repository.createMarkdownFile('docs/notes.md', '# hello');
+
+    await expect(repository.readMarkdownFile('docs/notes.md')).resolves.toBe('# hello');
+
+    await repository.updateMarkdownFile('docs/notes.md', '# updated');
+    await expect(repository.readMarkdownFile('docs/notes.md')).resolves.toBe('# updated');
+
+    await repository.moveMarkdownFile('docs/notes.md', 'docs/moved.md');
+    await expect(repository.readMarkdownFile('docs/notes.md')).rejects.toThrow(StoragePathError);
+    await expect(repository.readMarkdownFile('docs/moved.md')).resolves.toBe('# updated');
+
+    await repository.deletePath('docs/moved.md');
+    await expect(repository.readMarkdownFile('docs/moved.md')).rejects.toThrow(StoragePathError);
+  });
+
+  it('generates nested markdown-only tree output', async () => {
+    const repository = createFileRepository(createPathResolver(contentRoot));
+
+    await repository.createDirectory('docs/guides');
+    await repository.createMarkdownFile('docs/guides/a.md', 'a');
+    await repository.createMarkdownFile('README.md', 'root');
+
+    const tree = await repository.listTree('');
+
+    expect(tree.map((entry) => entry.path)).toEqual(['docs', 'README.md']);
+
+    const docsNode = tree.find((entry) => entry.path === 'docs');
+    expect(docsNode?.type).toBe('dir');
+    expect(docsNode?.children?.[0]?.path).toBe('docs/guides');
+    expect(docsNode?.children?.[0]?.children?.[0]?.path).toBe('docs/guides/a.md');
+    expect(docsNode?.children?.[0]?.children?.[0]?.type).toBe('file');
+  });
+});
