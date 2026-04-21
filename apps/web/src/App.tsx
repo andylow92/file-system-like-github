@@ -16,11 +16,6 @@ import {
   updateFile,
 } from './api/files';
 
-function addFileToRoot(nodes: FileNode[], path: string): FileNode[] {
-  const name = path.split('/').at(-1) ?? path;
-  return [...nodes, { name, path, isDirectory: false }];
-}
-
 export function App() {
   const [activeTab, setActiveTab] = useState<ViewerTabKey>('preview');
   const [tree, setTree] = useState<FileNode[]>([]);
