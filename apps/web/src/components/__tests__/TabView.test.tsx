@@ -7,7 +7,7 @@ describe('TabView', () => {
     render(<TabView preview={<p>Preview Body</p>} edit={<p>Edit Body</p>} />);
 
     expect(screen.getByText('Preview Body')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
     expect(screen.getByText('Edit Body')).toBeInTheDocument();
   });
 });
