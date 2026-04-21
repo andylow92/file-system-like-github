@@ -4,9 +4,9 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import type { ApiResponse } from '@repo/shared';
+import type { ApiResponse, FileNode } from '@repo/shared';
 
-import type { FileRepository } from '../storage/fileRepository.js';
+import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
 
@@ -148,9 +148,19 @@ async function loadFileFromContext(context: RequestContext, logicalPath: string)
   };
 }
 
+function toFileNode(node: TreeNode): FileNode {
+  return {
+    name: node.name,
+    path: node.path,
+    isDirectory: node.isDirectory,
+    children: node.children?.map(toFileNode),
+  };
+}
+
 async function handleGetTree({ res, url, repository }: RequestContext): Promise<void> {
   const logicalPath = url.searchParams.get('path') ?? '';
-  const data = await repository.listTree(logicalPath);
+  const tree = await repository.listTree(logicalPath);
+  const data: FileNode[] = tree.map(toFileNode);
   sendJson(res, 200, { success: true, data });
 }
 

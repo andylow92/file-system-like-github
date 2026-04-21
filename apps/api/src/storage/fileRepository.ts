@@ -3,11 +3,9 @@ import path from 'node:path';
 
 import { PathResolver, StoragePathError } from './pathResolver';
 
-export type TreeNodeType = 'file' | 'dir';
-
 export interface TreeNode {
   name: string;
-  type: TreeNodeType;
+  isDirectory: boolean;
   path: string;
   lastModified: string;
   children?: TreeNode[];
@@ -71,7 +69,7 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
       if (entry.isDirectory()) {
         nodes.push({
           name: entry.name,
-          type: 'dir',
+          isDirectory: true,
           path: relativePath,
           lastModified: stat.mtime.toISOString(),
           children: await readTree(absolutePath),
@@ -82,7 +80,7 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
       if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
         nodes.push({
           name: entry.name,
-          type: 'file',
+          isDirectory: false,
           path: relativePath,
           lastModified: stat.mtime.toISOString(),
         });
