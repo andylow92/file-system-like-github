@@ -59,19 +59,25 @@ npm install
 npm run dev:api
 ```
 
-3. Start frontend (separate terminal):
+3. Start frontend in a separate terminal:
 
 ```bash
 npm run dev:web
 ```
 
-4. Run tests:
+4. Confirm API health responds **before** testing UI actions:
+
+```bash
+curl -sf http://localhost:3001/health
+```
+
+5. Run tests:
 
 ```bash
 npm test
 ```
 
-5. Lint + format checks:
+6. Lint + format checks:
 
 ```bash
 npm run lint
