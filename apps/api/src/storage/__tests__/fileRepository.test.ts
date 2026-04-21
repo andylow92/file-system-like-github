@@ -47,9 +47,9 @@ describe('fileRepository', () => {
     expect(tree.map((entry) => entry.path)).toEqual(['docs', 'README.md']);
 
     const docsNode = tree.find((entry) => entry.path === 'docs');
-    expect(docsNode?.type).toBe('dir');
+    expect(docsNode?.isDirectory).toBe(true);
     expect(docsNode?.children?.[0]?.path).toBe('docs/guides');
     expect(docsNode?.children?.[0]?.children?.[0]?.path).toBe('docs/guides/a.md');
-    expect(docsNode?.children?.[0]?.children?.[0]?.type).toBe('file');
+    expect(docsNode?.children?.[0]?.children?.[0]?.isDirectory).toBe(false);
   });
 });

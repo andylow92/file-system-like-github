@@ -4,6 +4,7 @@ import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { FileNode } from '@repo/shared';
 
 import { loadConfig } from '../config';
 import { createServer } from '../server';
@@ -110,6 +111,24 @@ describe('server bootstrap', () => {
     expect(readFile.statusCode).toBe(200);
     expect(readFile.body.success).toBe(true);
     expect(readFile.body.data.content).toBe('# guide');
+
+    const tree = await requestJson<{ success: boolean; data: FileNode[] }>(port, 'GET', '/api/tree');
+    expect(tree.statusCode).toBe(200);
+    expect(tree.body.success).toBe(true);
+    expect(tree.body.data).toEqual([
+      {
+        name: 'docs',
+        path: 'docs',
+        isDirectory: true,
+        children: [
+          {
+            name: 'guide.md',
+            path: 'docs/guide.md',
+            isDirectory: false,
+          },
+        ],
+      },
+    ]);
 
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   });
