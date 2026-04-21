@@ -71,7 +71,8 @@ export function GlobalLayout({
 
     const exists = flatTree.some((entry) => entry.node.path === selectedPath);
     if (!exists) {
-      const fallback = flatTree.find((entry) => !entry.node.isDirectory)?.node.path ?? flatTree[0]?.node.path;
+      const fallback =
+        flatTree.find((entry) => !entry.node.isDirectory)?.node.path ?? flatTree[0]?.node.path;
       setSelectedPath(fallback ?? '');
     }
   }, [flatTree, selectedPath, tree.length]);
@@ -269,7 +270,9 @@ export function GlobalLayout({
               id="name-input"
               value={inputValue}
               onChange={(event) => setInputValue(event.target.value)}
-              placeholder={mode === 'newFile' ? 'README.md' : mode === 'newFolder' ? 'docs' : 'new-name.md'}
+              placeholder={
+                mode === 'newFile' ? 'README.md' : mode === 'newFolder' ? 'docs' : 'new-name.md'
+              }
             />
             {validationMessage ? <p className="validation-msg">{validationMessage}</p> : null}
             <div className="inline-form-actions">
@@ -304,7 +307,12 @@ export function GlobalLayout({
             </ul>
           </section>
         ) : (
-          <ul className="tree" role="tree" aria-label="Repository file tree" onKeyDown={onTreeKeyDown}>
+          <ul
+            className="tree"
+            role="tree"
+            aria-label="Repository file tree"
+            onKeyDown={onTreeKeyDown}
+          >
             {flatTree.map(({ node, depth }) => (
               <li
                 key={node.path}
@@ -314,13 +322,22 @@ export function GlobalLayout({
                 className={selectedPath === node.path ? 'tree-item selected' : 'tree-item'}
               >
                 {node.isDirectory ? (
-                  <button type="button" style={{ paddingLeft: `${depth * 12}px` }} onClick={() => void selectNode(node.path)}>
-                    <span aria-hidden="true">📁 </span>
+                  <button
+                    type="button"
+                    style={{ paddingLeft: `${depth * 12 + 4}px` }}
+                    onClick={() => void selectNode(node.path)}
+                  >
+                    <span className="tree-folder-arrow" aria-hidden="true">
+                      ▸
+                    </span>
                     {node.name}/
                   </button>
                 ) : (
-                  <Link to={`/file/${encodeURIComponent(node.path)}`} style={{ paddingLeft: `${depth * 12}px` }} onClick={() => void selectNode(node.path)}>
-                    <span aria-hidden="true">📄 </span>
+                  <Link
+                    to={`/file/${encodeURIComponent(node.path)}`}
+                    style={{ paddingLeft: `${depth * 12 + 18}px` }}
+                    onClick={() => void selectNode(node.path)}
+                  >
                     {node.name}
                   </Link>
                 )}
@@ -333,7 +350,10 @@ export function GlobalLayout({
 
       <div className="toast-stack" aria-live="polite" aria-label="Notifications">
         {toasts.map((toast) => (
-          <div key={toast.id} className={toast.type === 'success' ? 'toast success' : 'toast error'}>
+          <div
+            key={toast.id}
+            className={toast.type === 'success' ? 'toast success' : 'toast error'}
+          >
             {toast.message}
           </div>
         ))}

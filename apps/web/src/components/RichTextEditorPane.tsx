@@ -1,12 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-
-type BlockType = 'heading1' | 'heading2' | 'paragraph' | 'bullet' | 'quote' | 'code';
-
-interface EditorBlock {
-  id: string;
-  type: BlockType;
-  text: string;
-}
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 interface RichTextEditorPaneProps {
   filePath: string | null;
@@ -17,102 +9,29 @@ interface RichTextEditorPaneProps {
   onSave: () => void;
 }
 
-function createBlock(type: BlockType, text = ''): EditorBlock {
-  return { id: crypto.randomUUID(), type, text };
+type WrapFormat = 'bold' | 'italic' | 'code' | 'link';
+type LineFormat = 'heading1' | 'heading2' | 'bullet' | 'quote';
+type BlockFormat = 'codeblock';
+
+const wrapSyntax: Record<WrapFormat, { prefix: string; suffix: string; placeholder: string }> = {
+  bold: { prefix: '**', suffix: '**', placeholder: 'bold text' },
+  italic: { prefix: '*', suffix: '*', placeholder: 'italic text' },
+  code: { prefix: '`', suffix: '`', placeholder: 'code' },
+  link: { prefix: '[', suffix: '](https://)', placeholder: 'link text' },
+};
+
+const linePrefix: Record<LineFormat, string> = {
+  heading1: '# ',
+  heading2: '## ',
+  bullet: '- ',
+  quote: '> ',
+};
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
 }
-
-function parseMarkdownToBlocks(markdown: string): EditorBlock[] {
-  if (!markdown.trim()) {
-    return [createBlock('paragraph', '')];
-  }
-
-  const lines = markdown.split('\n');
-  const blocks: EditorBlock[] = [];
-  let inCode = false;
-  let codeLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.trimStart().startsWith('```')) {
-      if (inCode) {
-        blocks.push(createBlock('code', codeLines.join('\n')));
-        codeLines = [];
-      }
-      inCode = !inCode;
-      continue;
-    }
-
-    if (inCode) {
-      codeLines.push(line);
-      continue;
-    }
-
-    if (line.startsWith('# ')) {
-      blocks.push(createBlock('heading1', line.slice(2)));
-      continue;
-    }
-
-    if (line.startsWith('## ')) {
-      blocks.push(createBlock('heading2', line.slice(3)));
-      continue;
-    }
-
-    if (line.startsWith('- ')) {
-      blocks.push(createBlock('bullet', line.slice(2)));
-      continue;
-    }
-
-    if (line.startsWith('> ')) {
-      blocks.push(createBlock('quote', line.slice(2)));
-      continue;
-    }
-
-    if (!line.trim()) {
-      blocks.push(createBlock('paragraph', ''));
-      continue;
-    }
-
-    blocks.push(createBlock('paragraph', line));
-  }
-
-  if (codeLines.length > 0) {
-    blocks.push(createBlock('code', codeLines.join('\n')));
-  }
-
-  return blocks.length > 0 ? blocks : [createBlock('paragraph', '')];
-}
-
-function serializeBlocksToMarkdown(blocks: EditorBlock[]): string {
-  const content = blocks
-    .map((block) => {
-      switch (block.type) {
-        case 'heading1':
-          return `# ${block.text}`.trimEnd();
-        case 'heading2':
-          return `## ${block.text}`.trimEnd();
-        case 'bullet':
-          return `- ${block.text}`.trimEnd();
-        case 'quote':
-          return `> ${block.text}`.trimEnd();
-        case 'code':
-          return `\`\`\`\n${block.text}\n\`\`\``;
-        case 'paragraph':
-        default:
-          return block.text;
-      }
-    })
-    .join('\n');
-
-  return content.replace(/\n{3,}/g, '\n\n').trim();
-}
-
-const blockTypeOptions: Array<{ label: string; value: BlockType }> = [
-  { label: 'Text', value: 'paragraph' },
-  { label: 'H1', value: 'heading1' },
-  { label: 'H2', value: 'heading2' },
-  { label: 'Bullet', value: 'bullet' },
-  { label: 'Quote', value: 'quote' },
-  { label: 'Code', value: 'code' },
-];
 
 export function RichTextEditorPane({
   filePath,
@@ -122,17 +41,135 @@ export function RichTextEditorPane({
   onChangeMarkdown,
   onSave,
 }: RichTextEditorPaneProps) {
-  const [blocks, setBlocks] = useState<EditorBlock[]>(() => parseMarkdownToBlocks(markdown));
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [value, setValue] = useState(markdown);
 
   useEffect(() => {
-    setBlocks(parseMarkdownToBlocks(markdown));
+    setValue(markdown);
   }, [filePath, markdown]);
 
-  const serializedMarkdown = useMemo(() => serializeBlocksToMarkdown(blocks), [blocks]);
+  const commitChange = useCallback(
+    (nextValue: string) => {
+      setValue(nextValue);
+      onChangeMarkdown(nextValue);
+    },
+    [onChangeMarkdown],
+  );
 
-  useEffect(() => {
-    onChangeMarkdown(serializedMarkdown);
-  }, [onChangeMarkdown, serializedMarkdown]);
+  const applyWrap = useCallback(
+    (format: WrapFormat) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const { selectionStart, selectionEnd } = textarea;
+      const { prefix, suffix, placeholder } = wrapSyntax[format];
+      const current = textarea.value;
+      const selected = current.slice(selectionStart, selectionEnd) || placeholder;
+      const next =
+        current.slice(0, selectionStart) + prefix + selected + suffix + current.slice(selectionEnd);
+
+      commitChange(next);
+
+      const caretStart = selectionStart + prefix.length;
+      const caretEnd = caretStart + selected.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(caretStart, caretEnd);
+      });
+    },
+    [commitChange],
+  );
+
+  const applyLine = useCallback(
+    (format: LineFormat) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const { selectionStart, selectionEnd } = textarea;
+      const current = textarea.value;
+      const lineStart = current.lastIndexOf('\n', Math.max(selectionStart - 1, 0)) + 1;
+      const rawLineEnd = current.indexOf('\n', selectionEnd);
+      const lineEnd = rawLineEnd === -1 ? current.length : rawLineEnd;
+
+      const prefix = linePrefix[format];
+      const block = current.slice(lineStart, lineEnd);
+      const transformed = block
+        .split('\n')
+        .map((line) => {
+          const stripped = line.replace(/^(#{1,6}\s|-\s|>\s)/, '');
+          return prefix + stripped;
+        })
+        .join('\n');
+
+      const next = current.slice(0, lineStart) + transformed + current.slice(lineEnd);
+      commitChange(next);
+
+      const delta = transformed.length - block.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(selectionStart + prefix.length, selectionEnd + delta);
+      });
+    },
+    [commitChange],
+  );
+
+  const applyBlock = useCallback(
+    (format: BlockFormat) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const { selectionStart, selectionEnd } = textarea;
+      const current = textarea.value;
+      const selected = current.slice(selectionStart, selectionEnd) || 'code here';
+
+      const opening = format === 'codeblock' ? '```\n' : '';
+      const closing = format === 'codeblock' ? '\n```' : '';
+      const next =
+        current.slice(0, selectionStart) +
+        opening +
+        selected +
+        closing +
+        current.slice(selectionEnd);
+
+      commitChange(next);
+
+      const caretStart = selectionStart + opening.length;
+      const caretEnd = caretStart + selected.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(caretStart, caretEnd);
+      });
+    },
+    [commitChange],
+  );
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    const isMod = event.metaKey || event.ctrlKey;
+    if (!isMod) return;
+
+    const key = event.key.toLowerCase();
+    if (key === 'b') {
+      event.preventDefault();
+      applyWrap('bold');
+    } else if (key === 'i') {
+      event.preventDefault();
+      applyWrap('italic');
+    } else if (key === 'k') {
+      event.preventDefault();
+      applyWrap('link');
+    } else if (key === 'e') {
+      event.preventDefault();
+      applyWrap('code');
+    }
+  }
+
+  const stats = useMemo(() => {
+    return {
+      words: countWords(value),
+      chars: value.length,
+      lines: value ? value.split('\n').length : 0,
+    };
+  }, [value]);
 
   if (!filePath) {
     return <p className="empty-state">Select a markdown file to edit.</p>;
@@ -142,60 +179,123 @@ export function RichTextEditorPane({
     <div className="editor-pane">
       <header className="editor-header">
         <div>
-          <strong>{filePath}</strong>
-          <p className="editor-meta">{isDirty ? 'Unsaved changes' : 'All changes saved'}</p>
+          <div className="editor-title">{filePath}</div>
+          <p className={isDirty ? 'editor-meta is-dirty' : 'editor-meta'}>
+            {isDirty ? 'Unsaved changes' : 'All changes saved'}
+          </p>
         </div>
         <button type="button" onClick={onSave} disabled={!isDirty} className="save-button">
-          Save {isDirty ? '•' : ''}
+          Save
         </button>
       </header>
 
-      <div className="rich-editor" role="group" aria-label="Rich text editor">
-        {blocks.length === 0 ? <p className="empty-state">No content to edit.</p> : null}
-        {blocks.map((block, index) => (
-          <div key={block.id} className="editor-row">
-            <select
-              aria-label="Block style"
-              value={block.type}
-              onChange={(event) => {
-                const nextType = event.target.value as BlockType;
-                setBlocks((current) =>
-                  current.map((item) => (item.id === block.id ? { ...item, type: nextType } : item)),
-                );
-              }}
-            >
-              {blockTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <textarea
-              value={block.text}
-              rows={block.type === 'code' ? 5 : 2}
-              className={block.type === 'code' ? 'block-input code' : 'block-input'}
-              placeholder={block.type === 'paragraph' ? 'Type / for commands' : ''}
-              onChange={(event) => {
-                const nextText = event.target.value;
-                setBlocks((current) =>
-                  current.map((item) => (item.id === block.id ? { ...item, text: nextText } : item)),
-                );
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setBlocks((current) => {
-                  const next = [...current];
-                  next.splice(index + 1, 0, createBlock('paragraph'));
-                  return next;
-                });
-              }}
-            >
-              +
-            </button>
-          </div>
-        ))}
+      <div className="editor-surface" role="group" aria-label="Markdown editor">
+        <div className="editor-toolbar" role="toolbar" aria-label="Formatting">
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => applyLine('heading1')}
+            title="Heading 1"
+            aria-label="Heading 1"
+          >
+            H1
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => applyLine('heading2')}
+            title="Heading 2"
+            aria-label="Heading 2"
+          >
+            H2
+          </button>
+          <span className="toolbar-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className="toolbar-btn bold"
+            onClick={() => applyWrap('bold')}
+            title="Bold (⌘B)"
+            aria-label="Bold"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn italic"
+            onClick={() => applyWrap('italic')}
+            title="Italic (⌘I)"
+            aria-label="Italic"
+          >
+            I
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn mono"
+            onClick={() => applyWrap('code')}
+            title="Inline code (⌘E)"
+            aria-label="Inline code"
+          >
+            {'</>'}
+          </button>
+          <span className="toolbar-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => applyLine('bullet')}
+            title="Bulleted list"
+            aria-label="Bulleted list"
+          >
+            •
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => applyLine('quote')}
+            title="Quote"
+            aria-label="Quote"
+          >
+            "
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn mono"
+            onClick={() => applyBlock('codeblock')}
+            title="Code block"
+            aria-label="Code block"
+          >
+            {'{ }'}
+          </button>
+          <span className="toolbar-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => applyWrap('link')}
+            title="Link (⌘K)"
+            aria-label="Link"
+          >
+            ↗
+          </button>
+        </div>
+
+        <textarea
+          ref={textareaRef}
+          className="markdown-textarea"
+          aria-label="Markdown source"
+          value={value}
+          spellCheck
+          placeholder="# Start writing…"
+          onKeyDown={handleKeyDown}
+          onChange={(event) => commitChange(event.target.value)}
+        />
+
+        <div className="editor-footer" aria-live="off">
+          <span>
+            {stats.words} {stats.words === 1 ? 'word' : 'words'} · {stats.chars}{' '}
+            {stats.chars === 1 ? 'char' : 'chars'} · {stats.lines}{' '}
+            {stats.lines === 1 ? 'line' : 'lines'}
+          </span>
+          <span>markdown</span>
+        </div>
       </div>
 
       {!savedMarkdown.trim() && !isDirty ? (
