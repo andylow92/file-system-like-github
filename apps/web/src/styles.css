@@ -340,6 +340,48 @@ select:focus-visible {
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
+.tree-item[draggable='true'] button,
+.tree-item[draggable='true'] a {
+  cursor: grab;
+}
+
+.tree-item[draggable='true']:active button,
+.tree-item[draggable='true']:active a {
+  cursor: grabbing;
+}
+
+.tree-item.dragging {
+  opacity: 0.45;
+}
+
+.tree-item.drop-target {
+  background: var(--color-accent-soft);
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    inset 2px 0 0 var(--color-accent);
+  color: var(--color-text);
+}
+
+.root-drop {
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  background: transparent;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.root-drop.drop-target {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
 .tree-folder-arrow {
   display: inline-block;
   width: 0.75rem;

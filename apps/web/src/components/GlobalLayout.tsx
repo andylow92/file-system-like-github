@@ -1,6 +1,16 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useMemo, useState, type KeyboardEvent, type PropsWithChildren } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type PropsWithChildren,
+} from 'react';
 import type { FileNode } from '@repo/shared';
+
+const ROOT_DROP_KEY = '__root__';
+const DRAG_MIME = 'application/x-repo-path';
 
 interface GlobalLayoutProps extends PropsWithChildren {
   tree: FileNode[];
@@ -54,8 +64,131 @@ export function GlobalLayout({
   const [inputValue, setInputValue] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
   const [toasts, setToasts] = useState<Array<{ id: number; type: ToastType; message: string }>>([]);
+  const [draggedPath, setDraggedPath] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const flatTree = useMemo(() => flattenTree(tree), [tree]);
+
+  function findNode(nodePath: string): FileNode | undefined {
+    return flatTree.find((entry) => entry.node.path === nodePath)?.node;
+  }
+
+  function targetDirectoryFor(node: FileNode): string {
+    return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? '');
+  }
+
+  function isValidMove(sourcePath: string, targetDir: string): boolean {
+    const source = findNode(sourcePath);
+    if (!source) {
+      return false;
+    }
+
+    const currentParent = getParentDirectoryPath(sourcePath) ?? '';
+    if (currentParent === targetDir) {
+      return false;
+    }
+
+    if (source.isDirectory) {
+      if (targetDir === source.path || targetDir.startsWith(`${source.path}/`)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  async function movePathTo(sourcePath: string, targetDir: string) {
+    const source = findNode(sourcePath);
+    if (!source || !isValidMove(sourcePath, targetDir)) {
+      return;
+    }
+
+    const toPath = targetDir ? `${targetDir}/${source.name}` : source.name;
+
+    try {
+      await onRenamePath(sourcePath, toPath);
+      setSelectedPath(toPath);
+      showToast('success', `Moved ${source.name} to ${targetDir || 'root'}.`);
+    } catch (error: unknown) {
+      showToast('error', error instanceof Error ? error.message : 'Move failed.');
+    }
+  }
+
+  function handleItemDragStart(event: DragEvent<HTMLLIElement>, nodePath: string) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(DRAG_MIME, nodePath);
+    event.dataTransfer.setData('text/plain', nodePath);
+    setDraggedPath(nodePath);
+  }
+
+  function handleItemDragEnd() {
+    setDraggedPath(null);
+    setDropTargetKey(null);
+  }
+
+  function handleItemDragOver(event: DragEvent<HTMLLIElement>, node: FileNode) {
+    if (!draggedPath) {
+      return;
+    }
+
+    const targetDir = targetDirectoryFor(node);
+    if (!isValidMove(draggedPath, targetDir)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTargetKey(node.path);
+  }
+
+  function handleItemDragLeave(event: DragEvent<HTMLLIElement>, node: FileNode) {
+    const related = event.relatedTarget as Node | null;
+    if (related && event.currentTarget.contains(related)) {
+      return;
+    }
+    setDropTargetKey((current) => (current === node.path ? null : current));
+  }
+
+  function handleItemDrop(event: DragEvent<HTMLLIElement>, node: FileNode) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    setDropTargetKey(null);
+    setDraggedPath(null);
+
+    if (!sourcePath) {
+      return;
+    }
+
+    const targetDir = targetDirectoryFor(node);
+    void movePathTo(sourcePath, targetDir);
+  }
+
+  function handleRootDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!draggedPath || !isValidMove(draggedPath, '')) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTargetKey(ROOT_DROP_KEY);
+  }
+
+  function handleRootDragLeave() {
+    setDropTargetKey((current) => (current === ROOT_DROP_KEY ? null : current));
+  }
+
+  function handleRootDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    setDropTargetKey(null);
+    setDraggedPath(null);
+    if (!sourcePath) {
+      return;
+    }
+    void movePathTo(sourcePath, '');
+  }
 
   useEffect(() => {
     if (selectedFilePath) {
@@ -307,43 +440,70 @@ export function GlobalLayout({
             </ul>
           </section>
         ) : (
-          <ul
-            className="tree"
-            role="tree"
-            aria-label="Repository file tree"
-            onKeyDown={onTreeKeyDown}
-          >
-            {flatTree.map(({ node, depth }) => (
-              <li
-                key={node.path}
-                role="treeitem"
-                aria-level={depth}
-                aria-selected={selectedPath === node.path}
-                className={selectedPath === node.path ? 'tree-item selected' : 'tree-item'}
+          <>
+            {draggedPath && isValidMove(draggedPath, '') ? (
+              <div
+                className={dropTargetKey === ROOT_DROP_KEY ? 'root-drop drop-target' : 'root-drop'}
+                onDragOver={handleRootDragOver}
+                onDragLeave={handleRootDragLeave}
+                onDrop={handleRootDrop}
+                aria-label="Move to repository root"
               >
-                {node.isDirectory ? (
-                  <button
-                    type="button"
-                    style={{ paddingLeft: `${depth * 12 + 4}px` }}
-                    onClick={() => void selectNode(node.path)}
+                Drop here to move to root
+              </div>
+            ) : null}
+            <ul
+              className="tree"
+              role="tree"
+              aria-label="Repository file tree"
+              onKeyDown={onTreeKeyDown}
+            >
+              {flatTree.map(({ node, depth }) => {
+                const classes = ['tree-item'];
+                if (selectedPath === node.path) classes.push('selected');
+                if (draggedPath === node.path) classes.push('dragging');
+                if (dropTargetKey === node.path) classes.push('drop-target');
+
+                return (
+                  <li
+                    key={node.path}
+                    role="treeitem"
+                    aria-level={depth}
+                    aria-selected={selectedPath === node.path}
+                    className={classes.join(' ')}
+                    draggable
+                    onDragStart={(event) => handleItemDragStart(event, node.path)}
+                    onDragEnd={handleItemDragEnd}
+                    onDragOver={(event) => handleItemDragOver(event, node)}
+                    onDragLeave={(event) => handleItemDragLeave(event, node)}
+                    onDrop={(event) => handleItemDrop(event, node)}
                   >
-                    <span className="tree-folder-arrow" aria-hidden="true">
-                      ▸
-                    </span>
-                    {node.name}/
-                  </button>
-                ) : (
-                  <Link
-                    to={`/file/${encodeURIComponent(node.path)}`}
-                    style={{ paddingLeft: `${depth * 12 + 18}px` }}
-                    onClick={() => void selectNode(node.path)}
-                  >
-                    {node.name}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
+                    {node.isDirectory ? (
+                      <button
+                        type="button"
+                        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+                        onClick={() => void selectNode(node.path)}
+                      >
+                        <span className="tree-folder-arrow" aria-hidden="true">
+                          ▸
+                        </span>
+                        {node.name}/
+                      </button>
+                    ) : (
+                      <Link
+                        to={`/file/${encodeURIComponent(node.path)}`}
+                        style={{ paddingLeft: `${depth * 12 + 18}px` }}
+                        onClick={() => void selectNode(node.path)}
+                        draggable={false}
+                      >
+                        {node.name}
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </aside>
       <main className="right-panel">{children}</main>
