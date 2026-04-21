@@ -21,15 +21,24 @@ describe('PATCH /api/path', () => {
   let baseUrl = '';
   let server: http.Server | undefined;
 
+  async function createRouteDependencies(rootPath: string) {
+    const { createPathResolver } = await import('../storage/pathResolver.js');
+    const { createFileRepository } = await import('../storage/fileRepository.js');
+    const pathResolver = createPathResolver(rootPath);
+    const repository = createFileRepository(pathResolver);
+    return { repository, pathResolver };
+  }
+
   beforeEach(async () => {
     contentRoot = await mkdtemp(path.join(os.tmpdir(), 'api-routes-content-root-'));
     process.env.CONTENT_ROOT = contentRoot;
     vi.resetModules();
 
     const { handleFileRoutes } = await import('./files');
+    const deps = await createRouteDependencies(contentRoot);
 
     server = http.createServer(async (req, res) => {
-      const handled = await handleFileRoutes(req, res);
+      const handled = await handleFileRoutes(req, res, deps);
       if (!handled.handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ success: false, error: { code: 'not_found', message: 'Endpoint not found.' } }));
