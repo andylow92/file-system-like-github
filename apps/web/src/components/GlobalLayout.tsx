@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import {
   useEffect,
   useMemo,
@@ -11,7 +10,6 @@ import {
 import type { FileNode } from '@repo/shared';
 
 const ROOT_DROP_KEY = '__root__';
-const DRAG_MIME = 'application/x-repo-path';
 
 interface GlobalLayoutProps extends PropsWithChildren {
   tree: FileNode[];
@@ -147,15 +145,18 @@ export function GlobalLayout({
     }
   }
 
-  function isOwnDrag(event: DragEvent): boolean {
-    return Array.from(event.dataTransfer.types).includes(DRAG_MIME);
+  function isOwnDrag(): boolean {
+    return draggedPathRef.current !== null;
   }
 
   function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(DRAG_MIME, nodePath);
-    event.dataTransfer.setData('text/plain', nodePath);
+    try {
+      event.dataTransfer.setData('text/plain', nodePath);
+    } catch {
+      // Some browsers throw if setData is called after drag already started; ignore.
+    }
     draggedPathRef.current = nodePath;
     setDraggedPath(nodePath);
   }
@@ -167,19 +168,12 @@ export function GlobalLayout({
   }
 
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
-    if (!isOwnDrag(event)) {
-      return;
-    }
-
-    const sourcePath = draggedPathRef.current;
-    const targetDir = targetDirectoryFor(node);
-
-    if (sourcePath && !isValidMove(sourcePath, targetDir)) {
-      event.dataTransfer.dropEffect = 'none';
+    if (!isOwnDrag()) {
       return;
     }
 
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
     setDropTargetKey((current) => (current === node.path ? current : node.path));
   }
@@ -194,8 +188,9 @@ export function GlobalLayout({
 
   function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
     event.preventDefault();
+    event.stopPropagation();
 
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPathRef.current;
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
     setDropTargetKey(null);
     draggedPathRef.current = null;
     setDraggedPath(null);
@@ -212,12 +207,7 @@ export function GlobalLayout({
   }
 
   function handleRootDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!isOwnDrag(event)) {
-      return;
-    }
-    const sourcePath = draggedPathRef.current;
-    if (sourcePath && !isValidMove(sourcePath, '')) {
-      event.dataTransfer.dropEffect = 'none';
+    if (!isOwnDrag()) {
       return;
     }
     event.preventDefault();
@@ -231,7 +221,7 @@ export function GlobalLayout({
 
   function handleRootDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPathRef.current;
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
     setDropTargetKey(null);
     draggedPathRef.current = null;
     setDraggedPath(null);
@@ -650,10 +640,13 @@ export function GlobalLayout({
                             {node.name}/
                           </button>
                         ) : (
-                          <Link
-                            to={`/file/${encodeURIComponent(node.path)}`}
+                          <a
+                            href={`/file/${encodeURIComponent(node.path)}`}
                             style={{ paddingLeft: `${depth * 12 + 18}px` }}
-                            onClick={() => void selectNode(node.path)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void selectNode(node.path);
+                            }}
                             draggable
                             onDragStart={(event) => handleItemDragStart(event, node.path)}
                             onDragEnd={handleItemDragEnd}
@@ -662,7 +655,7 @@ export function GlobalLayout({
                             onDrop={(event) => handleItemDrop(event, node)}
                           >
                             {node.name}
-                          </Link>
+                          </a>
                         )}
                       </li>
                     );
