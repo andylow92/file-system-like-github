@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type ViewerTabKey = 'preview' | 'edit';
+export type ViewerTabKey = 'preview' | 'edit' | 'split';
 
 interface FileViewerTabsProps {
   activeTab: ViewerTabKey;
@@ -25,6 +25,15 @@ export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileVi
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === 'split'}
+          className={activeTab === 'split' ? 'tab active' : 'tab'}
+          onClick={() => onTabChange('split')}
+        >
+          Split
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === 'edit'}
           className={activeTab === 'edit' ? 'tab active' : 'tab'}
           onClick={() => onTabChange('edit')}
@@ -32,7 +41,18 @@ export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileVi
           Edit
         </button>
       </div>
-      <div className="tab-content">{activeTab === 'preview' ? preview : edit}</div>
+      <div className="tab-content">
+        {activeTab === 'split' ? (
+          <div className="split-view">
+            <div className="split-pane split-edit">{edit}</div>
+            <div className="split-pane split-preview">{preview}</div>
+          </div>
+        ) : activeTab === 'preview' ? (
+          preview
+        ) : (
+          edit
+        )}
+      </div>
     </section>
   );
 }

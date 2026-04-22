@@ -6,7 +6,8 @@ interface MarkdownPreviewPaneProps {
 type MarkdownNode =
   | { type: 'h1' | 'h2' | 'paragraph' | 'blockquote'; content: string }
   | { type: 'list'; items: string[] }
-  | { type: 'code'; content: string };
+  | { type: 'code'; content: string }
+  | { type: 'hr' };
 
 function escapeHtml(value: string): string {
   return value
@@ -15,6 +16,13 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function renderInlineFromEscaped(escaped: string): string {
+  return escaped
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
 }
 
 function tokenizeMarkdown(markdown: string): string[] {
@@ -68,7 +76,9 @@ function parseMarkdown(lines: string[]): MarkdownNode[] {
 
     flushList();
 
-    if (line.startsWith('# ')) {
+    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
+      nodes.push({ type: 'hr' });
+    } else if (line.startsWith('# ')) {
       nodes.push({ type: 'h1', content: line.slice(2) });
     } else if (line.startsWith('## ')) {
       nodes.push({ type: 'h2', content: line.slice(3) });
@@ -97,6 +107,10 @@ function sanitizeMarkdownAst(nodes: MarkdownNode[]): MarkdownNode[] {
       };
     }
 
+    if (node.type === 'hr') {
+      return node;
+    }
+
     return {
       ...node,
       content: escapeHtml(node.content),
@@ -109,17 +123,21 @@ function renderHtml(nodes: MarkdownNode[]): string {
     .map((node) => {
       switch (node.type) {
         case 'h1':
-          return `<h1>${node.content}</h1>`;
+          return `<h1>${renderInlineFromEscaped(node.content)}</h1>`;
         case 'h2':
-          return `<h2>${node.content}</h2>`;
+          return `<h2>${renderInlineFromEscaped(node.content)}</h2>`;
         case 'blockquote':
-          return `<blockquote>${node.content}</blockquote>`;
+          return `<blockquote>${renderInlineFromEscaped(node.content)}</blockquote>`;
         case 'paragraph':
-          return `<p>${node.content}</p>`;
+          return `<p>${renderInlineFromEscaped(node.content)}</p>`;
         case 'code':
           return `<pre><code>${node.content}</code></pre>`;
         case 'list':
-          return `<ul>${node.items.map((item) => `<li>${item}</li>`).join('')}</ul>`;
+          return `<ul>${node.items
+            .map((item) => `<li>${renderInlineFromEscaped(item)}</li>`)
+            .join('')}</ul>`;
+        case 'hr':
+          return `<hr />`;
       }
     })
     .join('');
