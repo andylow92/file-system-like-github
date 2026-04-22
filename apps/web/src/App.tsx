@@ -27,7 +27,7 @@ export function App() {
   const currentSavedFile = selectedFilePath ? savedFiles[selectedFilePath] : undefined;
   const currentSavedMarkdown = currentSavedFile?.content ?? '';
   const currentDraftMarkdown = selectedFilePath
-    ? draftContents[selectedFilePath] ?? currentSavedMarkdown
+    ? (draftContents[selectedFilePath] ?? currentSavedMarkdown)
     : '';
 
   const hasUnsavedChanges = useMemo(
@@ -109,7 +109,9 @@ export function App() {
 
   async function handleSelectFile(nextPath: string) {
     if (selectedFilePath && isCurrentFileDirty && selectedFilePath !== nextPath) {
-      const shouldDiscard = window.confirm('You have unsaved changes. Switch files and discard edits?');
+      const shouldDiscard = window.confirm(
+        'You have unsaved changes. Switch files and discard edits?',
+      );
       if (!shouldDiscard) {
         return;
       }
@@ -161,6 +163,7 @@ export function App() {
       tree={tree}
       treeLoading={treeLoading}
       selectedFilePath={selectedFilePath ?? undefined}
+      isDirty={hasUnsavedChanges}
       onSelectFile={handleSelectFile}
       onSave={saveCurrentFile}
       onCreateFile={async (path) => {
@@ -187,7 +190,9 @@ export function App() {
 
         try {
           await renamePath(fromPath, toPath);
-          await refreshTreeAndCurrentFile(previousSelected === fromPath ? toPath : selectedFilePath);
+          await refreshTreeAndCurrentFile(
+            previousSelected === fromPath ? toPath : selectedFilePath,
+          );
         } catch (error: unknown) {
           setSelectedFilePath(previousSelected);
           throw new Error(getErrorMessage(error));
@@ -225,7 +230,9 @@ export function App() {
       <FileViewerTabs
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        preview={<MarkdownPreviewPane filePath={selectedFilePath} markdown={currentDraftMarkdown} />}
+        preview={
+          <MarkdownPreviewPane filePath={selectedFilePath} markdown={currentDraftMarkdown} />
+        }
         edit={
           <RichTextEditorPane
             filePath={selectedFilePath}
