@@ -557,13 +557,13 @@ select:focus-visible {
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
-.tree-item[draggable='true'] button,
-.tree-item[draggable='true'] a {
+.tree-item button[draggable='true'],
+.tree-item a[draggable='true'] {
   cursor: grab;
 }
 
-.tree-item[draggable='true']:active button,
-.tree-item[draggable='true']:active a {
+.tree-item button[draggable='true']:active,
+.tree-item a[draggable='true']:active {
   cursor: grabbing;
 }
 
