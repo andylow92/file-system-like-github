@@ -158,7 +158,7 @@ export function GlobalLayout({
     setDropTargetKey(null);
   }
 
-  function handleItemDragOver(event: DragEvent<HTMLLIElement>, node: FileNode) {
+  function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
     if (!draggedPath) {
       return;
     }
@@ -169,12 +169,11 @@ export function GlobalLayout({
     }
 
     event.preventDefault();
-    event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
     setDropTargetKey(node.path);
   }
 
-  function handleItemDragLeave(event: DragEvent<HTMLLIElement>, node: FileNode) {
+  function handleItemDragLeave(event: DragEvent<HTMLElement>, node: FileNode) {
     const related = event.relatedTarget as Node | null;
     if (related && event.currentTarget.contains(related)) {
       return;
@@ -182,9 +181,8 @@ export function GlobalLayout({
     setDropTargetKey((current) => (current === node.path ? null : current));
   }
 
-  function handleItemDrop(event: DragEvent<HTMLLIElement>, node: FileNode) {
+  function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
     event.preventDefault();
-    event.stopPropagation();
 
     const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
     setDropTargetKey(null);
@@ -609,9 +607,6 @@ export function GlobalLayout({
                         aria-level={depth}
                         aria-selected={selectedPath === node.path}
                         className={classes.join(' ')}
-                        onDragOver={(event) => handleItemDragOver(event, node)}
-                        onDragLeave={(event) => handleItemDragLeave(event, node)}
-                        onDrop={(event) => handleItemDrop(event, node)}
                       >
                         {node.isDirectory ? (
                           <button
@@ -621,6 +616,9 @@ export function GlobalLayout({
                             draggable
                             onDragStart={(event) => handleItemDragStart(event, node.path)}
                             onDragEnd={handleItemDragEnd}
+                            onDragOver={(event) => handleItemDragOver(event, node)}
+                            onDragLeave={(event) => handleItemDragLeave(event, node)}
+                            onDrop={(event) => handleItemDrop(event, node)}
                           >
                             <span className="tree-folder-arrow" aria-hidden="true">
                               ▸
@@ -635,6 +633,9 @@ export function GlobalLayout({
                             draggable
                             onDragStart={(event) => handleItemDragStart(event, node.path)}
                             onDragEnd={handleItemDragEnd}
+                            onDragOver={(event) => handleItemDragOver(event, node)}
+                            onDragLeave={(event) => handleItemDragLeave(event, node)}
+                            onDrop={(event) => handleItemDrop(event, node)}
                           >
                             {node.name}
                           </Link>
