@@ -145,7 +145,8 @@ export function GlobalLayout({
     }
   }
 
-  function handleItemDragStart(event: DragEvent<HTMLLIElement>, nodePath: string) {
+  function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
+    event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(DRAG_MIME, nodePath);
     event.dataTransfer.setData('text/plain', nodePath);
@@ -608,9 +609,6 @@ export function GlobalLayout({
                         aria-level={depth}
                         aria-selected={selectedPath === node.path}
                         className={classes.join(' ')}
-                        draggable
-                        onDragStart={(event) => handleItemDragStart(event, node.path)}
-                        onDragEnd={handleItemDragEnd}
                         onDragOver={(event) => handleItemDragOver(event, node)}
                         onDragLeave={(event) => handleItemDragLeave(event, node)}
                         onDrop={(event) => handleItemDrop(event, node)}
@@ -620,6 +618,9 @@ export function GlobalLayout({
                             type="button"
                             style={{ paddingLeft: `${depth * 12 + 4}px` }}
                             onClick={() => void selectNode(node.path)}
+                            draggable
+                            onDragStart={(event) => handleItemDragStart(event, node.path)}
+                            onDragEnd={handleItemDragEnd}
                           >
                             <span className="tree-folder-arrow" aria-hidden="true">
                               ▸
@@ -631,7 +632,9 @@ export function GlobalLayout({
                             to={`/file/${encodeURIComponent(node.path)}`}
                             style={{ paddingLeft: `${depth * 12 + 18}px` }}
                             onClick={() => void selectNode(node.path)}
-                            draggable={false}
+                            draggable
+                            onDragStart={(event) => handleItemDragStart(event, node.path)}
+                            onDragEnd={handleItemDragEnd}
                           >
                             {node.name}
                           </Link>
