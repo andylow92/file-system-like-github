@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type KeyboardEvent,
@@ -10,7 +10,6 @@ import {
 import type { FileNode } from '@repo/shared';
 
 const ROOT_DROP_KEY = '__root__';
-const DRAG_MIME = 'application/x-repo-path';
 
 interface GlobalLayoutProps extends PropsWithChildren {
   tree: FileNode[];
@@ -69,6 +68,7 @@ export function GlobalLayout({
   const [draggedPath, setDraggedPath] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
+  const draggedPathRef = useRef<string | null>(null);
 
   const flatTree = useMemo(() => flattenTree(tree), [tree]);
 
@@ -145,32 +145,37 @@ export function GlobalLayout({
     }
   }
 
+  function isOwnDrag(): boolean {
+    return draggedPathRef.current !== null;
+  }
+
   function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(DRAG_MIME, nodePath);
-    event.dataTransfer.setData('text/plain', nodePath);
+    try {
+      event.dataTransfer.setData('text/plain', nodePath);
+    } catch {
+      // Some browsers throw if setData is called after drag already started; ignore.
+    }
+    draggedPathRef.current = nodePath;
     setDraggedPath(nodePath);
   }
 
   function handleItemDragEnd() {
+    draggedPathRef.current = null;
     setDraggedPath(null);
     setDropTargetKey(null);
   }
 
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
-    if (!draggedPath) {
-      return;
-    }
-
-    const targetDir = targetDirectoryFor(node);
-    if (!isValidMove(draggedPath, targetDir)) {
+    if (!isOwnDrag()) {
       return;
     }
 
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    setDropTargetKey(node.path);
+    setDropTargetKey((current) => (current === node.path ? current : node.path));
   }
 
   function handleItemDragLeave(event: DragEvent<HTMLElement>, node: FileNode) {
@@ -183,9 +188,11 @@ export function GlobalLayout({
 
   function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
     event.preventDefault();
+    event.stopPropagation();
 
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
     setDropTargetKey(null);
+    draggedPathRef.current = null;
     setDraggedPath(null);
 
     if (!sourcePath) {
@@ -193,16 +200,19 @@ export function GlobalLayout({
     }
 
     const targetDir = targetDirectoryFor(node);
+    if (!isValidMove(sourcePath, targetDir)) {
+      return;
+    }
     void movePathTo(sourcePath, targetDir);
   }
 
   function handleRootDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!draggedPath || !isValidMove(draggedPath, '')) {
+    if (!isOwnDrag()) {
       return;
     }
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    setDropTargetKey(ROOT_DROP_KEY);
+    setDropTargetKey((current) => (current === ROOT_DROP_KEY ? current : ROOT_DROP_KEY));
   }
 
   function handleRootDragLeave() {
@@ -211,10 +221,14 @@ export function GlobalLayout({
 
   function handleRootDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
     setDropTargetKey(null);
+    draggedPathRef.current = null;
     setDraggedPath(null);
     if (!sourcePath) {
+      return;
+    }
+    if (!isValidMove(sourcePath, '')) {
       return;
     }
     void movePathTo(sourcePath, '');
@@ -626,10 +640,13 @@ export function GlobalLayout({
                             {node.name}/
                           </button>
                         ) : (
-                          <Link
-                            to={`/file/${encodeURIComponent(node.path)}`}
+                          <a
+                            href={`/file/${encodeURIComponent(node.path)}`}
                             style={{ paddingLeft: `${depth * 12 + 18}px` }}
-                            onClick={() => void selectNode(node.path)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void selectNode(node.path);
+                            }}
                             draggable
                             onDragStart={(event) => handleItemDragStart(event, node.path)}
                             onDragEnd={handleItemDragEnd}
@@ -638,7 +655,7 @@ export function GlobalLayout({
                             onDrop={(event) => handleItemDrop(event, node)}
                           >
                             {node.name}
-                          </Link>
+                          </a>
                         )}
                       </li>
                     );
