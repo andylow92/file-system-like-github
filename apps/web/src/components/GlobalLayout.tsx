@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
   type KeyboardEvent,
@@ -69,6 +70,7 @@ export function GlobalLayout({
   const [draggedPath, setDraggedPath] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
+  const draggedPathRef = useRef<string | null>(null);
 
   const flatTree = useMemo(() => flattenTree(tree), [tree]);
 
@@ -145,32 +147,41 @@ export function GlobalLayout({
     }
   }
 
+  function isOwnDrag(event: DragEvent): boolean {
+    return Array.from(event.dataTransfer.types).includes(DRAG_MIME);
+  }
+
   function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(DRAG_MIME, nodePath);
     event.dataTransfer.setData('text/plain', nodePath);
+    draggedPathRef.current = nodePath;
     setDraggedPath(nodePath);
   }
 
   function handleItemDragEnd() {
+    draggedPathRef.current = null;
     setDraggedPath(null);
     setDropTargetKey(null);
   }
 
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
-    if (!draggedPath) {
+    if (!isOwnDrag(event)) {
       return;
     }
 
+    const sourcePath = draggedPathRef.current;
     const targetDir = targetDirectoryFor(node);
-    if (!isValidMove(draggedPath, targetDir)) {
+
+    if (sourcePath && !isValidMove(sourcePath, targetDir)) {
+      event.dataTransfer.dropEffect = 'none';
       return;
     }
 
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    setDropTargetKey(node.path);
+    setDropTargetKey((current) => (current === node.path ? current : node.path));
   }
 
   function handleItemDragLeave(event: DragEvent<HTMLElement>, node: FileNode) {
@@ -184,8 +195,9 @@ export function GlobalLayout({
   function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
     event.preventDefault();
 
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPathRef.current;
     setDropTargetKey(null);
+    draggedPathRef.current = null;
     setDraggedPath(null);
 
     if (!sourcePath) {
@@ -193,16 +205,24 @@ export function GlobalLayout({
     }
 
     const targetDir = targetDirectoryFor(node);
+    if (!isValidMove(sourcePath, targetDir)) {
+      return;
+    }
     void movePathTo(sourcePath, targetDir);
   }
 
   function handleRootDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!draggedPath || !isValidMove(draggedPath, '')) {
+    if (!isOwnDrag(event)) {
+      return;
+    }
+    const sourcePath = draggedPathRef.current;
+    if (sourcePath && !isValidMove(sourcePath, '')) {
+      event.dataTransfer.dropEffect = 'none';
       return;
     }
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    setDropTargetKey(ROOT_DROP_KEY);
+    setDropTargetKey((current) => (current === ROOT_DROP_KEY ? current : ROOT_DROP_KEY));
   }
 
   function handleRootDragLeave() {
@@ -211,10 +231,14 @@ export function GlobalLayout({
 
   function handleRootDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPath;
+    const sourcePath = event.dataTransfer.getData(DRAG_MIME) || draggedPathRef.current;
     setDropTargetKey(null);
+    draggedPathRef.current = null;
     setDraggedPath(null);
     if (!sourcePath) {
+      return;
+    }
+    if (!isValidMove(sourcePath, '')) {
       return;
     }
     void movePathTo(sourcePath, '');
