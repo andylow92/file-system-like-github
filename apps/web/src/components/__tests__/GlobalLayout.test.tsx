@@ -28,9 +28,13 @@ describe('GlobalLayout', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('docs/')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'docs' })).toBeInTheDocument();
 
     const fileLink = screen.getByRole('link', { name: 'intro.md' });
     expect(fileLink).toHaveAttribute('href', '/file/docs%2Fintro.md');
+    expect(fileLink).toHaveAttribute('draggable', 'false');
+
+    const folderRow = fileLink.closest('li');
+    expect(folderRow).toHaveAttribute('draggable', 'true');
   });
 });
