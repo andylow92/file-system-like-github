@@ -25,7 +25,12 @@ interface GlobalLayoutProps extends PropsWithChildren {
 }
 
 type ActionMode = 'newFile' | 'newFolder' | 'rename' | null;
-type ToastType = 'success' | 'error';
+type ToastType = 'success' | 'error' | 'info';
+
+interface MoveValidation {
+  ok: boolean;
+  reason?: string;
+}
 
 interface FlatTreeNode {
   node: FileNode;
@@ -108,29 +113,29 @@ export function GlobalLayout({
     return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? '');
   }
 
-  function isValidMove(sourcePath: string, targetDir: string): boolean {
+  function validateMove(sourcePath: string, targetDir: string): MoveValidation {
     const source = findNode(sourcePath);
     if (!source) {
-      return false;
+      return { ok: false, reason: 'Could not find dragged item.' };
     }
 
     const currentParent = getParentDirectoryPath(sourcePath) ?? '';
     if (currentParent === targetDir) {
-      return false;
+      return { ok: false, reason: 'Item is already in that folder.' };
     }
 
     if (source.isDirectory) {
       if (targetDir === source.path || targetDir.startsWith(`${source.path}/`)) {
-        return false;
+        return { ok: false, reason: 'Cannot move a folder into itself.' };
       }
     }
 
-    return true;
+    return { ok: true };
   }
 
   async function movePathTo(sourcePath: string, targetDir: string) {
     const source = findNode(sourcePath);
-    if (!source || !isValidMove(sourcePath, targetDir)) {
+    if (!source) {
       return;
     }
 
@@ -177,7 +182,7 @@ export function GlobalLayout({
     }
 
     const targetDir = targetDirectoryFor(node);
-    if (!isValidMove(draggedPathRef.current!, targetDir)) {
+    if (!validateMove(draggedPathRef.current!, targetDir).ok) {
       return;
     }
 
@@ -207,11 +212,17 @@ export function GlobalLayout({
     setDraggedPath(null);
 
     if (!sourcePath) {
+      showToast('error', 'Could not determine dragged item. Try again.');
       return;
     }
 
     const targetDir = targetDirectoryFor(node);
-    if (!isValidMove(sourcePath, targetDir)) {
+    const validation = validateMove(sourcePath, targetDir);
+    if (!validation.ok) {
+      showToast(
+        validation.reason === 'Item is already in that folder.' ? 'info' : 'error',
+        validation.reason ?? 'Move failed.',
+      );
       return;
     }
     void movePathTo(sourcePath, targetDir);
@@ -237,9 +248,15 @@ export function GlobalLayout({
     draggedPathRef.current = null;
     setDraggedPath(null);
     if (!sourcePath) {
+      showToast('error', 'Could not determine dragged item. Try again.');
       return;
     }
-    if (!isValidMove(sourcePath, '')) {
+    const validation = validateMove(sourcePath, '');
+    if (!validation.ok) {
+      showToast(
+        validation.reason === 'Item is already in that folder.' ? 'info' : 'error',
+        validation.reason ?? 'Move failed.',
+      );
       return;
     }
     void movePathTo(sourcePath, '');
@@ -597,7 +614,7 @@ export function GlobalLayout({
             </section>
           ) : (
             <>
-              {draggedPath && isValidMove(draggedPath, '') ? (
+              {draggedPath && validateMove(draggedPath, '').ok ? (
                 <div
                   className={
                     dropTargetKey === ROOT_DROP_KEY ? 'root-drop drop-target' : 'root-drop'
@@ -689,7 +706,13 @@ export function GlobalLayout({
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={toast.type === 'success' ? 'toast success' : 'toast error'}
+            className={
+              toast.type === 'success'
+                ? 'toast success'
+                : toast.type === 'info'
+                  ? 'toast info'
+                  : 'toast error'
+            }
           >
             <span className="toast-icon" aria-hidden="true">
               {toast.type === 'success' ? '✓' : '!'}
