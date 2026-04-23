@@ -11,6 +11,7 @@ vi.mock('../api/files', async () => {
     ...actual,
     fetchTree: vi.fn(),
     fetchFile: vi.fn(),
+    renamePath: vi.fn(),
   };
 });
 
@@ -59,5 +60,158 @@ describe('App', () => {
     });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Loaded from API' })).toBeInTheDocument();
+  });
+
+  it('renames a directory and remaps the selected nested file before refreshing file content', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    vi.mocked(filesApi.fetchTree)
+      .mockResolvedValueOnce([
+        {
+          name: 'docs',
+          path: 'docs',
+          isDirectory: true,
+          children: [
+            {
+              name: 'note.md',
+              path: 'docs/note.md',
+              isDirectory: false,
+            },
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: 'renamed',
+          path: 'renamed',
+          isDirectory: true,
+          children: [
+            {
+              name: 'note.md',
+              path: 'renamed/note.md',
+              isDirectory: false,
+            },
+          ],
+        },
+      ]);
+
+    vi.mocked(filesApi.fetchFile).mockImplementation(async (path: string) => {
+      if (path === 'docs/note.md') {
+        return {
+          path,
+          content: '# Original',
+          encoding: 'utf-8',
+          lastModified: '2026-04-21T00:00:00.000Z',
+          etag: 'note-v1',
+        };
+      }
+
+      if (path === 'renamed/note.md') {
+        return {
+          path,
+          content: '# Renamed',
+          encoding: 'utf-8',
+          lastModified: '2026-04-22T00:00:00.000Z',
+          etag: 'note-v2',
+        };
+      }
+
+      throw new Error(`Path does not exist: ${path}`);
+    });
+
+    vi.mocked(filesApi.renamePath).mockResolvedValue({
+      fromPath: 'docs',
+      toPath: 'renamed',
+    });
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('treeitem', { name: /note.md/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('treeitem', { name: /note.md/ }));
+    await waitFor(() => {
+      expect(filesApi.fetchFile).toHaveBeenCalledWith('docs/note.md');
+    });
+
+    fireEvent.click(screen.getByRole('treeitem', { name: /docs/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByLabelText('New name'), { target: { value: 'renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(filesApi.renamePath).toHaveBeenCalledWith('docs', 'renamed');
+      expect(filesApi.fetchFile).toHaveBeenCalledWith('renamed/note.md');
+    });
+
+    expect(vi.mocked(filesApi.fetchFile).mock.calls.at(-1)?.[0]).toBe('renamed/note.md');
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it('keeps rename success when refreshing remapped file returns not found', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    vi.mocked(filesApi.fetchTree)
+      .mockResolvedValueOnce([
+        {
+          name: 'docs',
+          path: 'docs',
+          isDirectory: true,
+          children: [{ name: 'note.md', path: 'docs/note.md', isDirectory: false }],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: 'renamed',
+          path: 'renamed',
+          isDirectory: true,
+          children: [{ name: 'note.md', path: 'renamed/note.md', isDirectory: false }],
+        },
+      ]);
+
+    vi.mocked(filesApi.fetchFile).mockImplementation(async (path: string) => {
+      if (path === 'docs/note.md') {
+        return {
+          path,
+          content: '# Original',
+          encoding: 'utf-8',
+          lastModified: '2026-04-21T00:00:00.000Z',
+          etag: 'note-v1',
+        };
+      }
+
+      throw new Error('Path does not exist.');
+    });
+
+    vi.mocked(filesApi.renamePath).mockResolvedValue({
+      fromPath: 'docs',
+      toPath: 'renamed',
+    });
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('treeitem', { name: /note.md/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('treeitem', { name: /note.md/ }));
+    await waitFor(() => expect(filesApi.fetchFile).toHaveBeenCalledWith('docs/note.md'));
+
+    fireEvent.click(screen.getByRole('treeitem', { name: /docs/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByLabelText('New name'), { target: { value: 'renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    expect(await screen.findByText('Renamed to renamed.')).toBeInTheDocument();
+    expect(await screen.findByRole('treeitem', { name: /renamed/ })).toBeInTheDocument();
+    expect(alertSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Moved successfully, but could not refresh "renamed/note.md"'),
+    );
+    alertSpy.mockRestore();
   });
 });
