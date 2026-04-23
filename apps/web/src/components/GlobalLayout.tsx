@@ -167,15 +167,25 @@ export function GlobalLayout({
     setDropTargetKey(null);
   }
 
+  function dropTargetKeyFor(node: FileNode): string {
+    return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? ROOT_DROP_KEY);
+  }
+
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
     if (!isOwnDrag()) {
+      return;
+    }
+
+    const targetDir = targetDirectoryFor(node);
+    if (!isValidMove(draggedPathRef.current!, targetDir)) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    setDropTargetKey((current) => (current === node.path ? current : node.path));
+    const nextKey = dropTargetKeyFor(node);
+    setDropTargetKey((current) => (current === nextKey ? current : nextKey));
   }
 
   function handleItemDragLeave(event: DragEvent<HTMLElement>, node: FileNode) {
@@ -183,7 +193,8 @@ export function GlobalLayout({
     if (related && event.currentTarget.contains(related)) {
       return;
     }
-    setDropTargetKey((current) => (current === node.path ? null : current));
+    const key = dropTargetKeyFor(node);
+    setDropTargetKey((current) => (current === key ? null : current));
   }
 
   function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
@@ -610,9 +621,13 @@ export function GlobalLayout({
                 >
                   {visibleFlatTree.map(({ node, depth }) => {
                     const classes = ['tree-item'];
+                    classes.push(node.isDirectory ? 'tree-item-folder' : 'tree-item-file');
                     if (selectedPath === node.path) classes.push('selected');
                     if (draggedPath === node.path) classes.push('dragging');
-                    if (dropTargetKey === node.path) classes.push('drop-target');
+                    const isDropTarget = dropTargetKey === dropTargetKeyFor(node);
+                    if (isDropTarget && draggedPath && draggedPath !== node.path) {
+                      classes.push('drop-target');
+                    }
 
                     return (
                       <li
@@ -621,40 +636,45 @@ export function GlobalLayout({
                         aria-level={depth}
                         aria-selected={selectedPath === node.path}
                         className={classes.join(' ')}
+                        draggable
+                        onDragStart={(event) => handleItemDragStart(event, node.path)}
+                        onDragEnd={handleItemDragEnd}
+                        onDragOver={(event) => handleItemDragOver(event, node)}
+                        onDragLeave={(event) => handleItemDragLeave(event, node)}
+                        onDrop={(event) => handleItemDrop(event, node)}
                       >
                         {node.isDirectory ? (
                           <button
                             type="button"
-                            style={{ paddingLeft: `${depth * 12 + 4}px` }}
+                            className="tree-item-row"
+                            style={{ paddingLeft: `${depth * 14 + 6}px` }}
                             onClick={() => void selectNode(node.path)}
-                            draggable
-                            onDragStart={(event) => handleItemDragStart(event, node.path)}
-                            onDragEnd={handleItemDragEnd}
-                            onDragOver={(event) => handleItemDragOver(event, node)}
-                            onDragLeave={(event) => handleItemDragLeave(event, node)}
-                            onDrop={(event) => handleItemDrop(event, node)}
+                            draggable={false}
                           >
-                            <span className="tree-folder-arrow" aria-hidden="true">
-                              ▸
+                            <span className="tree-icon tree-icon-folder" aria-hidden="true">
+                              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
+                              </svg>
                             </span>
-                            {node.name}/
+                            <span className="tree-label">{node.name}</span>
                           </button>
                         ) : (
                           <a
                             href={`/file/${encodeURIComponent(node.path)}`}
-                            style={{ paddingLeft: `${depth * 12 + 18}px` }}
+                            className="tree-item-row"
+                            style={{ paddingLeft: `${depth * 14 + 6}px` }}
                             onClick={(event) => {
                               event.preventDefault();
                               void selectNode(node.path);
                             }}
-                            draggable
-                            onDragStart={(event) => handleItemDragStart(event, node.path)}
-                            onDragEnd={handleItemDragEnd}
-                            onDragOver={(event) => handleItemDragOver(event, node)}
-                            onDragLeave={(event) => handleItemDragLeave(event, node)}
-                            onDrop={(event) => handleItemDrop(event, node)}
+                            draggable={false}
                           >
-                            {node.name}
+                            <span className="tree-icon tree-icon-file" aria-hidden="true">
+                              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25zm10.5 1.06L11.19 1.5H10.5v2.25c0 .138.112.25.25.25H13v-.69zM3.5 1.75v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V5h-2.5A1.75 1.75 0 0 1 9.25 3.25V1.5h-5.5a.25.25 0 0 0-.25.25z" />
+                              </svg>
+                            </span>
+                            <span className="tree-label">{node.name}</span>
                           </a>
                         )}
                       </li>

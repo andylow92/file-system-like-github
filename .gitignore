@@ -1,3 +1,10 @@
 node_modules
 dist
 .DS_Store
+
+# npm install generates a lockfile; this repo has historically not tracked one
+package-lock.json
+
+# TypeScript emits next to sources when noEmit isn't set; ignore those artifacts
+apps/**/src/**/*.js
+apps/web/vite.config.js
