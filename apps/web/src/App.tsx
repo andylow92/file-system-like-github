@@ -183,16 +183,33 @@ export function App() {
       }}
       onRenamePath={async (fromPath, toPath) => {
         const previousSelected = selectedFilePath;
-
-        if (previousSelected === fromPath) {
-          setSelectedFilePath(toPath);
-        }
+        const remappedPath =
+          previousSelected === fromPath
+            ? toPath
+            : previousSelected?.startsWith(`${fromPath}/`)
+              ? `${toPath}/${previousSelected.slice(fromPath.length + 1)}`
+              : previousSelected;
 
         try {
           await renamePath(fromPath, toPath);
-          await refreshTreeAndCurrentFile(
-            previousSelected === fromPath ? toPath : selectedFilePath,
-          );
+          await refreshTree();
+          setSelectedFilePath(remappedPath ?? null);
+
+          if (!remappedPath) {
+            return;
+          }
+
+          try {
+            await refreshCurrentFile(remappedPath);
+          } catch (error: unknown) {
+            const message = getErrorMessage(error);
+            if (/not found|does not exist/i.test(message)) {
+              window.alert(`Moved successfully, but could not refresh "${remappedPath}": ${message}`);
+              return;
+            }
+
+            throw error;
+          }
         } catch (error: unknown) {
           setSelectedFilePath(previousSelected);
           throw new Error(getErrorMessage(error));
