@@ -45,14 +45,14 @@ describe('App', () => {
     expect(screen.getByText('Loading files...')).toBeInTheDocument();
 
     expect(await screen.findByRole('tree', { name: 'Repository file tree' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /README.md/ })).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: /README.md/ })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.queryByText('Loading files...')).not.toBeInTheDocument();
       expect(filesApi.fetchTree).toHaveBeenCalledTimes(1);
     });
 
-    fireEvent.click(screen.getByRole('link', { name: /README.md/ }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /README.md/ }));
 
     await waitFor(() => {
       expect(filesApi.fetchFile).toHaveBeenCalledWith('README.md');

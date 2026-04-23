@@ -451,8 +451,6 @@ body {
 .danger-btn:focus-visible,
 .save-btn:focus-visible,
 .inline-form-actions button:focus-visible,
-.tree-item button:focus-visible,
-.tree-item a:focus-visible,
 .tab:focus-visible,
 .toolbar-btn:focus-visible,
 input:focus-visible,
@@ -534,11 +532,6 @@ select:focus-visible {
     background 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
-  cursor: grab;
-}
-
-.tree-item:active {
-  cursor: grabbing;
 }
 
 .tree-item-row {
@@ -556,9 +549,20 @@ select:focus-visible {
   font-size: 0.8125rem;
   text-decoration: none;
   border-radius: inherit;
-  cursor: inherit;
+  cursor: grab;
   transition: color 120ms ease;
-  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: element;
+}
+
+.tree-item-row:active {
+  cursor: grabbing;
+}
+
+.tree-item-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .tree-icon {

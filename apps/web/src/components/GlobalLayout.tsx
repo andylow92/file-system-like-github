@@ -629,54 +629,51 @@ export function GlobalLayout({
                       classes.push('drop-target');
                     }
 
+                    const icon = node.isDirectory ? (
+                      <span className="tree-icon tree-icon-folder" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <span className="tree-icon tree-icon-file" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25zm10.5 1.06L11.19 1.5H10.5v2.25c0 .138.112.25.25.25H13v-.69zM3.5 1.75v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V5h-2.5A1.75 1.75 0 0 1 9.25 3.25V1.5h-5.5a.25.25 0 0 0-.25.25z" />
+                        </svg>
+                      </span>
+                    );
+
                     return (
                       <li
                         key={node.path}
-                        role="treeitem"
-                        aria-level={depth}
-                        aria-selected={selectedPath === node.path}
                         className={classes.join(' ')}
-                        draggable
-                        onDragStart={(event) => handleItemDragStart(event, node.path)}
-                        onDragEnd={handleItemDragEnd}
-                        onDragOver={(event) => handleItemDragOver(event, node)}
-                        onDragLeave={(event) => handleItemDragLeave(event, node)}
-                        onDrop={(event) => handleItemDrop(event, node)}
                       >
-                        {node.isDirectory ? (
-                          <button
-                            type="button"
-                            className="tree-item-row"
-                            style={{ paddingLeft: `${depth * 14 + 6}px` }}
-                            onClick={() => void selectNode(node.path)}
-                            draggable={false}
-                          >
-                            <span className="tree-icon tree-icon-folder" aria-hidden="true">
-                              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
-                              </svg>
-                            </span>
-                            <span className="tree-label">{node.name}</span>
-                          </button>
-                        ) : (
-                          <a
-                            href={`/file/${encodeURIComponent(node.path)}`}
-                            className="tree-item-row"
-                            style={{ paddingLeft: `${depth * 14 + 6}px` }}
-                            onClick={(event) => {
+                        <div
+                          role="treeitem"
+                          aria-level={depth}
+                          aria-selected={selectedPath === node.path}
+                          tabIndex={selectedPath === node.path ? 0 : -1}
+                          className="tree-item-row"
+                          style={{ paddingLeft: `${depth * 14 + 6}px` }}
+                          draggable
+                          onDragStart={(event) => handleItemDragStart(event, node.path)}
+                          onDragEnd={handleItemDragEnd}
+                          onDragOver={(event) => handleItemDragOver(event, node)}
+                          onDragLeave={(event) => handleItemDragLeave(event, node)}
+                          onDrop={(event) => handleItemDrop(event, node)}
+                          onClick={() => void selectNode(node.path)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
                               event.preventDefault();
                               void selectNode(node.path);
-                            }}
-                            draggable={false}
-                          >
-                            <span className="tree-icon tree-icon-file" aria-hidden="true">
-                              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25zm10.5 1.06L11.19 1.5H10.5v2.25c0 .138.112.25.25.25H13v-.69zM3.5 1.75v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V5h-2.5A1.75 1.75 0 0 1 9.25 3.25V1.5h-5.5a.25.25 0 0 0-.25.25z" />
-                              </svg>
-                            </span>
-                            <span className="tree-label">{node.name}</span>
-                          </a>
-                        )}
+                            }
+                          }}
+                          data-path={node.path}
+                          data-kind={node.isDirectory ? 'directory' : 'file'}
+                        >
+                          {icon}
+                          <span className="tree-label">{node.name}</span>
+                        </div>
                       </li>
                     );
                   })}
