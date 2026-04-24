@@ -44,6 +44,9 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --space-8: 3rem;
+  --space-fluid-3: clamp(0.65rem, 0.45rem + 0.4vw, 0.9rem);
+  --space-fluid-4: clamp(0.85rem, 0.65rem + 0.5vw, 1.15rem);
+  --space-fluid-5: clamp(1rem, 0.7rem + 1.1vw, 1.75rem);
 
   /* Radius */
   --radius-sm: 6px;
@@ -121,6 +124,7 @@ body {
 
 .app-shell {
   display: flex;
+  overflow-x: clip;
   flex-direction: column;
   min-height: 100vh;
   background: var(--color-bg);
@@ -131,7 +135,7 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-fluid-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-raised);
   position: sticky;
@@ -162,7 +166,14 @@ body {
 .brand-name {
   font-weight: 600;
   letter-spacing: -0.01em;
-  font-size: 0.875rem;
+  font-size: clamp(0.85rem, 0.75rem + 0.35vw, 1rem);
+}
+
+.topbar-left-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .breadcrumbs {
@@ -203,7 +214,7 @@ body {
 .topbar-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-fluid-3);
 }
 
 .topbar-status {
@@ -290,7 +301,7 @@ body {
 
 .sidebar-quick-actions {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .icon-btn {
@@ -299,12 +310,14 @@ body {
   justify-content: center;
   width: 26px;
   height: 26px;
+  min-width: 26px;
+  min-height: 26px;
   border: 0;
   background: transparent;
   color: var(--color-text-muted);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: clamp(0.86rem, 0.8rem + 0.35vw, 1rem);
   line-height: 1;
   transition:
     background 100ms ease,
@@ -367,7 +380,7 @@ body {
 }
 
 .right-panel {
-  padding: var(--space-5) var(--space-6) var(--space-6);
+  padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2rem) clamp(1.1rem, 3vw, 2.2rem);
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -549,16 +562,12 @@ select:focus-visible {
   font-size: 0.8125rem;
   text-decoration: none;
   border-radius: inherit;
-  cursor: grab;
+  cursor: default;
   transition: color 120ms ease;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-user-drag: element;
 }
 
-.tree-item-row:active {
-  cursor: grabbing;
-}
 
 .tree-item-row:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -698,8 +707,8 @@ select:focus-visible {
 
 .tabs {
   display: flex;
-  gap: var(--space-1);
-  margin-bottom: var(--space-5);
+  gap: var(--space-fluid-3);
+  margin-bottom: var(--space-fluid-5);
   padding-bottom: 0;
   border-bottom: 1px solid var(--color-border);
 }
@@ -797,11 +806,11 @@ select:focus-visible {
 }
 
 .github-markdown h1 {
-  font-size: 1.75rem;
+  font-size: clamp(1.45rem, 1.2rem + 1.1vw, 1.85rem);
 }
 
 .github-markdown h2 {
-  font-size: 1.375rem;
+  font-size: clamp(1.2rem, 1.05rem + 0.8vw, 1.45rem);
 }
 
 .github-markdown p {
@@ -887,7 +896,7 @@ select:focus-visible {
 
 .editor-title {
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: clamp(0.86rem, 0.8rem + 0.35vw, 1rem);
   color: var(--color-text);
   font-weight: 500;
   word-break: break-all;
@@ -975,6 +984,7 @@ select:focus-visible {
   justify-content: center;
   min-width: 30px;
   height: 30px;
+  min-height: 30px;
   padding: 0 0.5rem;
   border: 1px solid transparent;
   background: transparent;
@@ -1173,7 +1183,7 @@ textarea[aria-label='Markdown editor'] {
 .sidebar-head-right {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .sidebar-collapse-btn {
@@ -1197,6 +1207,36 @@ textarea[aria-label='Markdown editor'] {
   padding: 0;
 }
 
+
+.tree-drag-handle {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  border-radius: var(--radius-sm);
+  opacity: 0.75;
+}
+
+.tree-drag-handle:active {
+  cursor: grabbing;
+}
+
+.tree-drag-handle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Tree chevron (folder expand/collapse indicator)                            */
 /* -------------------------------------------------------------------------- */
@@ -1217,6 +1257,145 @@ textarea[aria-label='Markdown editor'] {
 .tree-item:hover .tree-chevron,
 .tree-item.selected .tree-chevron {
   color: var(--color-text-muted);
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Modal dialog                                                               */
+/* -------------------------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 16, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: var(--space-4);
+}
+
+.modal-dialog {
+  width: min(100%, 420px);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-raised);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-dialog h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.modal-dialog p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.modal-dialog.modal-destructive {
+  border-color: rgba(239, 106, 106, 0.55);
+}
+
+.modal-dialog.modal-error {
+  border-color: rgba(239, 106, 106, 0.45);
+}
+
+.mobile-sidebar-trigger {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .icon-btn,
+  .toolbar-btn,
+  .tab,
+  .save-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .sidebar-quick-actions,
+  .sidebar-head-right,
+  .editor-toolbar,
+  .topbar-actions {
+    gap: var(--space-3);
+  }
+
+  .tab {
+    padding: 0.75rem 1rem;
+  }
+
+  .tree-drag-handle {
+    min-width: 28px;
+    min-height: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .layout,
+  .layout--sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-sidebar-trigger {
+    display: inline-flex;
+  }
+
+  .left-panel,
+  .left-panel--collapsed {
+    position: fixed;
+    top: 53px;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 320px);
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    z-index: 45;
+    height: auto;
+    border-right: 1px solid var(--color-border);
+    align-items: stretch;
+    padding: var(--space-4);
+  }
+
+  .left-panel.left-panel--mobile-open {
+    transform: translateX(0);
+  }
+
+  .left-panel--collapsed .sidebar-head {
+    justify-content: space-between;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 53px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 40;
+  }
+
+  .right-panel {
+    padding-inline: var(--space-4);
+  }
+
+  .topbar {
+    grid-template-columns: minmax(0, auto) 1fr auto;
+  }
 }
 
 /* -------------------------------------------------------------------------- */

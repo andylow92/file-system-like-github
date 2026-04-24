@@ -69,8 +69,6 @@ describe('App', () => {
   });
 
   it('renames a directory and remaps the selected nested file before refreshing file content', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
     vi.mocked(filesApi.fetchTree)
       .mockResolvedValueOnce([
         {
@@ -154,13 +152,9 @@ describe('App', () => {
     });
 
     expect(vi.mocked(filesApi.fetchFile).mock.calls.at(-1)?.[0]).toBe('renamed/note.md');
-    expect(alertSpy).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 
   it('keeps rename success when refreshing remapped file returns not found', async () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
     vi.mocked(filesApi.fetchTree)
       .mockResolvedValueOnce([
         {
@@ -215,9 +209,11 @@ describe('App', () => {
 
     expect(await screen.findByText('Renamed to renamed.')).toBeInTheDocument();
     expect(await screen.findByRole('treeitem', { name: /renamed/ })).toBeInTheDocument();
-    expect(alertSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Moved successfully, but could not refresh "renamed/note.md"'),
-    );
-    alertSpy.mockRestore();
+    expect(
+      await screen.findByRole('dialog', { name: 'Rename completed with warning' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Moved successfully, but could not refresh "renamed\/note.md"/),
+    ).toBeInTheDocument();
   });
 });
