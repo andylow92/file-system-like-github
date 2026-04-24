@@ -54,23 +54,26 @@ describe('GlobalLayout', () => {
   // Drag-and-drop (existing tests)
   // -------------------------------------------------------------------------
 
-  it('renders each tree row as a single draggable treeitem', () => {
+  it('renders tree rows as non-draggable and exposes drag handles', () => {
     renderLayout();
 
     const folderRow = screen.getByRole('treeitem', { name: 'docs' });
-    expect(folderRow).toHaveAttribute('draggable', 'true');
+    expect(folderRow).not.toHaveAttribute('draggable');
     expect(folderRow).toHaveAttribute('data-kind', 'directory');
 
     const fileRow = screen.getByRole('treeitem', { name: 'intro.md' });
-    expect(fileRow).toHaveAttribute('draggable', 'true');
+    expect(fileRow).not.toHaveAttribute('draggable');
     expect(fileRow).toHaveAttribute('data-kind', 'file');
     expect(fileRow).toHaveAttribute('data-path', 'docs/nested/intro.md');
+
+    expect(screen.getByTitle('Drag docs')).toHaveAttribute('draggable', 'true');
+    expect(screen.getByTitle('Drag intro.md')).toHaveAttribute('draggable', 'true');
   });
 
   it('shows an error toast when drop source path is missing', () => {
     renderLayout();
 
-    const docsRow = screen.getAllByRole('treeitem', { name: 'docs' })[0];
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
     fireEvent.drop(docsRow, {
       dataTransfer: {
         getData: () => '',
@@ -83,7 +86,7 @@ describe('GlobalLayout', () => {
   it('shows an info toast and does not rename when dropping on a file row', () => {
     const { onRenamePath } = renderLayout();
 
-    const introRow = screen.getAllByRole('treeitem', { name: 'intro.md' })[0];
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
     fireEvent.drop(introRow, {
       dataTransfer: {
         getData: () => 'docs/nested/intro.md',
@@ -97,7 +100,7 @@ describe('GlobalLayout', () => {
   it('calls onRenamePath when dropping on a folder row', async () => {
     const { onRenamePath } = renderLayout();
 
-    const docsRow = screen.getAllByRole('treeitem', { name: 'docs' })[0];
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
     fireEvent.drop(docsRow, {
       dataTransfer: {
         getData: () => 'docs/nested/intro.md',
@@ -112,7 +115,7 @@ describe('GlobalLayout', () => {
   it('shows an error toast when moving a folder into itself', () => {
     renderLayout();
 
-    const nestedRow = screen.getAllByRole('treeitem', { name: 'nested' })[0];
+    const nestedRow = screen.getByRole('treeitem', { name: 'nested' });
     fireEvent.drop(nestedRow, {
       dataTransfer: {
         getData: () => 'docs',
@@ -120,14 +123,14 @@ describe('GlobalLayout', () => {
     });
 
     expect(screen.getAllByText('Cannot move a folder into itself.').length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('treeitem', { name: 'docs' })[0]).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: 'docs' })).toBeInTheDocument();
   });
 
   it('shows an info toast and does not rename when dropping onto same parent folder', async () => {
     const { onRenamePath } = renderLayout();
 
     // intro.md is already inside docs/nested; dropping it onto docs/nested is a no-op
-    const nestedRow = screen.getAllByRole('treeitem', { name: 'nested' })[0];
+    const nestedRow = screen.getByRole('treeitem', { name: 'nested' });
     fireEvent.drop(nestedRow, {
       dataTransfer: {
         getData: () => 'docs/nested/intro.md',
@@ -203,7 +206,7 @@ describe('GlobalLayout', () => {
     expect(screen.getByRole('treeitem', { name: 'intro.md' })).toBeInTheDocument();
 
     // Click docs to collapse it
-    fireEvent.click(screen.getAllByRole('treeitem', { name: 'docs' })[0]);
+    fireEvent.click(screen.getByRole('treeitem', { name: 'docs' }));
 
     expect(screen.queryByRole('treeitem', { name: 'nested' })).not.toBeInTheDocument();
     expect(screen.queryByRole('treeitem', { name: 'intro.md' })).not.toBeInTheDocument();
@@ -212,7 +215,7 @@ describe('GlobalLayout', () => {
   it('expands a collapsed folder and shows children on second click', () => {
     renderLayout();
 
-    const docsRow = screen.getAllByRole('treeitem', { name: 'docs' })[0];
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
     fireEvent.click(docsRow); // collapse
     expect(screen.queryByRole('treeitem', { name: 'intro.md' })).not.toBeInTheDocument();
 
@@ -223,7 +226,7 @@ describe('GlobalLayout', () => {
   it('sets aria-expanded false on collapsed folder and true when expanded', () => {
     renderLayout();
 
-    const docsRow = screen.getAllByRole('treeitem', { name: 'docs' })[0];
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
     // Initially expanded
     expect(docsRow).toHaveAttribute('aria-expanded', 'true');
 
@@ -237,7 +240,7 @@ describe('GlobalLayout', () => {
   it('persists collapsed folders in localStorage', () => {
     renderLayout();
 
-    fireEvent.click(screen.getAllByRole('treeitem', { name: 'docs' })[0]);
+    fireEvent.click(screen.getByRole('treeitem', { name: 'docs' }));
 
     const stored = JSON.parse(localStorage.getItem('collapsedFolders') ?? '[]') as string[];
     expect(stored).toContain('docs');
