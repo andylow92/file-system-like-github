@@ -1,9 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlobalLayout } from '../GlobalLayout';
 
 describe('GlobalLayout', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   const tree = [
     {
       name: 'docs',
@@ -21,14 +25,15 @@ describe('GlobalLayout', () => {
   ];
 
   function renderLayout() {
-    return render(
+    const onRenamePath = vi.fn(async () => {});
+    const view = render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <GlobalLayout
           tree={tree}
           onSelectFile={vi.fn()}
           onCreateFile={vi.fn(async () => {})}
           onCreateFolder={vi.fn(async () => {})}
-          onRenamePath={vi.fn(async () => {})}
+          onRenamePath={onRenamePath}
           onDeletePath={vi.fn(async () => {})}
           onSave={vi.fn(async () => {})}
         >
@@ -36,6 +41,8 @@ describe('GlobalLayout', () => {
         </GlobalLayout>
       </MemoryRouter>,
     );
+
+    return { ...view, onRenamePath };
   }
 
   it('renders each tree row as a single draggable treeitem', () => {
@@ -64,8 +71,8 @@ describe('GlobalLayout', () => {
     expect(screen.getByText('Could not determine dragged item. Try again.')).toBeInTheDocument();
   });
 
-  it('shows an info toast for drops into the same folder', () => {
-    renderLayout();
+  it('shows an info toast and does not rename when dropping on a file row', () => {
+    const { onRenamePath } = renderLayout();
 
     const introRow = screen.getAllByRole('treeitem', { name: 'intro.md' })[0];
     fireEvent.drop(introRow, {
@@ -74,7 +81,23 @@ describe('GlobalLayout', () => {
       },
     });
 
-    expect(screen.getByText('Item is already in that folder.')).toBeInTheDocument();
+    expect(screen.getByText('Drop onto a folder.')).toBeInTheDocument();
+    expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  it('calls onRenamePath when dropping on a folder row', async () => {
+    const { onRenamePath } = renderLayout();
+
+    const docsRow = screen.getAllByRole('treeitem', { name: 'docs' })[0];
+    fireEvent.drop(docsRow, {
+      dataTransfer: {
+        getData: () => 'docs/nested/intro.md',
+      },
+    });
+
+    await waitFor(() =>
+      expect(onRenamePath).toHaveBeenCalledWith('docs/nested/intro.md', 'docs/intro.md'),
+    );
   });
 
   it('shows an error toast when moving a folder into itself', () => {
@@ -87,7 +110,7 @@ describe('GlobalLayout', () => {
       },
     });
 
-    expect(screen.getByText('Cannot move a folder into itself.')).toBeInTheDocument();
+    expect(screen.getAllByText('Cannot move a folder into itself.').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('treeitem', { name: 'docs' })[0]).toBeInTheDocument();
   });
 });

@@ -109,8 +109,8 @@ export function GlobalLayout({
     return flatTree.find((entry) => entry.node.path === nodePath)?.node;
   }
 
-  function targetDirectoryFor(node: FileNode): string {
-    return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? '');
+  function targetDirectoryFor(node: FileNode): string | null {
+    return node.isDirectory ? node.path : null;
   }
 
   function validateMove(sourcePath: string, targetDir: string): MoveValidation {
@@ -172,8 +172,8 @@ export function GlobalLayout({
     setDropTargetKey(null);
   }
 
-  function dropTargetKeyFor(node: FileNode): string {
-    return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? ROOT_DROP_KEY);
+  function dropTargetKeyFor(node: FileNode): string | null {
+    return node.isDirectory ? node.path : null;
   }
 
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
@@ -181,7 +181,14 @@ export function GlobalLayout({
       return;
     }
 
+    if (!node.isDirectory) {
+      return;
+    }
+
     const targetDir = targetDirectoryFor(node);
+    if (targetDir === null) {
+      return;
+    }
     if (!validateMove(draggedPathRef.current!, targetDir).ok) {
       return;
     }
@@ -199,6 +206,9 @@ export function GlobalLayout({
       return;
     }
     const key = dropTargetKeyFor(node);
+    if (key === null) {
+      return;
+    }
     setDropTargetKey((current) => (current === key ? null : current));
   }
 
@@ -216,7 +226,16 @@ export function GlobalLayout({
       return;
     }
 
+    if (!node.isDirectory) {
+      showToast('info', 'Drop onto a folder.');
+      return;
+    }
+
     const targetDir = targetDirectoryFor(node);
+    if (targetDir === null) {
+      showToast('info', 'Drop onto a folder.');
+      return;
+    }
     const validation = validateMove(sourcePath, targetDir);
     if (!validation.ok) {
       showToast(
@@ -641,7 +660,9 @@ export function GlobalLayout({
                     classes.push(node.isDirectory ? 'tree-item-folder' : 'tree-item-file');
                     if (selectedPath === node.path) classes.push('selected');
                     if (draggedPath === node.path) classes.push('dragging');
-                    const isDropTarget = dropTargetKey === dropTargetKeyFor(node);
+                    const itemDropTargetKey = dropTargetKeyFor(node);
+                    const isDropTarget =
+                      itemDropTargetKey !== null && dropTargetKey === itemDropTargetKey;
                     if (isDropTarget && draggedPath && draggedPath !== node.path) {
                       classes.push('drop-target');
                     }
