@@ -52,6 +52,36 @@ function getParentDirectoryPath(path: string): string | null {
   return path.split('/').slice(0, -1).join('/');
 }
 
+function readLocalStorageBool(key: string, fallback: boolean): boolean {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return fallback;
+    return stored === 'true';
+  } catch {
+    return fallback;
+  }
+}
+
+function readLocalStorageSet(key: string): Set<string> {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return new Set<string>(JSON.parse(stored) as string[]);
+    }
+  } catch {
+    // ignore
+  }
+  return new Set<string>();
+}
+
+function writeLocalStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore — storage may be unavailable in some environments
+  }
+}
+
 export function GlobalLayout({
   tree,
   children,
@@ -73,6 +103,12 @@ export function GlobalLayout({
   const [draggedPath, setDraggedPath] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
+    readLocalStorageBool('sidebarCollapsed', false),
+  );
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() =>
+    readLocalStorageSet('collapsedFolders'),
+  );
   const draggedPathRef = useRef<string | null>(null);
 
   const flatTree = useMemo(() => flattenTree(tree), [tree]);
@@ -97,6 +133,19 @@ export function GlobalLayout({
 
     return flatTree.filter(({ node }) => visiblePaths.has(node.path));
   }, [flatTree, filterQuery]);
+
+  // Further filter by collapsed folders: hide all nodes whose direct ancestor is collapsed
+  const folderVisibleFlatTree = useMemo(() => {
+    if (collapsedFolders.size === 0) return visibleFlatTree;
+    return visibleFlatTree.filter(({ node }) => {
+      const parts = node.path.split('/');
+      for (let i = 1; i < parts.length; i++) {
+        const ancestorPath = parts.slice(0, i).join('/');
+        if (collapsedFolders.has(ancestorPath)) return false;
+      }
+      return true;
+    });
+  }, [visibleFlatTree, collapsedFolders]);
 
   const breadcrumbs = useMemo(() => {
     if (!selectedFilePath) {
@@ -281,6 +330,27 @@ export function GlobalLayout({
     void movePathTo(sourcePath, '');
   }
 
+  function toggleFolder(path: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      writeLocalStorage('collapsedFolders', JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function toggleSidebar() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      writeLocalStorage('sidebarCollapsed', String(next));
+      return next;
+    });
+  }
+
   useEffect(() => {
     if (selectedFilePath) {
       setSelectedPath(selectedFilePath);
@@ -320,7 +390,9 @@ export function GlobalLayout({
   async function selectNode(path: string) {
     setSelectedPath(path);
     const target = flatTree.find((entry) => entry.node.path === path)?.node;
-    if (target && !target.isDirectory) {
+    if (target?.isDirectory) {
+      toggleFolder(path);
+    } else if (target) {
       await onSelectFile(path);
     }
   }
@@ -425,14 +497,36 @@ export function GlobalLayout({
   }
 
   function onTreeKeyDown(event: KeyboardEvent<HTMLUListElement>) {
-    if (!flatTree.length) {
+    if (!folderVisibleFlatTree.length) {
       return;
     }
 
-    const currentIndex = flatTree.findIndex((entry) => entry.node.path === selectedPath);
+    const currentIndex = folderVisibleFlatTree.findIndex(
+      (entry) => entry.node.path === selectedPath,
+    );
+    const currentNode = folderVisibleFlatTree[currentIndex]?.node;
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      if (currentNode?.isDirectory && collapsedFolders.has(currentNode.path)) {
+        toggleFolder(currentNode.path);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      if (currentNode?.isDirectory && !collapsedFolders.has(currentNode.path)) {
+        toggleFolder(currentNode.path);
+      }
+      return;
+    }
+
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      const next = flatTree[Math.min(currentIndex + 1, flatTree.length - 1)]?.node.path;
+      const next =
+        folderVisibleFlatTree[Math.min(currentIndex + 1, folderVisibleFlatTree.length - 1)]?.node
+          .path;
       if (next) {
         void selectNode(next);
       }
@@ -440,7 +534,7 @@ export function GlobalLayout({
 
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      const next = flatTree[Math.max(currentIndex - 1, 0)]?.node.path;
+      const next = folderVisibleFlatTree[Math.max(currentIndex - 1, 0)]?.node.path;
       if (next) {
         void selectNode(next);
       }
@@ -512,210 +606,241 @@ export function GlobalLayout({
         </div>
       </header>
 
-      <div className="layout">
-        <aside className="left-panel">
+      <div className={sidebarCollapsed ? 'layout layout--sidebar-collapsed' : 'layout'}>
+        <aside className={sidebarCollapsed ? 'left-panel left-panel--collapsed' : 'left-panel'}>
           <div className="sidebar-head">
-            <h2>Files</h2>
-            <div className="sidebar-quick-actions" aria-label="File actions">
+            {!sidebarCollapsed && <h2>Files</h2>}
+            <div className="sidebar-head-right">
+              {!sidebarCollapsed && (
+                <div className="sidebar-quick-actions" aria-label="File actions">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setMode('newFile')}
+                    title="New file"
+                    aria-label="New file"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setMode('newFolder')}
+                    title="New folder"
+                    aria-label="New folder"
+                  >
+                    ▤
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setMode('rename')}
+                    disabled={!hasSelection}
+                    title="Rename"
+                    aria-label="Rename"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-danger"
+                    onClick={() => void handleDelete()}
+                    disabled={!hasSelection}
+                    title="Delete"
+                    aria-label="Delete"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
-                className="icon-btn"
-                onClick={() => setMode('newFile')}
-                title="New file"
-                aria-label="New file"
+                className="icon-btn sidebar-collapse-btn"
+                onClick={toggleSidebar}
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
-                +
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => setMode('newFolder')}
-                title="New folder"
-                aria-label="New folder"
-              >
-                ▤
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => setMode('rename')}
-                disabled={!hasSelection}
-                title="Rename"
-                aria-label="Rename"
-              >
-                ✎
-              </button>
-              <button
-                type="button"
-                className="icon-btn icon-btn-danger"
-                onClick={() => void handleDelete()}
-                disabled={!hasSelection}
-                title="Delete"
-                aria-label="Delete"
-              >
-                ✕
+                {sidebarCollapsed ? '›' : '‹'}
               </button>
             </div>
           </div>
 
-          <div className="filter-wrapper">
-            <span className="filter-icon" aria-hidden="true">
-              ⌕
-            </span>
-            <input
-              type="search"
-              className="filter-input"
-              placeholder="Filter files"
-              value={filterQuery}
-              onChange={(event) => setFilterQuery(event.target.value)}
-              aria-label="Filter files"
-            />
-          </div>
-
-          {mode ? (
-            <div className="inline-form">
-              <label htmlFor="name-input">{mode === 'rename' ? 'New name' : 'Name'}</label>
-              <input
-                id="name-input"
-                value={inputValue}
-                autoFocus
-                onChange={(event) => setInputValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void submitCurrentMode();
-                  } else if (event.key === 'Escape') {
-                    setMode(null);
-                    setInputValue('');
-                    setValidationMessage('');
-                  }
-                }}
-                placeholder={
-                  mode === 'newFile' ? 'README.md' : mode === 'newFolder' ? 'docs' : 'new-name.md'
-                }
-              />
-              {validationMessage ? <p className="validation-msg">{validationMessage}</p> : null}
-              <div className="inline-form-actions">
-                <button type="button" onClick={() => void submitCurrentMode()}>
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode(null);
-                    setInputValue('');
-                    setValidationMessage('');
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {treeLoading ? (
-            <p className="loading-text" aria-live="polite">
-              Loading files...
-            </p>
-          ) : !tree.length ? (
-            <section className="onboarding-panel" aria-label="Onboarding hints">
-              <h3>Your workspace is empty</h3>
-              <p>Create your first markdown file or folder to get started.</p>
-              <ul>
-                <li>
-                  Use <kbd>+</kbd> to create a file
-                </li>
-                <li>
-                  Use <kbd>▤</kbd> for a folder
-                </li>
-                <li>Try names like README.md, notes.md, docs</li>
-              </ul>
-            </section>
-          ) : (
+          {!sidebarCollapsed && (
             <>
-              {draggedPath && validateMove(draggedPath, '').ok ? (
-                <div
-                  className={
-                    dropTargetKey === ROOT_DROP_KEY ? 'root-drop drop-target' : 'root-drop'
-                  }
-                  onDragOver={handleRootDragOver}
-                  onDragLeave={handleRootDragLeave}
-                  onDrop={handleRootDrop}
-                  aria-label="Move to repository root"
-                >
-                  Drop here to move to root
+              <div className="filter-wrapper">
+                <span className="filter-icon" aria-hidden="true">
+                  ⌕
+                </span>
+                <input
+                  type="search"
+                  className="filter-input"
+                  placeholder="Filter files"
+                  value={filterQuery}
+                  onChange={(event) => setFilterQuery(event.target.value)}
+                  aria-label="Filter files"
+                />
+              </div>
+
+              {mode ? (
+                <div className="inline-form">
+                  <label htmlFor="name-input">{mode === 'rename' ? 'New name' : 'Name'}</label>
+                  <input
+                    id="name-input"
+                    value={inputValue}
+                    autoFocus
+                    onChange={(event) => setInputValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void submitCurrentMode();
+                      } else if (event.key === 'Escape') {
+                        setMode(null);
+                        setInputValue('');
+                        setValidationMessage('');
+                      }
+                    }}
+                    placeholder={
+                      mode === 'newFile'
+                        ? 'README.md'
+                        : mode === 'newFolder'
+                          ? 'docs'
+                          : 'new-name.md'
+                    }
+                  />
+                  {validationMessage ? (
+                    <p className="validation-msg">{validationMessage}</p>
+                  ) : null}
+                  <div className="inline-form-actions">
+                    <button type="button" onClick={() => void submitCurrentMode()}>
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode(null);
+                        setInputValue('');
+                        setValidationMessage('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : null}
-              {visibleFlatTree.length === 0 ? (
-                <p className="loading-text">No matches for "{filterQuery}".</p>
+
+              {treeLoading ? (
+                <p className="loading-text" aria-live="polite">
+                  Loading files...
+                </p>
+              ) : !tree.length ? (
+                <section className="onboarding-panel" aria-label="Onboarding hints">
+                  <h3>Your workspace is empty</h3>
+                  <p>Create your first markdown file or folder to get started.</p>
+                  <ul>
+                    <li>
+                      Use <kbd>+</kbd> to create a file
+                    </li>
+                    <li>
+                      Use <kbd>▤</kbd> for a folder
+                    </li>
+                    <li>Try names like README.md, notes.md, docs</li>
+                  </ul>
+                </section>
               ) : (
-                <ul
-                  className="tree"
-                  role="tree"
-                  aria-label="Repository file tree"
-                  onKeyDown={onTreeKeyDown}
-                >
-                  {visibleFlatTree.map(({ node, depth }) => {
-                    const classes = ['tree-item'];
-                    classes.push(node.isDirectory ? 'tree-item-folder' : 'tree-item-file');
-                    if (selectedPath === node.path) classes.push('selected');
-                    if (draggedPath === node.path) classes.push('dragging');
-                    const itemDropTargetKey = dropTargetKeyFor(node);
-                    const isDropTarget =
-                      itemDropTargetKey !== null && dropTargetKey === itemDropTargetKey;
-                    if (isDropTarget && draggedPath && draggedPath !== node.path) {
-                      classes.push('drop-target');
-                    }
+                <>
+                  {draggedPath && validateMove(draggedPath, '').ok ? (
+                    <div
+                      className={
+                        dropTargetKey === ROOT_DROP_KEY ? 'root-drop drop-target' : 'root-drop'
+                      }
+                      onDragOver={handleRootDragOver}
+                      onDragLeave={handleRootDragLeave}
+                      onDrop={handleRootDrop}
+                      aria-label="Move to repository root"
+                    >
+                      Drop here to move to root
+                    </div>
+                  ) : null}
+                  {folderVisibleFlatTree.length === 0 ? (
+                    <p className="loading-text">No matches for "{filterQuery}".</p>
+                  ) : (
+                    <ul
+                      className="tree"
+                      role="tree"
+                      aria-label="Repository file tree"
+                      onKeyDown={onTreeKeyDown}
+                    >
+                      {folderVisibleFlatTree.map(({ node, depth }) => {
+                        const classes = ['tree-item'];
+                        classes.push(node.isDirectory ? 'tree-item-folder' : 'tree-item-file');
+                        if (selectedPath === node.path) classes.push('selected');
+                        if (draggedPath === node.path) classes.push('dragging');
+                        const itemDropTargetKey = dropTargetKeyFor(node);
+                        const isDropTarget =
+                          itemDropTargetKey !== null && dropTargetKey === itemDropTargetKey;
+                        if (isDropTarget && draggedPath && draggedPath !== node.path) {
+                          classes.push('drop-target');
+                        }
 
-                    const icon = node.isDirectory ? (
-                      <span className="tree-icon tree-icon-folder" aria-hidden="true">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
-                        </svg>
-                      </span>
-                    ) : (
-                      <span className="tree-icon tree-icon-file" aria-hidden="true">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25zm10.5 1.06L11.19 1.5H10.5v2.25c0 .138.112.25.25.25H13v-.69zM3.5 1.75v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V5h-2.5A1.75 1.75 0 0 1 9.25 3.25V1.5h-5.5a.25.25 0 0 0-.25.25z" />
-                        </svg>
-                      </span>
-                    );
+                        const isExpanded =
+                          node.isDirectory && !collapsedFolders.has(node.path);
 
-                    return (
-                      <li
-                        key={node.path}
-                        className={classes.join(' ')}
-                      >
-                        <div
-                          role="treeitem"
-                          aria-level={depth}
-                          aria-selected={selectedPath === node.path}
-                          tabIndex={selectedPath === node.path ? 0 : -1}
-                          className="tree-item-row"
-                          style={{ paddingLeft: `${depth * 14 + 6}px` }}
-                          draggable
-                          onDragStart={(event) => handleItemDragStart(event, node.path)}
-                          onDragEnd={handleItemDragEnd}
-                          onDragOver={(event) => handleItemDragOver(event, node)}
-                          onDragLeave={(event) => handleItemDragLeave(event, node)}
-                          onDrop={(event) => handleItemDrop(event, node)}
-                          onClick={() => void selectNode(node.path)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              void selectNode(node.path);
-                            }
-                          }}
-                          data-path={node.path}
-                          data-kind={node.isDirectory ? 'directory' : 'file'}
-                        >
-                          {icon}
-                          <span className="tree-label">{node.name}</span>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        const icon = node.isDirectory ? (
+                          <span className="tree-icon tree-icon-folder" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                              <path d="M1.75 3A1.75 1.75 0 0 0 0 4.75v6.5C0 12.216.784 13 1.75 13h12.5A1.75 1.75 0 0 0 16 11.25V5.75A1.75 1.75 0 0 0 14.25 4H8.5L7.057 2.557A1.5 1.5 0 0 0 5.997 2H1.75A1.75 1.75 0 0 0 0 3.75v.31C.495 3.388 1.083 3 1.75 3z" />
+                            </svg>
+                          </span>
+                        ) : (
+                          <span className="tree-icon tree-icon-file" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                              <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25zm10.5 1.06L11.19 1.5H10.5v2.25c0 .138.112.25.25.25H13v-.69zM3.5 1.75v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V5h-2.5A1.75 1.75 0 0 1 9.25 3.25V1.5h-5.5a.25.25 0 0 0-.25.25z" />
+                            </svg>
+                          </span>
+                        );
+
+                        return (
+                          <li key={node.path} className={classes.join(' ')}>
+                            <div
+                              role="treeitem"
+                              aria-level={depth}
+                              aria-selected={selectedPath === node.path}
+                              aria-expanded={
+                                node.isDirectory ? isExpanded : undefined
+                              }
+                              tabIndex={selectedPath === node.path ? 0 : -1}
+                              className="tree-item-row"
+                              style={{ paddingLeft: `${depth * 14 + 6}px` }}
+                              draggable
+                              onDragStart={(event) => handleItemDragStart(event, node.path)}
+                              onDragEnd={handleItemDragEnd}
+                              onDragOver={(event) => handleItemDragOver(event, node)}
+                              onDragLeave={(event) => handleItemDragLeave(event, node)}
+                              onDrop={(event) => handleItemDrop(event, node)}
+                              onClick={() => void selectNode(node.path)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  void selectNode(node.path);
+                                }
+                              }}
+                              data-path={node.path}
+                              data-kind={node.isDirectory ? 'directory' : 'file'}
+                            >
+                              {node.isDirectory && (
+                                <span className="tree-chevron" aria-hidden="true">
+                                  {isExpanded ? '▾' : '▸'}
+                                </span>
+                              )}
+                              {icon}
+                              <span className="tree-label">{node.name}</span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </>
               )}
             </>
           )}
