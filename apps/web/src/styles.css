@@ -1561,15 +1561,14 @@ body {
 .action-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.4rem;
-  min-height: 32px;
+  min-height: 30px;
   border: 1px solid var(--color-border);
-  background: transparent;
+  background: var(--color-surface);
   color: var(--color-text-muted);
   border-radius: var(--radius-md);
-  padding: 0.25rem 0.5rem;
-  font-size: var(--type-caption);
+  padding: 0.3rem 0.55rem;
+  font-size: var(--type-label);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -1582,7 +1581,7 @@ body {
 .action-btn:focus-visible {
   color: var(--color-text);
   border-color: var(--color-border-strong);
-  background: color-mix(in oklab, var(--color-surface-hover) 88%, transparent);
+  background: var(--color-surface-hover);
 }
 
 .action-btn-danger {
