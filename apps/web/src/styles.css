@@ -1403,6 +1403,385 @@ textarea[aria-label='Markdown editor'] {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Impeccable QA refresh                                                      */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light dark;
+
+  --type-caption: 0.75rem;
+  --type-label: 0.8125rem;
+  --type-body: 0.9375rem;
+  --type-section: 1.0625rem;
+  --type-title: clamp(1.2rem, 1.05rem + 0.65vw, 1.5rem);
+  --type-page: clamp(1.4rem, 1.15rem + 1vw, 1.85rem);
+
+  --motion-feedback-fast: 110ms;
+  --motion-state-medium: 170ms;
+  --motion-structural-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --color-bg: #f4f4f6;
+  --color-bg-raised: #ececf0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f4f8;
+  --color-surface-strong: #e5e7ee;
+  --color-border: #d5d9e4;
+  --color-border-strong: #b9c1d1;
+  --color-text: #1e2533;
+  --color-text-muted: #495268;
+  --color-text-dim: #6d778f;
+  --color-accent: #4466c9;
+  --color-accent-strong: #3a58b0;
+  --color-accent-soft: color-mix(in oklab, var(--color-accent) 16%, white);
+  --color-accent-ring: color-mix(in oklab, var(--color-accent) 40%, transparent);
+  --color-danger: #b7404f;
+  --color-danger-soft: color-mix(in oklab, var(--color-danger) 16%, white);
+  --color-success: #2f8870;
+  --color-success-soft: color-mix(in oklab, var(--color-success) 18%, white);
+  --color-on-accent: #f8fbff;
+  --color-on-danger: #fff7f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1b1e27;
+    --color-bg-raised: #232734;
+    --color-surface: #2a2f3f;
+    --color-surface-hover: #343b4f;
+    --color-surface-strong: #40485f;
+    --color-border: #4a536b;
+    --color-border-strong: #68738f;
+    --color-text: #f2f5ff;
+    --color-text-muted: #c4cbe0;
+    --color-text-dim: #9aa6c3;
+    --color-accent: #90a9ff;
+    --color-accent-strong: #a9bcff;
+    --color-accent-soft: color-mix(in oklab, var(--color-accent) 22%, transparent);
+    --color-accent-ring: color-mix(in oklab, var(--color-accent) 45%, transparent);
+    --color-danger: #e7838d;
+    --color-danger-soft: color-mix(in oklab, var(--color-danger) 22%, transparent);
+    --color-success: #5dd3ad;
+    --color-success-soft: color-mix(in oklab, var(--color-success) 20%, transparent);
+    --color-on-accent: #10182f;
+    --color-on-danger: #24080c;
+  }
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+.topbar,
+.left-panel,
+.right-panel,
+.editor-surface,
+.editor-toolbar,
+.tab.active,
+.save-button,
+.toast,
+.modal-dialog {
+  background-image: none;
+}
+
+.topbar {
+  background: color-mix(in oklab, var(--color-bg) 80%, var(--color-bg-raised));
+}
+
+.right-panel {
+  background: transparent;
+}
+
+.left-panel h2 {
+  font-size: var(--type-label);
+  letter-spacing: 0.06em;
+}
+
+.brand-mark,
+.icon-btn svg,
+.action-btn svg,
+.tree-chevron svg,
+.tree-drag-handle svg,
+.toast-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.brand-name {
+  font-size: var(--type-section);
+  font-weight: 600;
+}
+
+.breadcrumbs,
+.breadcrumb {
+  font-family: var(--font-sans);
+  font-size: var(--type-label);
+}
+
+.topbar-status,
+.editor-meta,
+.validation-msg,
+.loading-text {
+  font-size: var(--type-caption);
+}
+
+.topbar-status,
+.editor-meta {
+  transition:
+    color var(--motion-state-medium) var(--ease-standard),
+    opacity var(--motion-state-medium) var(--ease-standard);
+}
+
+.topbar-status::before,
+.editor-meta::before {
+  transition:
+    background-color var(--motion-state-medium) var(--ease-standard),
+    transform var(--motion-state-medium) var(--ease-standard);
+}
+
+.topbar-status.is-dirty::before,
+.editor-meta.is-dirty::before {
+  box-shadow: none;
+  transform: scale(1.12);
+}
+
+.icon-btn {
+  transition:
+    color var(--motion-feedback-fast) var(--ease-standard),
+    background-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 30px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.55rem;
+  font-size: var(--type-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.action-btn:hover:not(:disabled),
+.action-btn:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.action-btn-danger {
+  color: var(--color-danger);
+}
+
+.action-btn-danger:hover:not(:disabled),
+.action-btn-danger:focus-visible {
+  background: var(--color-danger-soft);
+  border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
+}
+
+.save-button {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border: 1px solid transparent;
+  transition:
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.save-button:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+
+.danger-btn {
+  color: var(--color-on-danger);
+  background: var(--color-danger);
+}
+
+.danger-btn:hover {
+  background: color-mix(in oklab, var(--color-danger) 88%, black);
+}
+
+.toast {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  animation: toast-in var(--motion-state-medium) var(--ease-emphasis);
+  transition:
+    opacity var(--motion-state-medium) var(--ease-standard),
+    transform var(--motion-state-medium) var(--ease-standard);
+}
+
+.toast.success {
+  background: color-mix(in oklab, var(--color-success-soft) 42%, var(--color-surface));
+}
+
+.toast.error {
+  background: color-mix(in oklab, var(--color-danger-soft) 36%, var(--color-surface));
+}
+
+.toast.success .toast-icon,
+.toast.error .toast-icon {
+  color: var(--color-on-accent);
+}
+
+.toast.success .toast-icon {
+  background: var(--color-success);
+}
+
+.toast.error .toast-icon {
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+}
+
+.modal-dialog {
+  animation: modal-in var(--motion-structural-slow) var(--ease-emphasis);
+}
+
+.layout > .right-panel .empty-state,
+.layout > .right-panel .onboarding-panel,
+.editor-surface {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.editor-toolbar,
+.editor-footer,
+.tabs {
+  border-color: var(--color-border);
+}
+
+.viewer-region .tab-content {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+}
+
+.empty-state,
+.onboarding-panel {
+  padding: var(--space-3) 0;
+  border: 0;
+  background: transparent;
+}
+
+.onboarding-panel {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-3);
+}
+
+.editor-title {
+  font-family: var(--font-sans);
+  font-size: var(--type-section);
+  font-weight: 600;
+}
+
+.editor-footer {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption);
+}
+
+.github-markdown {
+  max-width: 72ch;
+  font-size: var(--type-body);
+}
+
+.github-markdown p {
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.tab,
+.tree-item,
+.tree-item-row,
+.filter-input,
+.toolbar-btn {
+  transition-duration: var(--motion-state-medium);
+  transition-timing-function: var(--ease-standard);
+}
+
+.left-panel {
+  box-shadow: none;
+}
+
+.modal-dialog,
+.toast {
+  box-shadow: var(--shadow-lg);
+}
+
+.tree-drag-handle {
+  opacity: 0;
+  transition:
+    opacity var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.tree-item:hover .tree-drag-handle,
+.tree-item:focus-within .tree-drag-handle {
+  opacity: 0.72;
+}
+
+.tree-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-dim);
+}
+
+.tree-item:hover .tree-chevron,
+.tree-item.selected .tree-chevron {
+  color: var(--color-text);
+}
+
+.tree-item-row:focus-visible,
+.icon-btn:focus-visible,
+.action-btn:focus-visible,
+.toolbar-btn:focus-visible,
+.tab:focus-visible,
+.save-button:focus-visible,
+.danger-btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Reduced motion                                                             */
 /* -------------------------------------------------------------------------- */
 
