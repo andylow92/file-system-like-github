@@ -540,7 +540,7 @@ select:focus-visible {
   color: var(--color-text);
   border-radius: var(--radius-sm);
   padding: 0.45rem 0.6rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.8125rem;
 }
 
@@ -1050,7 +1050,7 @@ select:focus-visible {
 }
 
 .toolbar-btn.mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .toolbar-sep {
@@ -1528,6 +1528,9 @@ body {
 .brand-mark,
 .icon-btn svg,
 .action-btn svg,
+.toolbar-btn svg,
+.tab svg,
+.sidebar-collapse-btn svg,
 .tree-chevron svg,
 .tree-drag-handle svg,
 .toast-icon svg {
@@ -1544,6 +1547,13 @@ body {
 .breadcrumb {
   font-family: var(--font-sans);
   font-size: var(--type-label);
+}
+
+.left-panel h2,
+.action-btn,
+.tab,
+.toolbar-btn {
+  font-family: var(--font-sans);
 }
 
 .topbar-status,
