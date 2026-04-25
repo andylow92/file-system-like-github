@@ -11,7 +11,7 @@ interface FileViewerTabsProps {
 
 export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileViewerTabsProps) {
   return (
-    <section>
+    <section className="viewer-region">
       <div className="tabs" role="tablist" aria-label="File tabs">
         <button
           type="button"
@@ -41,7 +41,7 @@ export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileVi
           Edit
         </button>
       </div>
-      <div className="tab-content">
+      <div className="tab-content" role="region" aria-label="File viewer content">
         {activeTab === 'split' ? (
           <div className="split-view">
             <div className="split-pane split-edit">{edit}</div>

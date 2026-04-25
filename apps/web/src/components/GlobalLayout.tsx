@@ -38,6 +38,82 @@ interface FlatTreeNode {
   depth: number;
 }
 
+function IconMenu() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function IconSpark() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 1.5 9.6 6.4 14.5 8l-4.9 1.6L8 14.5 6.4 9.6 1.5 8l4.9-1.6L8 1.5z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconNewFile() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 1.75C3 .78 3.78 0 4.75 0h4.8l3.45 3.45v10.8c0 .97-.78 1.75-1.75 1.75h-6.5A1.75 1.75 0 0 1 3 14.25z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+      <path d="M9.5 0v3.5H13" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 7v4M6 9h4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function IconNewFolder() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M1.25 4.5c0-.97.78-1.75 1.75-1.75h2.4l1.1 1.1H13c.97 0 1.75.78 1.75 1.75v6c0 .97-.78 1.75-1.75 1.75H3A1.75 1.75 0 0 1 1.25 11.6z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+      <path d="M8 6.6v3.8M6.1 8.5h3.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function IconRename() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="m11.8 1.6 2.6 2.6-8.2 8.2-3.4.8.8-3.4z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+      <path d="M10.2 3.2 12.8 5.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.5 4h11" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M5.2 4V2.7c0-.66.54-1.2 1.2-1.2h3.2c.66 0 1.2.54 1.2 1.2V4m-7.5 0 .8 9c.06.84.76 1.5 1.6 1.5h4.6c.84 0 1.54-.66 1.6-1.5l.8-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
 function flattenTree(nodes: FileNode[], depth = 1): FlatTreeNode[] {
   return nodes.flatMap((node) => [
     { node, depth },
@@ -616,11 +692,11 @@ export function GlobalLayout({
             aria-expanded={isMobileSidebarOpen}
             aria-controls="app-sidebar"
           >
-            ☰
+            <IconMenu />
           </button>
           <div className="brand">
             <span className="brand-mark" aria-hidden="true">
-              ◆
+              <IconSpark />
             </span>
             <span className="brand-name">Markdown Workspace</span>
           </div>
@@ -680,41 +756,45 @@ export function GlobalLayout({
                 <div className="sidebar-quick-actions" aria-label="File actions">
                   <button
                     type="button"
-                    className="icon-btn"
+                    className="action-btn"
                     onClick={() => setMode('newFile')}
-                    title="New file"
+                    title="Create markdown file in selected folder"
                     aria-label="New file"
                   >
-                    +
+                    <IconNewFile />
+                    <span>File</span>
                   </button>
                   <button
                     type="button"
-                    className="icon-btn"
+                    className="action-btn"
                     onClick={() => setMode('newFolder')}
-                    title="New folder"
+                    title="Create folder in selected location"
                     aria-label="New folder"
                   >
-                    ▤
+                    <IconNewFolder />
+                    <span>Folder</span>
                   </button>
                   <button
                     type="button"
-                    className="icon-btn"
+                    className="action-btn"
                     onClick={() => setMode('rename')}
                     disabled={!hasSelection}
-                    title="Rename"
+                    title="Rename selected file or folder"
                     aria-label="Rename"
                   >
-                    ✎
+                    <IconRename />
+                    <span>Rename</span>
                   </button>
                   <button
                     type="button"
-                    className="icon-btn icon-btn-danger"
+                    className="action-btn action-btn-danger"
                     onClick={handleDelete}
                     disabled={!hasSelection}
-                    title="Delete"
+                    title="Delete selected file or folder"
                     aria-label="Delete"
                   >
-                    ✕
+                    <IconTrash />
+                    <span>Delete</span>
                   </button>
                 </div>
               )}
@@ -725,7 +805,16 @@ export function GlobalLayout({
                 title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
-                {sidebarCollapsed ? '›' : '‹'}
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d={sidebarCollapsed ? 'M6 3l5 5-5 5' : 'M10 3 5 8l5 5'}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
           </div>
@@ -803,10 +892,10 @@ export function GlobalLayout({
                   <p>Create your first markdown file or folder to get started.</p>
                   <ul>
                     <li>
-                      Use <kbd>+</kbd> to create a file
+                      Use <kbd>New file</kbd> to create a file
                     </li>
                     <li>
-                      Use <kbd>▤</kbd> for a folder
+                      Use <kbd>New folder</kbd> to add a folder
                     </li>
                     <li>Try names like README.md, notes.md, docs</li>
                   </ul>
@@ -897,11 +986,27 @@ export function GlobalLayout({
                                 tabIndex={-1}
                                 title={`Drag ${node.name}`}
                               >
-                                ⋮⋮
+                                <svg viewBox="0 0 16 16" aria-hidden="true">
+                                  <circle cx="6" cy="4" r="1" fill="currentColor" />
+                                  <circle cx="10" cy="4" r="1" fill="currentColor" />
+                                  <circle cx="6" cy="8" r="1" fill="currentColor" />
+                                  <circle cx="10" cy="8" r="1" fill="currentColor" />
+                                  <circle cx="6" cy="12" r="1" fill="currentColor" />
+                                  <circle cx="10" cy="12" r="1" fill="currentColor" />
+                                </svg>
                               </button>
                               {node.isDirectory && (
                                 <span className="tree-chevron" aria-hidden="true">
-                                  {isExpanded ? '▾' : '▸'}
+                                  <svg viewBox="0 0 16 16">
+                                    <path
+                                      d={isExpanded ? 'M4 6l4 4 4-4' : 'M6 4l4 4-4 4'}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.8"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
                                 </span>
                               )}
                               {icon}
@@ -941,7 +1046,28 @@ export function GlobalLayout({
             }
           >
             <span className="toast-icon" aria-hidden="true">
-              {toast.type === 'success' ? '✓' : '!'}
+              {toast.type === 'success' ? (
+                <svg viewBox="0 0 16 16">
+                  <path
+                    d="M3.5 8.5 6.5 11.5 12.5 5.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16">
+                  <path
+                    d="M8 4v4.2M8 11.7h.01"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
             </span>
             <span>{toast.message}</span>
           </div>
