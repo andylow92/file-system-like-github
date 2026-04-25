@@ -2,6 +2,21 @@
 
 This repository is a TypeScript monorepo for a markdown-file workspace with a React frontend and Node backend.
 
+## Quick Start
+
+1. **Prerequisites**
+   - Node.js 22.x and npm 10.x (the repo does not pin `engines`, so use these recommended versions).
+2. **Install dependencies**
+   - `npm install`
+3. **Start development servers (two terminals)**
+   - Terminal 1: `npm run dev:api`
+   - Terminal 2: `npm run dev:web`
+4. **Verify both services are up**
+   - API health endpoint: `http://localhost:3001/health`
+   - Web dev URL: `http://localhost:5173`
+5. **Expected result**
+   - The health URL returns a success JSON response, and the web URL loads the markdown workspace UI.
+
 ## Architecture
 
 ### Textual architecture diagram
