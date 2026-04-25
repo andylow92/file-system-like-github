@@ -316,7 +316,6 @@ body {
   border-right: 1px solid var(--color-border);
   padding: var(--space-4) var(--space-4);
   background: var(--color-bg-raised);
-  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -422,8 +421,7 @@ body {
   padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2rem) clamp(1.1rem, 3vw, 2.2rem);
   max-width: 100%;
   overflow-x: hidden;
-  background: var(--color-surface);
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.1);
+  background: var(--color-bg);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -608,7 +606,6 @@ select:focus-visible {
   user-select: none;
   -webkit-user-select: none;
 }
-
 
 .tree-item-row:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -1001,10 +998,9 @@ select:focus-visible {
 
 /* Toolbar + textarea editor */
 .editor-surface {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(16, 23, 39, 0.92), rgba(14, 20, 33, 0.94));
-  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   display: flex;
   flex-direction: column;
 }
@@ -1016,7 +1012,7 @@ select:focus-visible {
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-border);
-  background: linear-gradient(180deg, rgba(26, 36, 57, 0.94), rgba(22, 31, 51, 0.9));
+  background: transparent;
 }
 
 .toolbar-btn {
@@ -1090,7 +1086,7 @@ select:focus-visible {
   align-items: center;
   padding: var(--space-2) var(--space-4);
   border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: transparent;
   font-size: 0.75rem;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
@@ -1130,7 +1126,7 @@ textarea[aria-label='Markdown editor'] {
   align-items: center;
   gap: 0.6rem;
   color: var(--color-text);
-  background: linear-gradient(180deg, rgba(42, 56, 87, 0.92), rgba(34, 46, 72, 0.94));
+  background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   padding: 0.6rem 0.85rem;
@@ -1154,7 +1150,7 @@ textarea[aria-label='Markdown editor'] {
 
 .toast.success {
   border-color: var(--color-success);
-  background: linear-gradient(180deg, var(--color-success-soft), var(--color-surface-strong));
+  background: color-mix(in oklab, var(--color-success-soft) 42%, var(--color-surface));
 }
 
 .toast.success .toast-icon {
@@ -1164,7 +1160,7 @@ textarea[aria-label='Markdown editor'] {
 
 .toast.error {
   border-color: var(--color-danger);
-  background: linear-gradient(180deg, var(--color-danger-soft), var(--color-surface-strong));
+  background: color-mix(in oklab, var(--color-danger-soft) 36%, var(--color-surface));
 }
 
 .toast.error .toast-icon {
@@ -1286,7 +1282,6 @@ textarea[aria-label='Markdown editor'] {
   border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
 }
 
-
 .sidebar-collapse-btn {
   font-size: 1.1rem;
   width: 28px;
@@ -1309,7 +1304,6 @@ textarea[aria-label='Markdown editor'] {
   justify-content: center;
   padding: 0;
 }
-
 
 .tree-drag-handle {
   border: 0;
@@ -1361,7 +1355,6 @@ textarea[aria-label='Markdown editor'] {
 .tree-item.selected .tree-chevron {
   color: var(--color-text-muted);
 }
-
 
 /* -------------------------------------------------------------------------- */
 /* Modal dialog                                                               */
@@ -1527,10 +1520,6 @@ body {
   background: color-mix(in oklab, var(--color-bg) 80%, var(--color-bg-raised));
 }
 
-.right-panel {
-  background: transparent;
-}
-
 .left-panel h2 {
   font-size: var(--type-label);
   letter-spacing: 0.06em;
@@ -1647,14 +1636,6 @@ body {
 
 .modal-dialog {
   animation: modal-in var(--motion-structural-slow) var(--ease-emphasis);
-}
-
-.layout > .right-panel .empty-state,
-.layout > .right-panel .onboarding-panel,
-.editor-surface {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
 }
 
 .editor-toolbar,
