@@ -136,3 +136,9 @@ services:
 ```
 
 Use the manual integration checklist in `docs/integration-test-plan.md` during release validation.
+
+## Documentation
+
+- [`apps/api/README.md`](apps/api/README.md) — Start here for backend endpoint coverage and detailed request/response behavior.
+- [`docs/integration-test-plan.md`](docs/integration-test-plan.md) — Open this next for manual release validation and end-to-end verification steps.
+- `apps/web/` frontend docs — No frontend-specific Markdown docs are currently present under `apps/web/`; this README and in-code component tests are the current references.
