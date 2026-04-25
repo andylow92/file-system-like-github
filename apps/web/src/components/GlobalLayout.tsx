@@ -762,7 +762,7 @@ export function GlobalLayout({
                     aria-label="New file"
                   >
                     <IconNewFile />
-                    <span>File</span>
+                    <span>New file</span>
                   </button>
                   <button
                     type="button"
@@ -772,7 +772,7 @@ export function GlobalLayout({
                     aria-label="New folder"
                   >
                     <IconNewFolder />
-                    <span>Folder</span>
+                    <span>New folder</span>
                   </button>
                   <button
                     type="button"
