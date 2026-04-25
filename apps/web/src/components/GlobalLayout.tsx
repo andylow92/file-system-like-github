@@ -970,6 +970,10 @@ export function GlobalLayout({
                               tabIndex={selectedPath === node.path ? 0 : -1}
                               className="tree-item-row"
                               style={{ paddingLeft: `${depth * 14 + 6}px` }}
+                              draggable={true}
+                              onDragStart={(event) => handleItemDragStart(event, node.path)}
+                              onDragEnd={handleItemDragEnd}
+                              onDragEnter={(event) => handleItemDragOver(event, node)}
                               onDragOver={(event) => handleItemDragOver(event, node)}
                               onDragLeave={(event) => handleItemDragLeave(event, node)}
                               onDrop={(event) => handleItemDrop(event, node)}
@@ -983,15 +987,9 @@ export function GlobalLayout({
                               data-path={node.path}
                               data-kind={node.isDirectory ? 'directory' : 'file'}
                             >
-                              <button
-                                type="button"
+                              <span
                                 className="tree-drag-handle"
-                                draggable
-                                onDragStart={(event) => handleItemDragStart(event, node.path)}
-                                onDragEnd={handleItemDragEnd}
-                                onClick={(event) => event.stopPropagation()}
                                 aria-hidden="true"
-                                tabIndex={-1}
                                 title={`Drag ${node.name}`}
                               >
                                 <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -1002,7 +1000,7 @@ export function GlobalLayout({
                                   <circle cx="6" cy="12" r="1" fill="currentColor" />
                                   <circle cx="10" cy="12" r="1" fill="currentColor" />
                                 </svg>
-                              </button>
+                              </span>
                               {node.isDirectory && (
                                 <span className="tree-chevron" aria-hidden="true">
                                   <svg viewBox="0 0 16 16">

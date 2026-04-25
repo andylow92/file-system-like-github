@@ -54,20 +54,20 @@ describe('GlobalLayout', () => {
   // Drag-and-drop (existing tests)
   // -------------------------------------------------------------------------
 
-  it('renders tree rows as non-draggable and exposes drag handles', () => {
+  it('makes tree rows draggable and shows visual drag-grip indicators', () => {
     renderLayout();
 
     const folderRow = screen.getByRole('treeitem', { name: 'docs' });
-    expect(folderRow).not.toHaveAttribute('draggable');
+    expect(folderRow).toHaveAttribute('draggable', 'true');
     expect(folderRow).toHaveAttribute('data-kind', 'directory');
 
     const fileRow = screen.getByRole('treeitem', { name: 'intro.md' });
-    expect(fileRow).not.toHaveAttribute('draggable');
+    expect(fileRow).toHaveAttribute('draggable', 'true');
     expect(fileRow).toHaveAttribute('data-kind', 'file');
     expect(fileRow).toHaveAttribute('data-path', 'docs/nested/intro.md');
 
-    expect(screen.getByTitle('Drag docs')).toHaveAttribute('draggable', 'true');
-    expect(screen.getByTitle('Drag intro.md')).toHaveAttribute('draggable', 'true');
+    expect(screen.getByTitle('Drag docs')).toBeInTheDocument();
+    expect(screen.getByTitle('Drag intro.md')).toBeInTheDocument();
   });
 
   it('shows an error toast when drop source path is missing', () => {
