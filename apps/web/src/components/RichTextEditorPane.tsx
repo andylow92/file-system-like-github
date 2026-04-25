@@ -245,7 +245,7 @@ export function RichTextEditorPane({
             title="Bulleted list"
             aria-label="Bulleted list"
           >
-            •
+            List
           </button>
           <button
             type="button"
@@ -254,7 +254,7 @@ export function RichTextEditorPane({
             title="Quote"
             aria-label="Quote"
           >
-            "
+            Quote
           </button>
           <button
             type="button"
