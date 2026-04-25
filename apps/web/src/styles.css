@@ -5,37 +5,45 @@
 :root {
   color-scheme: dark;
 
-  /* Baseline semantic tokens (dark blue) */
-  --color-bg: #07101d;
-  --color-bg-raised: #0d1a2d;
-  --color-surface: #14253c;
-  --color-surface-hover: #1b304a;
-  --color-surface-strong: #243d5d;
-  --color-border: #244161;
-  --color-border-strong: #3a5d87;
+  /* Bespoke deep-ocean palette: indigo undertone + teal highlights              */
+  /* Designed to feel atmospheric and crafted, not template-generic.            */
+  --color-bg: #050b16;
+  --color-bg-raised: #0a1424;
+  --color-surface: #102035;
+  --color-surface-hover: #172b46;
+  --color-surface-strong: #1f3957;
+  --color-border: rgba(120, 165, 220, 0.12);
+  --color-border-strong: rgba(140, 185, 235, 0.26);
 
-  --color-text: #ecf2ff;
-  --color-text-muted: #b3bfd9;
-  --color-text-dim: #7e8cab;
+  --color-text: #e8efff;
+  --color-text-muted: #a4b3d1;
+  --color-text-dim: #6c7d9c;
 
-  --color-accent: #79a8ff;
-  --color-accent-strong: #6095f2;
-  --color-accent-soft: rgba(121, 168, 255, 0.18);
-  --color-accent-ring: rgba(121, 168, 255, 0.52);
-  --color-on-accent: #061224;
+  /* Accent: an electric ice-blue with a hint of cyan — distinctive yet calm.   */
+  --color-accent: #6ec1ff;
+  --color-accent-strong: #4ea7f5;
+  --color-accent-soft: rgba(110, 193, 255, 0.14);
+  --color-accent-ring: rgba(110, 193, 255, 0.45);
+  --color-on-accent: #03101e;
 
-  --color-success: #4fd9b0;
-  --color-success-soft: rgba(79, 217, 176, 0.16);
-  --color-danger: #f07d83;
-  --color-danger-soft: rgba(240, 125, 131, 0.16);
-  --color-on-danger: #2c0a0e;
+  --color-success: #46d6a8;
+  --color-success-soft: rgba(70, 214, 168, 0.14);
+  --color-danger: #ff7a85;
+  --color-danger-soft: rgba(255, 122, 133, 0.14);
+  --color-on-danger: #2a060a;
 
-  /* Apple Notes-inspired sidebar tokens */
-  --color-folder: #ffcc7a;
-  --color-folder-soft: rgba(255, 204, 122, 0.16);
-  --color-folder-ring: rgba(255, 204, 122, 0.42);
-  --color-file: #a9b7ea;
-  --color-file-soft: rgba(169, 183, 234, 0.14);
+  /* Atmospheric body gradient — subtle teal/indigo radial wash */
+  --bg-atmosphere:
+    radial-gradient(1200px 700px at 12% -8%, rgba(78, 167, 245, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(120, 90, 220, 0.08), transparent 55%),
+    radial-gradient(1100px 800px at 50% 110%, rgba(60, 220, 200, 0.05), transparent 60%);
+
+  /* Sidebar accents */
+  --color-folder: #f6c46b;
+  --color-folder-soft: rgba(246, 196, 107, 0.14);
+  --color-folder-ring: rgba(246, 196, 107, 0.36);
+  --color-file: #9ab0e8;
+  --color-file-soft: rgba(154, 176, 232, 0.12);
   --row-height: 32px;
 
   /* Spacing scale (4pt grid) */
@@ -125,7 +133,9 @@ body,
 body {
   margin: 0;
   color: var(--color-text);
-  background: var(--color-bg);
+  background-color: var(--color-bg);
+  background-image: var(--bg-atmosphere);
+  background-attachment: fixed;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -178,12 +188,17 @@ body {
   gap: var(--space-4);
   padding: var(--space-fluid-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-raised);
-  box-shadow: var(--shadow-sm);
+  background:
+    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent),
+    color-mix(in oklab, var(--color-bg-raised) 86%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 20;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
 .brand {
@@ -197,12 +212,18 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: #0c0f18;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.55), transparent 55%),
+    linear-gradient(140deg, #8ed4ff 0%, #5ea3f0 45%, #6e6cf0 100%);
+  color: #03101e;
   font-size: 0.75rem;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 1px 0 rgba(0, 0, 0, 0.4),
+    0 6px 18px -8px rgba(110, 108, 240, 0.55);
 }
 
 .brand-name {
@@ -314,8 +335,10 @@ body {
 
 .left-panel {
   border-right: 1px solid var(--color-border);
-  padding: var(--space-4) var(--space-4);
-  background: var(--color-bg-raised);
+  padding: var(--space-4) var(--space-3);
+  background:
+    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent 240px),
+    var(--color-bg-raised);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -329,17 +352,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-2);
   min-width: 0;
+  gap: var(--space-2);
 }
 
 .left-panel h2 {
   font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--color-text-dim);
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .icon-btn {
@@ -666,8 +692,11 @@ select:focus-visible {
 
 .tree-item.selected,
 .tree-item.active {
-  background-color: var(--color-accent-soft);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  background:
+    linear-gradient(90deg, rgba(110, 193, 255, 0.16), rgba(110, 193, 255, 0.04));
+  box-shadow:
+    inset 2px 0 0 var(--color-accent),
+    0 0 0 1px rgba(110, 193, 255, 0.10);
 }
 
 .tree-item.selected .tree-label,
@@ -1216,59 +1245,59 @@ textarea[aria-label='Markdown editor'] {
 /* Sidebar quick actions + collapse                                           */
 /* -------------------------------------------------------------------------- */
 
-.sidebar-head-right {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: var(--space-1);
-  min-width: 0;
-  flex: 1;
-}
-
 .sidebar-quick-actions {
-  display: flex;
-  align-items: flex-start;
-  align-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-2);
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+  padding: 0 var(--space-1);
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 .action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 30px;
-  min-width: max-content;
+  justify-content: center;
+  height: 34px;
+  min-width: 0;
+  width: 100%;
   border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.06)),
+    var(--color-surface);
   color: var(--color-text-muted);
   border-radius: var(--radius-md);
-  padding: 0.3rem 0.55rem;
+  padding: 0;
   font-size: var(--type-label);
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1;
   cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
   transition:
     background-color var(--motion-feedback-fast) var(--ease-standard),
     color var(--motion-feedback-fast) var(--ease-standard),
-    border-color var(--motion-feedback-fast) var(--ease-standard);
-}
-
-.action-btn span {
-  min-width: 0;
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard),
+    box-shadow var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .action-btn:hover:not(:disabled),
 .action-btn:focus-visible {
-  color: var(--color-text);
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-hover);
+  color: var(--color-accent);
+  border-color: var(--color-accent-ring);
+  background:
+    linear-gradient(180deg, rgba(110, 193, 255, 0.08), rgba(110, 193, 255, 0.02)),
+    var(--color-surface);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 0 0 1px rgba(110, 193, 255, 0.18);
+}
+
+.action-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .action-btn-danger {
@@ -1277,8 +1306,12 @@ textarea[aria-label='Markdown editor'] {
 
 .action-btn-danger:hover:not(:disabled),
 .action-btn-danger:focus-visible {
-  background: var(--color-danger-soft);
-  border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
+  color: var(--color-danger);
+  background:
+    linear-gradient(180deg, rgba(255, 122, 133, 0.10), rgba(255, 122, 133, 0.02)),
+    var(--color-surface);
+  border-color: color-mix(in oklab, var(--color-danger) 50%, var(--color-border));
+  box-shadow: 0 0 0 1px rgba(255, 122, 133, 0.18);
 }
 
 .sidebar-collapse-btn {
@@ -1302,6 +1335,11 @@ textarea[aria-label='Markdown editor'] {
 .left-panel--collapsed .sidebar-head {
   justify-content: center;
   padding: 0;
+  width: 100%;
+}
+
+.left-panel--collapsed .sidebar-quick-actions {
+  display: none;
 }
 
 .tree-drag-handle {
@@ -1516,7 +1554,9 @@ body {
 }
 
 .topbar {
-  background: color-mix(in oklab, var(--color-bg) 80%, var(--color-bg-raised));
+  background:
+    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent),
+    color-mix(in oklab, var(--color-bg-raised) 82%, transparent);
 }
 
 .left-panel h2 {
@@ -1524,15 +1564,23 @@ body {
   letter-spacing: 0.06em;
 }
 
-.brand-mark,
 .icon-btn svg,
-.action-btn svg,
 .toolbar-btn svg,
 .tab svg,
 .sidebar-collapse-btn svg,
 .tree-chevron svg,
 .tree-drag-handle svg,
 .toast-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.brand-mark svg {
   width: 14px;
   height: 14px;
 }
@@ -1589,16 +1637,27 @@ body {
 }
 
 .save-button {
-  background: var(--color-accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 55%),
+    linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
   color: var(--color-on-accent);
   border: 1px solid transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 16px -10px rgba(110, 193, 255, 0.6);
   transition:
-    background-color var(--motion-feedback-fast) var(--ease-standard),
-    transform var(--motion-feedback-fast) var(--ease-standard);
+    filter var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard),
+    box-shadow var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
-  background: var(--color-accent-strong);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 8px 22px -10px rgba(110, 193, 255, 0.75);
 }
 
 .danger-btn {
