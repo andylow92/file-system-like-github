@@ -926,6 +926,7 @@ select:focus-visible {
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
+  margin: 0;
 }
 
 .github-markdown code {
@@ -941,6 +942,74 @@ select:focus-visible {
   background: transparent;
   border: 0;
   padding: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Code block with copy button                                                */
+/* -------------------------------------------------------------------------- */
+
+.code-block {
+  position: relative;
+  margin: var(--space-4) 0;
+}
+
+.code-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 26px;
+  padding: 0 0.55rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  /* Hidden by default; revealed on hover/focus to keep the code clean. */
+  opacity: 0;
+  transition:
+    opacity var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    background-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.code-copy-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.code-block:hover .code-copy-btn,
+.code-block:focus-within .code-copy-btn,
+.code-copy-btn:focus-visible {
+  opacity: 1;
+}
+
+.code-copy-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.code-copy-btn.is-copied {
+  opacity: 1;
+  color: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: var(--color-accent-soft);
+}
+
+@media (pointer: coarse) {
+  /* Touch devices have no hover; keep the button always visible. */
+  .code-copy-btn {
+    opacity: 1;
+  }
 }
 
 .github-markdown blockquote {

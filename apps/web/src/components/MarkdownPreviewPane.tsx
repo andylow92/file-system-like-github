@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 interface MarkdownPreviewPaneProps {
   filePath: string | null;
   markdown: string;
@@ -111,6 +113,13 @@ function sanitizeMarkdownAst(nodes: MarkdownNode[]): MarkdownNode[] {
       return node;
     }
 
+    // Code blocks render via a React text node, which encodes for display
+    // automatically. Escaping here would surface visible &lt; / &gt; entities
+    // in the preview AND in the copied clipboard text.
+    if (node.type === 'code') {
+      return node;
+    }
+
     return {
       ...node,
       content: escapeHtml(node.content),
@@ -118,37 +127,140 @@ function sanitizeMarkdownAst(nodes: MarkdownNode[]): MarkdownNode[] {
   });
 }
 
-function renderHtml(nodes: MarkdownNode[]): string {
-  return nodes
-    .map((node) => {
-      switch (node.type) {
-        case 'h1':
-          return `<h1>${renderInlineFromEscaped(node.content)}</h1>`;
-        case 'h2':
-          return `<h2>${renderInlineFromEscaped(node.content)}</h2>`;
-        case 'blockquote':
-          return `<blockquote>${renderInlineFromEscaped(node.content)}</blockquote>`;
-        case 'paragraph':
-          return `<p>${renderInlineFromEscaped(node.content)}</p>`;
-        case 'code':
-          return `<pre><code>${node.content}</code></pre>`;
-        case 'list':
-          return `<ul>${node.items
-            .map((item) => `<li>${renderInlineFromEscaped(item)}</li>`)
-            .join('')}</ul>`;
-        case 'hr':
-          return `<hr />`;
-      }
-    })
-    .join('');
+interface CodeBlockProps {
+  // The raw, un-escaped code content. Rendered as plain text (React handles
+  // the encoding) and copied verbatim to the clipboard.
+  content: string;
 }
 
-function renderMarkdown(markdown: string): string {
-  const tokens = tokenizeMarkdown(markdown);
-  const ast = parseMarkdown(tokens);
-  const sanitizedAst = sanitizeMarkdownAst(ast);
+function CodeBlock({ content }: CodeBlockProps) {
+  const [copied, setCopied] = useState(false);
 
-  return renderHtml(sanitizedAst);
+  async function handleCopy() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        // Fallback for older browsers / non-secure contexts.
+        const textarea = document.createElement('textarea');
+        textarea.value = content;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Swallow — the user can still select-and-copy manually.
+    }
+  }
+
+  return (
+    <div className="code-block">
+      <button
+        type="button"
+        className={copied ? 'code-copy-btn is-copied' : 'code-copy-btn'}
+        onClick={handleCopy}
+        aria-label={copied ? 'Copied to clipboard' : 'Copy code to clipboard'}
+        title={copied ? 'Copied' : 'Copy'}
+      >
+        {copied ? (
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M3.5 8.5 6.5 11.5 12.5 5.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect
+              x="5"
+              y="5"
+              width="8"
+              height="9"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+            <path
+              d="M3.5 10.5V3.5A1.5 1.5 0 0 1 5 2h6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        <span className="code-copy-label">{copied ? 'Copied' : 'Copy'}</span>
+      </button>
+      <pre>
+        <code>{content}</code>
+      </pre>
+    </div>
+  );
+}
+
+function renderNodes(nodes: MarkdownNode[]) {
+  return nodes.map((node, index) => {
+    switch (node.type) {
+      case 'h1':
+        return (
+          <h1
+            key={index}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+          />
+        );
+      case 'h2':
+        return (
+          <h2
+            key={index}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+          />
+        );
+      case 'blockquote':
+        return (
+          <blockquote
+            key={index}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+          />
+        );
+      case 'paragraph':
+        return (
+          <p
+            key={index}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+          />
+        );
+      case 'list':
+        return (
+          <ul key={index}>
+            {node.items.map((item, itemIndex) => (
+              <li
+                key={itemIndex}
+                dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(item) }}
+              />
+            ))}
+          </ul>
+        );
+      case 'code':
+        // The code content is intentionally NOT escaped here: React's child
+        // text rendering handles the encoding, and the copy button needs the
+        // raw string verbatim.
+        return <CodeBlock key={index} content={node.content} />;
+      case 'hr':
+        return <hr key={index} />;
+    }
+  });
 }
 
 export function MarkdownPreviewPane({ filePath, markdown }: MarkdownPreviewPaneProps) {
@@ -160,10 +272,9 @@ export function MarkdownPreviewPane({ filePath, markdown }: MarkdownPreviewPaneP
     return <p className="empty-state">This file has no content yet.</p>;
   }
 
-  return (
-    <article
-      className="markdown-preview github-markdown"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }}
-    />
-  );
+  const tokens = tokenizeMarkdown(markdown);
+  const ast = parseMarkdown(tokens);
+  const sanitizedAst = sanitizeMarkdownAst(ast);
+
+  return <article className="markdown-preview github-markdown">{renderNodes(sanitizedAst)}</article>;
 }
