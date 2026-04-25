@@ -5,35 +5,35 @@
 :root {
   color-scheme: dark;
 
-  /* Tinted neutrals (blue-violet slate) - no pure blacks/grays */
-  --color-bg: #0c0f18;
-  --color-bg-raised: #11151f;
-  --color-surface: #151a27;
-  --color-surface-hover: #1c2233;
-  --color-surface-strong: #232a3f;
-  --color-border: #232a3d;
-  --color-border-strong: #343d57;
+  /* Refined deep-indigo palette with subtle violet highlights */
+  --color-bg: #090d16;
+  --color-bg-raised: #101727;
+  --color-surface: #161f33;
+  --color-surface-hover: #1f2a40;
+  --color-surface-strong: #283552;
+  --color-border: #25314a;
+  --color-border-strong: #3a4a6d;
 
-  --color-text: #e8ebf5;
-  --color-text-muted: #a1a9c0;
-  --color-text-dim: #6e7693;
+  --color-text: #ecf2ff;
+  --color-text-muted: #b3bfd9;
+  --color-text-dim: #7e8cab;
 
-  --color-accent: #8b9bff;
-  --color-accent-strong: #6b7dff;
-  --color-accent-soft: rgba(139, 155, 255, 0.14);
-  --color-accent-ring: rgba(139, 155, 255, 0.45);
+  --color-accent: #8ea6ff;
+  --color-accent-strong: #7591ff;
+  --color-accent-soft: rgba(142, 166, 255, 0.18);
+  --color-accent-ring: rgba(142, 166, 255, 0.52);
 
-  --color-success: #4cd6a3;
-  --color-success-soft: rgba(76, 214, 163, 0.14);
-  --color-danger: #ef6a6a;
-  --color-danger-soft: rgba(239, 106, 106, 0.14);
+  --color-success: #4fd9b0;
+  --color-success-soft: rgba(79, 217, 176, 0.16);
+  --color-danger: #f07d83;
+  --color-danger-soft: rgba(240, 125, 131, 0.16);
 
   /* Apple Notes-inspired sidebar tokens */
-  --color-folder: #f0b86c;
-  --color-folder-soft: rgba(240, 184, 108, 0.16);
-  --color-folder-ring: rgba(240, 184, 108, 0.42);
-  --color-file: #9aa6d4;
-  --color-file-soft: rgba(154, 166, 212, 0.14);
+  --color-folder: #ffcc7a;
+  --color-folder-soft: rgba(255, 204, 122, 0.16);
+  --color-folder-ring: rgba(255, 204, 122, 0.42);
+  --color-file: #a9b7ea;
+  --color-file-soft: rgba(169, 183, 234, 0.14);
   --row-height: 32px;
 
   /* Spacing scale (4pt grid) */
@@ -84,7 +84,10 @@ body,
 body {
   margin: 0;
   color: var(--color-text);
-  background: var(--color-bg);
+  background:
+    radial-gradient(1400px 900px at 12% -10%, rgba(142, 166, 255, 0.16), transparent 45%),
+    radial-gradient(900px 700px at 90% 0%, rgba(188, 145, 255, 0.12), transparent 38%),
+    var(--color-bg);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -137,7 +140,7 @@ body {
   gap: var(--space-4);
   padding: var(--space-fluid-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-raised);
+  background: linear-gradient(180deg, rgba(16, 23, 39, 0.94), rgba(16, 23, 39, 0.88));
   position: sticky;
   top: 0;
   z-index: 20;
@@ -158,7 +161,7 @@ body {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--color-accent), #c2b0ff);
+  background: linear-gradient(145deg, var(--color-accent), #bea3ff);
   color: #0c0f18;
   font-size: 0.75rem;
 }
@@ -273,7 +276,7 @@ body {
 .left-panel {
   border-right: 1px solid var(--color-border);
   padding: var(--space-4) var(--space-4);
-  background: var(--color-bg-raised);
+  background: linear-gradient(180deg, rgba(16, 23, 39, 0.92), rgba(12, 18, 30, 0.95));
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -325,7 +328,7 @@ body {
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: var(--color-surface-hover);
+  background: linear-gradient(180deg, var(--color-surface-hover), rgba(38, 49, 74, 0.75));
   color: var(--color-text);
 }
 
@@ -383,6 +386,7 @@ body {
   padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2rem) clamp(1.1rem, 3vw, 2.2rem);
   max-width: 100%;
   overflow-x: hidden;
+  background: linear-gradient(180deg, rgba(14, 21, 35, 0.35), rgba(14, 21, 35, 0));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -620,7 +624,7 @@ select:focus-visible {
 }
 
 .tree-item:hover {
-  background: var(--color-surface);
+  background: linear-gradient(180deg, rgba(31, 42, 64, 0.78), rgba(29, 40, 61, 0.75));
 }
 
 .tree-item:hover .tree-label {
@@ -629,7 +633,7 @@ select:focus-visible {
 
 .tree-item.selected,
 .tree-item.active {
-  background: var(--color-accent-soft);
+  background: linear-gradient(180deg, rgba(142, 166, 255, 0.22), rgba(142, 166, 255, 0.14));
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
@@ -732,7 +736,7 @@ select:focus-visible {
 .tab.active {
   color: var(--color-text);
   border-bottom-color: var(--color-accent);
-  background: transparent;
+  background: linear-gradient(180deg, rgba(142, 166, 255, 0.12), rgba(142, 166, 255, 0));
 }
 
 .tab-content {
@@ -930,7 +934,7 @@ select:focus-visible {
 }
 
 .save-button {
-  background: var(--color-accent);
+  background: linear-gradient(180deg, #99adff 0%, #7e98ff 100%);
   border: none;
   color: #0c0f18;
   padding: 0.5rem 1rem;
@@ -945,7 +949,7 @@ select:focus-visible {
 }
 
 .save-button:hover:not(:disabled) {
-  background: var(--color-accent-strong);
+  background: linear-gradient(180deg, #a7b8ff 0%, #8ba2ff 100%);
 }
 
 .save-button:active:not(:disabled) {
@@ -962,7 +966,7 @@ select:focus-visible {
 .editor-surface {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: var(--color-bg-raised);
+  background: linear-gradient(180deg, rgba(16, 23, 39, 0.92), rgba(14, 20, 33, 0.94));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -975,7 +979,7 @@ select:focus-visible {
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: linear-gradient(180deg, rgba(26, 36, 57, 0.94), rgba(22, 31, 51, 0.9));
 }
 
 .toolbar-btn {
@@ -1089,7 +1093,7 @@ textarea[aria-label='Markdown editor'] {
   align-items: center;
   gap: 0.6rem;
   color: var(--color-text);
-  background: var(--color-surface-strong);
+  background: linear-gradient(180deg, rgba(42, 56, 87, 0.92), rgba(34, 46, 72, 0.94));
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   padding: 0.6rem 0.85rem;
