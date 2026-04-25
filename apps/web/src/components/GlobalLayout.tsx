@@ -50,9 +50,10 @@ function IconSpark() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
-        d="M8 1.5 9.6 6.4 14.5 8l-4.9 1.6L8 14.5 6.4 9.6 1.5 8l4.9-1.6L8 1.5z"
+        d="M8 1.5c.4 2.6 1.4 3.6 4 4.1-2.6.5-3.6 1.5-4 4.1-.4-2.6-1.4-3.6-4-4.1 2.6-.5 3.6-1.5 4-4.1z"
         fill="currentColor"
       />
+      <circle cx="12.5" cy="11.5" r="1.2" fill="currentColor" opacity="0.7" />
     </svg>
   );
 }
@@ -61,13 +62,14 @@ function IconNewFile() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
-        d="M3 1.75C3 .78 3.78 0 4.75 0h4.8l3.45 3.45v10.8c0 .97-.78 1.75-1.75 1.75h-6.5A1.75 1.75 0 0 1 3 14.25z"
+        d="M3.25 2.25A1.25 1.25 0 0 1 4.5 1h4.79c.33 0 .65.13.88.37l2.96 2.96c.24.23.37.55.37.88v8.04A1.25 1.25 0 0 1 12.25 14.5h-7.5A1.25 1.25 0 0 1 3.5 13.25z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.4"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
-      <path d="M9.5 0v3.5H13" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M8 7v4M6 9h4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M9.5 1.25v3.25h3.25" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M8 7.75v3.5M6.25 9.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -76,12 +78,13 @@ function IconNewFolder() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
-        d="M1.25 4.5c0-.97.78-1.75 1.75-1.75h2.4l1.1 1.1H13c.97 0 1.75.78 1.75 1.75v6c0 .97-.78 1.75-1.75 1.75H3A1.75 1.75 0 0 1 1.25 11.6z"
+        d="M1.75 4.25A1.25 1.25 0 0 1 3 3h2.59c.33 0 .65.13.88.37l1.06 1.06H13a1.25 1.25 0 0 1 1.25 1.25v6.07A1.25 1.25 0 0 1 13 13H3a1.25 1.25 0 0 1-1.25-1.25z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.4"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
-      <path d="M8 6.6v3.8M6.1 8.5h3.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 7.5v3M6.5 9h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -90,12 +93,13 @@ function IconRename() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
-        d="m11.8 1.6 2.6 2.6-8.2 8.2-3.4.8.8-3.4z"
+        d="m10.6 2.4 2.6 2.6-7.55 7.55-3.15.55.55-3.15z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.4"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
-      <path d="M10.2 3.2 12.8 5.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M9.4 3.6 12 6.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -103,13 +107,22 @@ function IconRename() {
 function IconTrash() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2.5 4h11" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2.75 4.25h10.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       <path
-        d="M5.2 4V2.7c0-.66.54-1.2 1.2-1.2h3.2c.66 0 1.2.54 1.2 1.2V4m-7.5 0 .8 9c.06.84.76 1.5 1.6 1.5h4.6c.84 0 1.54-.66 1.6-1.5l.8-9"
+        d="M6.25 4.25V3a.75.75 0 0 1 .75-.75h2a.75.75 0 0 1 .75.75v1.25"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.4"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
       />
+      <path
+        d="m3.75 4.25.7 9.05a1.25 1.25 0 0 0 1.25 1.15h4.6a1.25 1.25 0 0 0 1.25-1.15l.7-9.05"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="M6.75 7v4.5M9.25 7v4.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
     </svg>
   );
 }
@@ -751,73 +764,68 @@ export function GlobalLayout({
         >
           <div className="sidebar-head">
             {!sidebarCollapsed && <h2>Files</h2>}
-            <div className="sidebar-head-right">
-              {!sidebarCollapsed && (
-                <div className="sidebar-quick-actions" aria-label="File actions">
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => setMode('newFile')}
-                    title="Create markdown file in selected folder"
-                    aria-label="New file"
-                  >
-                    <IconNewFile />
-                    <span>New file</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => setMode('newFolder')}
-                    title="Create folder in selected location"
-                    aria-label="New folder"
-                  >
-                    <IconNewFolder />
-                    <span>New folder</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => setMode('rename')}
-                    disabled={!hasSelection}
-                    title="Rename selected file or folder"
-                    aria-label="Rename"
-                  >
-                    <IconRename />
-                    <span>Rename</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn action-btn-danger"
-                    onClick={handleDelete}
-                    disabled={!hasSelection}
-                    title="Delete selected file or folder"
-                    aria-label="Delete"
-                  >
-                    <IconTrash />
-                    <span>Delete</span>
-                  </button>
-                </div>
-              )}
+            <button
+              type="button"
+              className="icon-btn sidebar-collapse-btn"
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d={sidebarCollapsed ? 'M6 3l5 5-5 5' : 'M10 3 5 8l5 5'}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {!sidebarCollapsed && (
+            <div className="sidebar-quick-actions" role="toolbar" aria-label="File actions">
               <button
                 type="button"
-                className="icon-btn sidebar-collapse-btn"
-                onClick={toggleSidebar}
-                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                className="action-btn"
+                onClick={() => setMode('newFile')}
+                title="New file"
+                aria-label="New file"
               >
-                <svg viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d={sidebarCollapsed ? 'M6 3l5 5-5 5' : 'M10 3 5 8l5 5'}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <IconNewFile />
+              </button>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setMode('newFolder')}
+                title="New folder"
+                aria-label="New folder"
+              >
+                <IconNewFolder />
+              </button>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setMode('rename')}
+                disabled={!hasSelection}
+                title="Rename"
+                aria-label="Rename"
+              >
+                <IconRename />
+              </button>
+              <button
+                type="button"
+                className="action-btn action-btn-danger"
+                onClick={handleDelete}
+                disabled={!hasSelection}
+                title="Delete"
+                aria-label="Delete"
+              >
+                <IconTrash />
               </button>
             </div>
-          </div>
+          )}
 
           {!sidebarCollapsed && (
             <>
