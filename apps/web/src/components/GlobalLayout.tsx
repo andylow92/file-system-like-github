@@ -254,8 +254,18 @@ export function GlobalLayout({
     return flatTree.find((entry) => entry.node.path === nodePath)?.node;
   }
 
-  function targetDirectoryFor(node: FileNode): string | null {
-    return node.isDirectory ? node.path : null;
+  // Resolve any tree node (folder OR file) to the directory that should
+  // receive a drop. Folder -> itself. File -> its parent folder (or root).
+  // This is what makes the entire tree a sensible drop surface: a user can
+  // drop a sibling file onto a sibling file and the move lands in the
+  // shared parent folder, instead of silently failing.
+  function targetDirectoryFor(node: FileNode): string {
+    return node.isDirectory ? node.path : (getParentDirectoryPath(node.path) ?? '');
+  }
+
+  function dropTargetKeyFor(node: FileNode): string {
+    const dir = targetDirectoryFor(node);
+    return dir === '' ? ROOT_DROP_KEY : dir;
   }
 
   function validateMove(sourcePath: string, targetDir: string): MoveValidation {
@@ -281,6 +291,7 @@ export function GlobalLayout({
   async function movePathTo(sourcePath: string, targetDir: string) {
     const source = findNode(sourcePath);
     if (!source) {
+      showToast('error', 'Could not find the item to move. Try again.');
       return;
     }
 
@@ -317,30 +328,29 @@ export function GlobalLayout({
     setDropTargetKey(null);
   }
 
-  function dropTargetKeyFor(node: FileNode): string | null {
-    return node.isDirectory ? node.path : null;
-  }
-
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
     if (!isOwnDrag()) {
       return;
     }
 
-    if (!node.isDirectory) {
-      return;
-    }
+    // Always stop propagation when this is our own drag so the tree-level
+    // safety-net handler doesn't see this event and override the row's
+    // decision. The tree handler is only meant to catch drops in the gaps
+    // between rows.
+    event.stopPropagation();
 
     const targetDir = targetDirectoryFor(node);
-    if (targetDir === null) {
-      return;
-    }
     if (!validateMove(draggedPathRef.current!, targetDir).ok) {
       return;
     }
 
+    // preventDefault marks this element as a valid drop target so that
+    // the subsequent drop event will fire. Without it the browser shows
+    // a "no-drop" cursor and never delivers `drop`.
     event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = 'move';
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
     const nextKey = dropTargetKeyFor(node);
     setDropTargetKey((current) => (current === nextKey ? current : nextKey));
   }
@@ -351,17 +361,16 @@ export function GlobalLayout({
       return;
     }
     const key = dropTargetKeyFor(node);
-    if (key === null) {
-      return;
-    }
     setDropTargetKey((current) => (current === key ? null : current));
   }
 
   function handleItemDrop(event: DragEvent<HTMLElement>, node: FileNode) {
     event.preventDefault();
+    // Stop propagation so the tree-level handler doesn't also process
+    // the same drop (it would otherwise re-route to root).
     event.stopPropagation();
 
-    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
     setDropTargetKey(null);
     draggedPathRef.current = null;
     setDraggedPath(null);
@@ -371,16 +380,7 @@ export function GlobalLayout({
       return;
     }
 
-    if (!node.isDirectory) {
-      showToast('info', 'Drop onto a folder.');
-      return;
-    }
-
     const targetDir = targetDirectoryFor(node);
-    if (targetDir === null) {
-      showToast('info', 'Drop onto a folder.');
-      return;
-    }
     const validation = validateMove(sourcePath, targetDir);
     if (!validation.ok) {
       showToast(
@@ -397,7 +397,9 @@ export function GlobalLayout({
       return;
     }
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
     setDropTargetKey((current) => (current === ROOT_DROP_KEY ? current : ROOT_DROP_KEY));
   }
 
@@ -407,7 +409,7 @@ export function GlobalLayout({
 
   function handleRootDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const sourcePath = draggedPathRef.current ?? event.dataTransfer.getData('text/plain');
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
     setDropTargetKey(null);
     draggedPathRef.current = null;
     setDraggedPath(null);
@@ -421,6 +423,36 @@ export function GlobalLayout({
         validation.reason === 'Item is already in that folder.' ? 'info' : 'error',
         validation.reason ?? 'Move failed.',
       );
+      return;
+    }
+    void movePathTo(sourcePath, '');
+  }
+
+  // Safety net: drops that land in the gap between rows (or anywhere
+  // inside the tree but not on a row) bubble up to the <ul>. Without
+  // this handler, dragover on those gaps would not preventDefault and
+  // the drop event would never fire — the user would see no feedback.
+  // We treat such drops as "drop into root", matching the Finder/VSCode
+  // convention for the empty area of a list.
+  function handleTreeDragOver(event: DragEvent<HTMLUListElement>) {
+    if (!isOwnDrag()) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleTreeDrop(event: DragEvent<HTMLUListElement>) {
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    const sourcePath = draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
+    setDropTargetKey(null);
+    draggedPathRef.current = null;
+    setDraggedPath(null);
+    if (!sourcePath) return;
+    const validation = validateMove(sourcePath, '');
+    if (!validation.ok) {
+      if (validation.reason !== 'Item is already in that folder.') {
+        showToast('error', validation.reason ?? 'Move failed.');
+      }
       return;
     }
     void movePathTo(sourcePath, '');
@@ -931,6 +963,8 @@ export function GlobalLayout({
                       role="tree"
                       aria-label="Repository file tree"
                       onKeyDown={onTreeKeyDown}
+                      onDragOver={handleTreeDragOver}
+                      onDrop={handleTreeDrop}
                     >
                       {folderVisibleFlatTree.map(({ node, depth }) => {
                         const classes = ['tree-item'];
@@ -939,8 +973,11 @@ export function GlobalLayout({
                         if (draggedPath === node.path) classes.push('dragging');
                         const itemDropTargetKey = dropTargetKeyFor(node);
                         const isDropTarget =
-                          itemDropTargetKey !== null && dropTargetKey === itemDropTargetKey;
-                        if (isDropTarget && draggedPath && draggedPath !== node.path) {
+                          node.isDirectory &&
+                          dropTargetKey === itemDropTargetKey &&
+                          draggedPath !== null &&
+                          draggedPath !== node.path;
+                        if (isDropTarget) {
                           classes.push('drop-target');
                         }
 
