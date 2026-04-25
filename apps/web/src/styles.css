@@ -358,8 +358,8 @@ body {
   font-size: clamp(0.86rem, 0.8rem + 0.35vw, 1rem);
   line-height: 1;
   transition:
-    background 100ms ease,
-    color 100ms ease;
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .icon-btn:hover:not(:disabled) {
@@ -444,10 +444,10 @@ body {
   font-size: 0.8125rem;
   font-weight: 500;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .primary-btn:hover,
@@ -581,9 +581,8 @@ select:focus-visible {
   color: var(--color-text-muted);
   position: relative;
   transition:
-    background 120ms ease,
-    box-shadow 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-state-medium) var(--ease-standard),
+    box-shadow var(--motion-state-medium) var(--ease-standard);
 }
 
 .tree-item-row {
@@ -602,7 +601,7 @@ select:focus-visible {
   text-decoration: none;
   border-radius: inherit;
   cursor: default;
-  transition: color 120ms ease;
+  transition: color var(--motion-state-medium) var(--ease-standard);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -621,9 +620,9 @@ select:focus-visible {
   border-radius: 5px;
   flex-shrink: 0;
   transition:
-    background 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease;
+    background-color var(--motion-state-medium) var(--ease-standard),
+    color var(--motion-state-medium) var(--ease-standard),
+    box-shadow var(--motion-state-medium) var(--ease-standard);
 }
 
 .tree-icon-folder {
@@ -725,10 +724,10 @@ select:focus-visible {
   text-align: center;
   background: transparent;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease;
+    background-color var(--motion-state-medium) var(--ease-standard),
+    border-color var(--motion-state-medium) var(--ease-standard),
+    color var(--motion-state-medium) var(--ease-standard),
+    box-shadow var(--motion-state-medium) var(--ease-standard);
 }
 
 .root-drop.drop-target {
@@ -978,8 +977,8 @@ select:focus-visible {
   font-weight: 600;
   font-size: 0.8125rem;
   transition:
-    background 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
@@ -1032,8 +1031,8 @@ select:focus-visible {
   font-size: 0.8125rem;
   font-weight: 600;
   transition:
-    background 100ms ease,
-    color 100ms ease;
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .toolbar-btn:hover {
@@ -1348,7 +1347,7 @@ textarea[aria-label='Markdown editor'] {
   color: var(--color-text-dim);
   flex-shrink: 0;
   margin-right: 1px;
-  transition: color 120ms ease;
+  transition: color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .tree-item:hover .tree-chevron,
@@ -1457,7 +1456,7 @@ textarea[aria-label='Markdown editor'] {
     bottom: 0;
     width: min(86vw, 320px);
     transform: translateX(-105%);
-    transition: transform 180ms ease;
+    transition: transform var(--motion-structural-slow) var(--ease-emphasis);
     z-index: 45;
     height: auto;
     border-right: 1px solid var(--color-border);
