@@ -331,6 +331,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--space-1);
+  min-width: 0;
 }
 
 .left-panel h2 {
@@ -340,11 +341,6 @@ body {
   text-transform: uppercase;
   color: var(--color-text-dim);
   margin: 0;
-}
-
-.sidebar-quick-actions {
-  display: inline-flex;
-  gap: var(--space-2);
 }
 
 .icon-btn {
@@ -1222,19 +1218,81 @@ textarea[aria-label='Markdown editor'] {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Sidebar collapse                                                           */
+/* Sidebar quick actions + collapse                                           */
 /* -------------------------------------------------------------------------- */
 
 .sidebar-head-right {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-quick-actions {
+  display: flex;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.action-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 0.4rem;
+  min-height: 30px;
+  min-width: max-content;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.55rem;
+  font-size: var(--type-label);
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard);
 }
+
+.action-btn span {
+  min-width: 0;
+}
+
+.action-btn:hover:not(:disabled),
+.action-btn:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.action-btn-danger {
+  color: var(--color-danger);
+}
+
+.action-btn-danger:hover:not(:disabled),
+.action-btn-danger:focus-visible {
+  background: var(--color-danger-soft);
+  border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
+}
+
 
 .sidebar-collapse-btn {
   font-size: 1.1rem;
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   flex-shrink: 0;
 }
 
@@ -1530,42 +1588,6 @@ body {
   transition:
     color var(--motion-feedback-fast) var(--ease-standard),
     background-color var(--motion-feedback-fast) var(--ease-standard);
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 30px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  border-radius: var(--radius-md);
-  padding: 0.3rem 0.55rem;
-  font-size: var(--type-label);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--motion-feedback-fast) var(--ease-standard),
-    color var(--motion-feedback-fast) var(--ease-standard),
-    border-color var(--motion-feedback-fast) var(--ease-standard);
-}
-
-.action-btn:hover:not(:disabled),
-.action-btn:focus-visible {
-  color: var(--color-text);
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-hover);
-}
-
-.action-btn-danger {
-  color: var(--color-danger);
-}
-
-.action-btn-danger:hover:not(:disabled),
-.action-btn-danger:focus-visible {
-  background: var(--color-danger-soft);
-  border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
 }
 
 .save-button {
