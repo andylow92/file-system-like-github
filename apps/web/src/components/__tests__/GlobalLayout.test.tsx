@@ -83,7 +83,7 @@ describe('GlobalLayout', () => {
     expect(screen.getByText('Could not determine dragged item. Try again.')).toBeInTheDocument();
   });
 
-  it('shows an info toast and does not rename when dropping on a file row', () => {
+  it('treats dropping a file onto itself as a no-op with an info toast', () => {
     const { onRenamePath } = renderLayout();
 
     const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
@@ -93,7 +93,9 @@ describe('GlobalLayout', () => {
       },
     });
 
-    expect(screen.getByText('Drop onto a folder.')).toBeInTheDocument();
+    // The file row resolves to its parent folder (docs/nested), which is
+    // already the source's parent — so the move is a no-op.
+    expect(screen.getByText('Item is already in that folder.')).toBeInTheDocument();
     expect(onRenamePath).not.toHaveBeenCalled();
   });
 
@@ -138,6 +140,219 @@ describe('GlobalLayout', () => {
     });
 
     expect(screen.getByText('Item is already in that folder.')).toBeInTheDocument();
+    expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Full-sequence DnD (dragstart -> dragenter -> dragover -> drop -> dragend)
+  //
+  // The legacy tests above only fire `drop` directly. That can mask
+  // regressions in dragstart wiring (data transfer, draggable attribute) or
+  // in dragover's `preventDefault` gating — which is what enables the drop
+  // to fire at all in real browsers. The tests below simulate the full
+  // sequence and share a single DataTransfer across events, mirroring what
+  // a real browser does.
+  // -------------------------------------------------------------------------
+
+  class DataTransferStub {
+    private store = new Map<string, string>();
+    public effectAllowed = '';
+    public dropEffect = '';
+    public files: File[] = [];
+    public types: string[] = [];
+    setData(type: string, val: string) {
+      this.store.set(type, val);
+      if (!this.types.includes(type)) this.types.push(type);
+    }
+    getData(type: string) {
+      return this.store.get(type) ?? '';
+    }
+    clearData() {
+      this.store.clear();
+      this.types = [];
+    }
+    setDragImage() {
+      /* noop */
+    }
+  }
+
+  const richTree = [
+    {
+      name: 'a.md',
+      path: 'a.md',
+      isDirectory: false,
+    },
+    {
+      name: 'docs',
+      path: 'docs',
+      isDirectory: true,
+      children: [
+        { name: 'guide.md', path: 'docs/guide.md', isDirectory: false },
+        {
+          name: 'nested',
+          path: 'docs/nested',
+          isDirectory: true,
+          children: [{ name: 'intro.md', path: 'docs/nested/intro.md', isDirectory: false }],
+        },
+      ],
+    },
+  ];
+
+  function renderRichLayout() {
+    const onRenamePath = vi.fn(async () => {});
+    const view = render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={richTree}
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={onRenamePath}
+          onDeletePath={vi.fn(async () => {})}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+    return { ...view, onRenamePath };
+  }
+
+  it('full sequence: dragstart -> dragenter -> dragover -> drop on folder row moves file', async () => {
+    const { onRenamePath } = renderRichLayout();
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(introRow, { dataTransfer: dt });
+    expect(dt.getData('text/plain')).toBe('docs/nested/intro.md');
+    expect(dt.effectAllowed).toBe('move');
+
+    fireEvent.dragEnter(docsRow, { dataTransfer: dt });
+    fireEvent.dragOver(docsRow, { dataTransfer: dt });
+
+    fireEvent.drop(docsRow, { dataTransfer: dt });
+    fireEvent.dragEnd(introRow, { dataTransfer: dt });
+
+    await waitFor(() =>
+      expect(onRenamePath).toHaveBeenCalledWith('docs/nested/intro.md', 'docs/intro.md'),
+    );
+  });
+
+  it('full sequence: dropping a file on a sibling-file row moves into the shared parent', async () => {
+    // a.md is at the root. guide.md lives in docs/.
+    // Dragging a.md onto guide.md should move a.md into docs/, because
+    // the file row resolves to its parent folder. This is the user-friendly
+    // behavior that the prior code was rejecting with "Drop onto a folder.".
+    const { onRenamePath } = renderRichLayout();
+    const sourceRow = screen.getByRole('treeitem', { name: 'a.md' });
+    const targetRow = screen.getByRole('treeitem', { name: 'guide.md' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(sourceRow, { dataTransfer: dt });
+    fireEvent.dragEnter(targetRow, { dataTransfer: dt });
+    fireEvent.dragOver(targetRow, { dataTransfer: dt });
+    fireEvent.drop(targetRow, { dataTransfer: dt });
+    fireEvent.dragEnd(sourceRow, { dataTransfer: dt });
+
+    await waitFor(() => expect(onRenamePath).toHaveBeenCalledWith('a.md', 'docs/a.md'));
+  });
+
+  it('dragover on a folder row calls preventDefault so the drop event can fire', () => {
+    // This is the gate that makes drops actually happen in real browsers.
+    // If preventDefault is not called on dragover, the browser shows a
+    // "no-drop" cursor and never delivers the drop event.
+    const { onRenamePath } = renderRichLayout();
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(introRow, { dataTransfer: dt });
+
+    const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOverEvent, 'dataTransfer', { value: dt });
+    docsRow.dispatchEvent(dragOverEvent);
+    expect(dragOverEvent.defaultPrevented).toBe(true);
+
+    expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  it('dragover on the source row does NOT preventDefault (cannot drop on self)', () => {
+    const { onRenamePath } = renderRichLayout();
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(docsRow, { dataTransfer: dt });
+
+    const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOverEvent, 'dataTransfer', { value: dt });
+    docsRow.dispatchEvent(dragOverEvent);
+    expect(dragOverEvent.defaultPrevented).toBe(false);
+
+    expect(onRenamePath).not.toHaveBeenCalled();
+  });
+
+  it('drop falls back to dataTransfer when ref was cleared (e.g. after re-render)', async () => {
+    const { onRenamePath } = renderRichLayout();
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
+    const dt = new DataTransferStub();
+    dt.setData('text/plain', 'docs/nested/intro.md');
+
+    // No dragStart -> internal ref is null. The drop must still resolve
+    // the source path from the dataTransfer payload.
+    fireEvent.dragOver(docsRow, { dataTransfer: dt });
+    fireEvent.drop(docsRow, { dataTransfer: dt });
+    fireEvent.dragEnd(introRow, { dataTransfer: dt });
+
+    await waitFor(() =>
+      expect(onRenamePath).toHaveBeenCalledWith('docs/nested/intro.md', 'docs/intro.md'),
+    );
+  });
+
+  it('full sequence: drop on the explicit "move to root" zone moves nested file to root', async () => {
+    const { onRenamePath } = renderRichLayout();
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(introRow, { dataTransfer: dt });
+    // Root drop appears only after dragstart triggers a re-render.
+    const rootDrop = await screen.findByLabelText('Move to repository root');
+
+    fireEvent.dragOver(rootDrop, { dataTransfer: dt });
+    fireEvent.drop(rootDrop, { dataTransfer: dt });
+    fireEvent.dragEnd(introRow, { dataTransfer: dt });
+
+    await waitFor(() =>
+      expect(onRenamePath).toHaveBeenCalledWith('docs/nested/intro.md', 'intro.md'),
+    );
+  });
+
+  it('drop on the tree gap (between rows) is a safety net that lands the move at the root', async () => {
+    const { onRenamePath } = renderRichLayout();
+    const introRow = screen.getByRole('treeitem', { name: 'intro.md' });
+    const treeList = screen.getByRole('tree', { name: 'Repository file tree' });
+    const dt = new DataTransferStub();
+
+    fireEvent.dragStart(introRow, { dataTransfer: dt });
+    fireEvent.dragOver(treeList, { dataTransfer: dt });
+    fireEvent.drop(treeList, { dataTransfer: dt });
+    fireEvent.dragEnd(introRow, { dataTransfer: dt });
+
+    await waitFor(() =>
+      expect(onRenamePath).toHaveBeenCalledWith('docs/nested/intro.md', 'intro.md'),
+    );
+  });
+
+  it('surfaces a toast (not a silent no-op) when the dragged path cannot be resolved', () => {
+    const { onRenamePath } = renderRichLayout();
+    const docsRow = screen.getByRole('treeitem', { name: 'docs' });
+
+    fireEvent.drop(docsRow, {
+      dataTransfer: { getData: () => 'does/not/exist.md' },
+    });
+
+    expect(screen.getByText(/could not find/i)).toBeInTheDocument();
     expect(onRenamePath).not.toHaveBeenCalled();
   });
 
