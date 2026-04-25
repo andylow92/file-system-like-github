@@ -2,49 +2,50 @@
 /* Design tokens                                                              */
 /* -------------------------------------------------------------------------- */
 
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&family=Inter+Tight:wght@400;500;600;700&display=swap');
+
 :root {
   color-scheme: dark;
 
-  /* Bespoke deep-ocean palette: indigo undertone + teal highlights              */
-  /* Designed to feel atmospheric and crafted, not template-generic.            */
-  --color-bg: #050b16;
-  --color-bg-raised: #0a1424;
-  --color-surface: #102035;
-  --color-surface-hover: #172b46;
-  --color-surface-strong: #1f3957;
-  --color-border: rgba(120, 165, 220, 0.12);
-  --color-border-strong: rgba(140, 185, 235, 0.26);
+  /* Editorial ink-blue canvas. Warmer than navy, cooler than pure ink, with
+     near-neutral surface variations so color does the talking only when it
+     should. No multi-color "atmosphere" — that's an AI-default tell. */
+  --color-bg: #0b1018;
+  --color-bg-raised: #10151e;
+  --color-surface: #161c27;
+  --color-surface-hover: #1d2431;
+  --color-surface-strong: #242c3b;
+  --color-border: rgba(255, 240, 220, 0.06);
+  --color-border-strong: rgba(255, 240, 220, 0.12);
 
-  --color-text: #e8efff;
-  --color-text-muted: #a4b3d1;
-  --color-text-dim: #6c7d9c;
+  /* Warm paper white instead of cold blue-white. Pairs with the warm accent
+     and prevents the whole UI from feeling like a saturated screenshot. */
+  --color-text: #ece6d9;
+  --color-text-muted: #9d978a;
+  --color-text-dim: #65605a;
 
-  /* Accent: an electric ice-blue with a hint of cyan — distinctive yet calm.   */
-  --color-accent: #6ec1ff;
-  --color-accent-strong: #4ea7f5;
-  --color-accent-soft: rgba(110, 193, 255, 0.14);
-  --color-accent-ring: rgba(110, 193, 255, 0.45);
-  --color-on-accent: #03101e;
+  /* Single signature color: a muted desk-lamp champagne. Used sparingly —
+     never as a gradient — so when it appears it actually means something. */
+  --color-accent: #d4a76a;
+  --color-accent-strong: #b88a4f;
+  --color-accent-soft: rgba(212, 167, 106, 0.10);
+  --color-accent-ring: rgba(212, 167, 106, 0.35);
+  --color-on-accent: #1a1206;
 
-  --color-success: #46d6a8;
-  --color-success-soft: rgba(70, 214, 168, 0.14);
-  --color-danger: #ff7a85;
-  --color-danger-soft: rgba(255, 122, 133, 0.14);
-  --color-on-danger: #2a060a;
+  --color-success: #7cb89a;
+  --color-success-soft: rgba(124, 184, 154, 0.10);
+  --color-danger: #d97a72;
+  --color-danger-soft: rgba(217, 122, 114, 0.10);
+  --color-on-danger: #1f0807;
 
-  /* Atmospheric body gradient — subtle teal/indigo radial wash */
-  --bg-atmosphere:
-    radial-gradient(1200px 700px at 12% -8%, rgba(78, 167, 245, 0.10), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(120, 90, 220, 0.08), transparent 55%),
-    radial-gradient(1100px 800px at 50% 110%, rgba(60, 220, 200, 0.05), transparent 60%);
-
-  /* Sidebar accents */
-  --color-folder: #f6c46b;
-  --color-folder-soft: rgba(246, 196, 107, 0.14);
-  --color-folder-ring: rgba(246, 196, 107, 0.36);
-  --color-file: #9ab0e8;
-  --color-file-soft: rgba(154, 176, 232, 0.12);
-  --row-height: 32px;
+  /* Folder/file accents desaturated so the tree reads as one calm column,
+     not a cluttered mosaic. */
+  --color-folder: #c8a575;
+  --color-folder-soft: rgba(200, 165, 117, 0.10);
+  --color-folder-ring: rgba(200, 165, 117, 0.28);
+  --color-file: #8d96a8;
+  --color-file-soft: rgba(141, 150, 168, 0.08);
+  --row-height: 30px;
 
   /* Spacing scale (4pt grid) */
   --space-1: 0.25rem;
@@ -58,20 +59,24 @@
   --space-fluid-4: clamp(0.85rem, 0.65rem + 0.5vw, 1.15rem);
   --space-fluid-5: clamp(1rem, 0.7rem + 1.1vw, 1.75rem);
 
-  /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Tighter, consistent radii. Native-feeling, not template-bubble. */
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 20px 48px -20px rgba(0, 0, 0, 0.7);
+  /* Single-stop shadows. No glow stacks. */
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px -10px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
 
-  /* Typography - deliberately avoids Inter/Arial defaults */
+  /* Real typefaces. Inter Tight for UI (more compressed and confident than
+     plain Inter); Fraunces italic only on the wordmark and section labels
+     for editorial flavor. */
   --font-sans:
-    ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system, BlinkMacSystemFont,
-    'Helvetica Neue', sans-serif;
+    'Inter Tight', ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system,
+    BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --font-serif:
+    'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono:
     ui-monospace, 'JetBrains Mono', 'Fira Code', SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -97,26 +102,26 @@
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --color-bg: #f4f6fb;
-    --color-bg-raised: #ecf1f8;
+    --color-bg: #f7f5f0;
+    --color-bg-raised: #f1ede4;
     --color-surface: #ffffff;
-    --color-surface-hover: #f3f7fd;
-    --color-surface-strong: #e4ebf5;
-    --color-border: #d2deee;
-    --color-border-strong: #b3c6df;
-    --color-text: #1b283d;
-    --color-text-muted: #445770;
-    --color-text-dim: #6a7a90;
-    --color-accent: #2f6fd8;
-    --color-accent-strong: #265db5;
-    --color-accent-soft: color-mix(in oklab, var(--color-accent) 16%, white);
-    --color-accent-ring: color-mix(in oklab, var(--color-accent) 40%, transparent);
-    --color-danger: #b7404f;
-    --color-danger-soft: color-mix(in oklab, var(--color-danger) 16%, white);
-    --color-success: #2f8870;
-    --color-success-soft: color-mix(in oklab, var(--color-success) 18%, white);
-    --color-on-accent: #f8fbff;
-    --color-on-danger: #fff7f8;
+    --color-surface-hover: #f5f2ea;
+    --color-surface-strong: #ebe5d7;
+    --color-border: rgba(60, 50, 30, 0.10);
+    --color-border-strong: rgba(60, 50, 30, 0.20);
+    --color-text: #1f1a13;
+    --color-text-muted: #5b544b;
+    --color-text-dim: #8a847a;
+    --color-accent: #9c6f2c;
+    --color-accent-strong: #7d5618;
+    --color-accent-soft: color-mix(in oklab, var(--color-accent) 12%, white);
+    --color-accent-ring: color-mix(in oklab, var(--color-accent) 36%, transparent);
+    --color-danger: #a4444a;
+    --color-danger-soft: color-mix(in oklab, var(--color-danger) 12%, white);
+    --color-success: #4a7d5e;
+    --color-success-soft: color-mix(in oklab, var(--color-success) 14%, white);
+    --color-on-accent: #fffaf0;
+    --color-on-danger: #fff7f6;
   }
 }
 
@@ -133,11 +138,10 @@ body,
 body {
   margin: 0;
   color: var(--color-text);
-  background-color: var(--color-bg);
-  background-image: var(--bg-atmosphere);
-  background-attachment: fixed;
+  background: var(--color-bg);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
 }
 
 ::selection {
@@ -186,50 +190,48 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-fluid-3) var(--space-fluid-5);
+  padding: var(--space-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
-  background:
-    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent),
-    color-mix(in oklab, var(--color-bg-raised) 86%, transparent);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.02) inset,
-    var(--shadow-sm);
+  background: var(--color-bg);
   position: sticky;
   top: 0;
   z-index: 20;
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
 .brand {
   display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: baseline;
+  gap: 0.45rem;
   color: var(--color-text);
 }
 
+/* The brand "mark" is now a typographic flourish: an italic serif "M"
+   that anchors the wordmark with character. No gradient square. */
 .brand-mark {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.55), transparent 55%),
-    linear-gradient(140deg, #8ed4ff 0%, #5ea3f0 45%, #6e6cf0 100%);
-  color: #03101e;
-  font-size: 0.75rem;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 1px 0 rgba(0, 0, 0, 0.4),
-    0 6px 18px -8px rgba(110, 108, 240, 0.55);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--color-accent);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.4rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-right: 0.05rem;
+  transform: translateY(0.05em);
 }
 
 .brand-name {
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
-  font-size: clamp(0.85rem, 0.75rem + 0.35vw, 1rem);
+  font-size: 0.95rem;
+  color: var(--color-text);
 }
 
 .topbar-left-group {
@@ -285,14 +287,17 @@ body {
   color: var(--color-text-dim);
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.45rem;
+  font-style: italic;
+  font-family: var(--font-serif);
+  letter-spacing: 0;
 }
 
 .topbar-status::before {
   content: '';
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: var(--color-text-dim);
 }
@@ -303,7 +308,6 @@ body {
 
 .topbar-status.is-dirty::before {
   background: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
 .topbar-save {
@@ -336,9 +340,7 @@ body {
 .left-panel {
   border-right: 1px solid var(--color-border);
   padding: var(--space-4) var(--space-3);
-  background:
-    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent 240px),
-    var(--color-bg-raised);
+  background: var(--color-bg-raised);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -358,11 +360,13 @@ body {
 }
 
 .left-panel h2 {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text);
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -714,11 +718,8 @@ select:focus-visible {
 
 .tree-item.selected,
 .tree-item.active {
-  background:
-    linear-gradient(90deg, rgba(110, 193, 255, 0.16), rgba(110, 193, 255, 0.04));
-  box-shadow:
-    inset 2px 0 0 var(--color-accent),
-    0 0 0 1px rgba(110, 193, 255, 0.10);
+  background: var(--color-surface-hover);
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
 .tree-item.selected .tree-label,
@@ -820,7 +821,7 @@ select:focus-visible {
 .tab.active {
   color: var(--color-text);
   border-bottom-color: var(--color-accent);
-  background: linear-gradient(180deg, rgba(142, 166, 255, 0.12), rgba(142, 166, 255, 0));
+  background: transparent;
 }
 
 .tab-content {
@@ -884,21 +885,32 @@ select:focus-visible {
 }
 
 .github-markdown h1,
-.github-markdown h2 {
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-2);
+.github-markdown h2,
+.github-markdown h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
   margin-top: var(--space-6);
-  margin-bottom: var(--space-4);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  margin-bottom: var(--space-3);
+  color: var(--color-text);
 }
 
 .github-markdown h1 {
-  font-size: clamp(1.45rem, 1.2rem + 1.1vw, 1.85rem);
+  font-size: clamp(1.7rem, 1.35rem + 1.4vw, 2.2rem);
+  line-height: 1.15;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-3);
 }
 
 .github-markdown h2 {
-  font-size: clamp(1.2rem, 1.05rem + 0.8vw, 1.45rem);
+  font-size: clamp(1.3rem, 1.1rem + 0.9vw, 1.6rem);
+  line-height: 1.2;
+}
+
+.github-markdown h3 {
+  font-size: 1.1rem;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .github-markdown p {
@@ -1018,30 +1030,27 @@ select:focus-visible {
 }
 
 .save-button {
-  background: linear-gradient(180deg, #99adff 0%, #7e98ff 100%);
-  border: none;
-  color: #0c0f18;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent-strong);
+  color: var(--color-on-accent);
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 0.8125rem;
+  letter-spacing: 0.005em;
   transition:
-    background-color var(--motion-feedback-fast) var(--ease-standard),
-    transform var(--motion-feedback-fast) var(--ease-standard);
+    background-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
-  background: linear-gradient(180deg, #a7b8ff 0%, #8ba2ff 100%);
-}
-
-.save-button:active:not(:disabled) {
-  transform: translateY(1px);
+  background: var(--color-accent-strong);
 }
 
 .save-button:disabled {
-  background: var(--color-surface-strong);
+  background: transparent;
+  border-color: var(--color-border);
   color: var(--color-text-dim);
   cursor: not-allowed;
 }
@@ -1183,7 +1192,6 @@ textarea[aria-label='Markdown editor'] {
   min-width: 240px;
   font-size: 0.8125rem;
   box-shadow: var(--shadow-md);
-  backdrop-filter: blur(8px);
 }
 
 .toast-icon {
@@ -1279,15 +1287,13 @@ textarea[aria-label='Markdown editor'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
+  height: 30px;
   min-width: 0;
   width: 100%;
   border: 1px solid var(--color-border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.06)),
-    var(--color-surface);
+  background: transparent;
   color: var(--color-text-muted);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: 0;
   font-size: var(--type-label);
   font-weight: 500;
@@ -1296,44 +1302,30 @@ textarea[aria-label='Markdown editor'] {
   transition:
     background-color var(--motion-feedback-fast) var(--ease-standard),
     color var(--motion-feedback-fast) var(--ease-standard),
-    border-color var(--motion-feedback-fast) var(--ease-standard),
-    transform var(--motion-feedback-fast) var(--ease-standard),
-    box-shadow var(--motion-feedback-fast) var(--ease-standard);
+    border-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .action-btn:hover:not(:disabled),
 .action-btn:focus-visible {
-  color: var(--color-accent);
-  border-color: var(--color-accent-ring);
-  background:
-    linear-gradient(180deg, rgba(110, 193, 255, 0.08), rgba(110, 193, 255, 0.02)),
-    var(--color-surface);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 0 0 1px rgba(110, 193, 255, 0.18);
-}
-
-.action-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
 }
 
 .action-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .action-btn-danger {
-  color: var(--color-danger);
+  color: var(--color-text-muted);
 }
 
 .action-btn-danger:hover:not(:disabled),
 .action-btn-danger:focus-visible {
   color: var(--color-danger);
-  background:
-    linear-gradient(180deg, rgba(255, 122, 133, 0.10), rgba(255, 122, 133, 0.02)),
-    var(--color-surface);
-  border-color: color-mix(in oklab, var(--color-danger) 50%, var(--color-border));
-  box-shadow: 0 0 0 1px rgba(255, 122, 133, 0.18);
+  background: var(--color-danger-soft);
+  border-color: color-mix(in oklab, var(--color-danger) 28%, var(--color-border));
 }
 
 .sidebar-collapse-btn {
@@ -1562,16 +1554,7 @@ body {
   background-image: none;
 }
 
-.topbar {
-  background:
-    linear-gradient(180deg, rgba(110, 193, 255, 0.04), transparent),
-    color-mix(in oklab, var(--color-bg-raised) 82%, transparent);
-}
-
-.left-panel h2 {
-  font-size: var(--type-label);
-  letter-spacing: 0.06em;
-}
+/* Topbar + section-heading overrides consolidated into the primary rules. */
 
 .icon-btn svg,
 .toolbar-btn svg,
@@ -1646,27 +1629,18 @@ body {
 }
 
 .save-button {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 55%),
-    linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
+  background: var(--color-accent);
   color: var(--color-on-accent);
-  border: 1px solid transparent;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 6px 16px -10px rgba(110, 193, 255, 0.6);
+  border: 1px solid var(--color-accent-strong);
+  box-shadow: var(--shadow-sm);
   transition:
-    filter var(--motion-feedback-fast) var(--ease-standard),
-    transform var(--motion-feedback-fast) var(--ease-standard),
-    box-shadow var(--motion-feedback-fast) var(--ease-standard);
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.36),
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 8px 22px -10px rgba(110, 193, 255, 0.75);
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
 }
 
 .danger-btn {
@@ -1739,9 +1713,12 @@ body {
 }
 
 .editor-title {
-  font-family: var(--font-sans);
-  font-size: var(--type-section);
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.25rem;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: var(--color-text);
 }
 
 .editor-footer {

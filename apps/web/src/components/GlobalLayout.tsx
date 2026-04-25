@@ -46,18 +46,6 @@ function IconMenu() {
   );
 }
 
-function IconSpark() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M8 1.5c.4 2.6 1.4 3.6 4 4.1-2.6.5-3.6 1.5-4 4.1-.4-2.6-1.4-3.6-4-4.1 2.6-.5 3.6-1.5 4-4.1z"
-        fill="currentColor"
-      />
-      <circle cx="12.5" cy="11.5" r="1.2" fill="currentColor" opacity="0.7" />
-    </svg>
-  );
-}
-
 function IconNewFile() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -740,9 +728,7 @@ export function GlobalLayout({
             <IconMenu />
           </button>
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              <IconSpark />
-            </span>
+            <span className="brand-mark" aria-hidden="true">M</span>
             <span className="brand-name">Markdown Workspace</span>
           </div>
         </div>
