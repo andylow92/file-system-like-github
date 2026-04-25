@@ -8,6 +8,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import type { FileNode } from '@repo/shared';
+import { ModalDialog } from './ModalDialog';
 
 const ROOT_DROP_KEY = '__root__';
 
@@ -109,7 +110,10 @@ export function GlobalLayout({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() =>
     readLocalStorageSet('collapsedFolders'),
   );
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const draggedPathRef = useRef<string | null>(null);
+  const mobileSidebarTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const flatTree = useMemo(() => flattenTree(tree), [tree]);
 
@@ -134,7 +138,6 @@ export function GlobalLayout({
     return flatTree.filter(({ node }) => visiblePaths.has(node.path));
   }, [flatTree, filterQuery]);
 
-  // Further filter by collapsed folders: hide all nodes whose direct ancestor is collapsed
   const folderVisibleFlatTree = useMemo(() => {
     if (collapsedFolders.size === 0) return visibleFlatTree;
     return visibleFlatTree.filter(({ node }) => {
@@ -153,6 +156,10 @@ export function GlobalLayout({
     }
     return selectedFilePath.split('/').filter(Boolean);
   }, [selectedFilePath]);
+
+  const pendingDeleteNode = pendingDeletePath
+    ? flatTree.find((entry) => entry.node.path === pendingDeletePath)?.node
+    : null;
 
   function findNode(nodePath: string): FileNode | undefined {
     return flatTree.find((entry) => entry.node.path === nodePath)?.node;
@@ -351,6 +358,15 @@ export function GlobalLayout({
     });
   }
 
+  function openMobileSidebar() {
+    setIsMobileSidebarOpen(true);
+  }
+
+  function closeMobileSidebar() {
+    setIsMobileSidebarOpen(false);
+    mobileSidebarTriggerRef.current?.focus();
+  }
+
   useEffect(() => {
     if (selectedFilePath) {
       setSelectedPath(selectedFilePath);
@@ -383,6 +399,22 @@ export function GlobalLayout({
     return () => window.clearTimeout(timer);
   }, [toasts]);
 
+  useEffect(() => {
+    if (!isMobileSidebarOpen) {
+      return;
+    }
+
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobileSidebar();
+      }
+    };
+
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [isMobileSidebarOpen]);
+
   function showToast(type: ToastType, message: string) {
     setToasts((prev) => [...prev, { id: Date.now() + prev.length, type, message }]);
   }
@@ -394,6 +426,7 @@ export function GlobalLayout({
       toggleFolder(path);
     } else if (target) {
       await onSelectFile(path);
+      setIsMobileSidebarOpen(false);
     }
   }
 
@@ -460,6 +493,7 @@ export function GlobalLayout({
 
         if (mode === 'newFile') {
           await onSelectFile(newPath);
+          setIsMobileSidebarOpen(false);
         }
 
         showToast('success', `${mode === 'newFolder' ? 'Folder' : 'File'} created.`);
@@ -472,7 +506,7 @@ export function GlobalLayout({
     }
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!selectedPath) {
       showToast('error', 'Select a file or folder before deleting.');
       return;
@@ -483,14 +517,24 @@ export function GlobalLayout({
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${selectedNode.name}? This action cannot be undone.`);
-    if (!confirmed) {
+    setPendingDeletePath(selectedNode.path);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeletePath) {
+      return;
+    }
+
+    const selectedNode = flatTree.find((entry) => entry.node.path === pendingDeletePath)?.node;
+    if (!selectedNode) {
+      setPendingDeletePath(null);
       return;
     }
 
     try {
-      await onDeletePath(selectedPath, selectedNode.isDirectory);
+      await onDeletePath(pendingDeletePath, selectedNode.isDirectory);
       showToast('success', `${selectedNode.name} deleted.`);
+      setPendingDeletePath(null);
     } catch (error: unknown) {
       showToast('error', error instanceof Error ? error.message : 'Delete failed.');
     }
@@ -562,11 +606,24 @@ export function GlobalLayout({
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            ◆
-          </span>
-          <span className="brand-name">Markdown Workspace</span>
+        <div className="topbar-left-group">
+          <button
+            ref={mobileSidebarTriggerRef}
+            type="button"
+            className="icon-btn mobile-sidebar-trigger"
+            onClick={openMobileSidebar}
+            aria-label="Open sidebar"
+            aria-expanded={isMobileSidebarOpen}
+            aria-controls="app-sidebar"
+          >
+            ☰
+          </button>
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              ◆
+            </span>
+            <span className="brand-name">Markdown Workspace</span>
+          </div>
         </div>
         <nav className="breadcrumbs" aria-label="Current file">
           {breadcrumbs.length === 0 ? (
@@ -607,7 +664,15 @@ export function GlobalLayout({
       </header>
 
       <div className={sidebarCollapsed ? 'layout layout--sidebar-collapsed' : 'layout'}>
-        <aside className={sidebarCollapsed ? 'left-panel left-panel--collapsed' : 'left-panel'}>
+        <aside
+          id="app-sidebar"
+          className={[
+            sidebarCollapsed ? 'left-panel left-panel--collapsed' : 'left-panel',
+            isMobileSidebarOpen ? 'left-panel--mobile-open' : '',
+          ]
+            .join(' ')
+            .trim()}
+        >
           <div className="sidebar-head">
             {!sidebarCollapsed && <h2>Files</h2>}
             <div className="sidebar-head-right">
@@ -644,7 +709,7 @@ export function GlobalLayout({
                   <button
                     type="button"
                     className="icon-btn icon-btn-danger"
-                    onClick={() => void handleDelete()}
+                    onClick={handleDelete}
                     disabled={!hasSelection}
                     title="Delete"
                     aria-label="Delete"
@@ -782,8 +847,7 @@ export function GlobalLayout({
                           classes.push('drop-target');
                         }
 
-                        const isExpanded =
-                          node.isDirectory && !collapsedFolders.has(node.path);
+                        const isExpanded = node.isDirectory && !collapsedFolders.has(node.path);
 
                         const icon = node.isDirectory ? (
                           <span className="tree-icon tree-icon-folder" aria-hidden="true">
@@ -805,15 +869,10 @@ export function GlobalLayout({
                               role="treeitem"
                               aria-level={depth}
                               aria-selected={selectedPath === node.path}
-                              aria-expanded={
-                                node.isDirectory ? isExpanded : undefined
-                              }
+                              aria-expanded={node.isDirectory ? isExpanded : undefined}
                               tabIndex={selectedPath === node.path ? 0 : -1}
                               className="tree-item-row"
                               style={{ paddingLeft: `${depth * 14 + 6}px` }}
-                              draggable
-                              onDragStart={(event) => handleItemDragStart(event, node.path)}
-                              onDragEnd={handleItemDragEnd}
                               onDragOver={(event) => handleItemDragOver(event, node)}
                               onDragLeave={(event) => handleItemDragLeave(event, node)}
                               onDrop={(event) => handleItemDrop(event, node)}
@@ -827,6 +886,19 @@ export function GlobalLayout({
                               data-path={node.path}
                               data-kind={node.isDirectory ? 'directory' : 'file'}
                             >
+                              <button
+                                type="button"
+                                className="tree-drag-handle"
+                                draggable
+                                onDragStart={(event) => handleItemDragStart(event, node.path)}
+                                onDragEnd={handleItemDragEnd}
+                                onClick={(event) => event.stopPropagation()}
+                                aria-hidden="true"
+                                tabIndex={-1}
+                                title={`Drag ${node.name}`}
+                              >
+                                ⋮⋮
+                              </button>
                               {node.isDirectory && (
                                 <span className="tree-chevron" aria-hidden="true">
                                   {isExpanded ? '▾' : '▸'}
@@ -845,6 +917,14 @@ export function GlobalLayout({
             </>
           )}
         </aside>
+        {isMobileSidebarOpen ? (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="Close sidebar"
+            onClick={closeMobileSidebar}
+          />
+        ) : null}
         <main className="right-panel">{children}</main>
       </div>
 
@@ -867,6 +947,17 @@ export function GlobalLayout({
           </div>
         ))}
       </div>
+
+      <ModalDialog
+        open={Boolean(pendingDeleteNode)}
+        title="Delete item"
+        description={pendingDeleteNode ? `Delete ${pendingDeleteNode.name}? This action cannot be undone.` : ''}
+        variant="destructive"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => void confirmDelete()}
+        onClose={() => setPendingDeletePath(null)}
+      />
     </div>
   );
 }
