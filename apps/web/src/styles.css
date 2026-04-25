@@ -447,7 +447,25 @@ body {
   padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2rem) clamp(1.1rem, 3vw, 2.2rem);
   max-width: 100%;
   overflow-x: hidden;
-  background: var(--color-bg);
+  background: transparent;
+}
+
+.viewer-region {
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+.split-view {
+  width: 100%;
+}
+
+.editor-pane {
+  margin-inline: auto;
+}
+
+.github-markdown {
+  margin-inline: auto;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -614,7 +632,7 @@ select:focus-visible {
 .tree-item-row {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
   width: 100%;
   min-height: var(--row-height);
   border: 0;
@@ -626,10 +644,14 @@ select:focus-visible {
   font-size: 0.8125rem;
   text-decoration: none;
   border-radius: inherit;
-  cursor: default;
+  cursor: pointer;
   transition: color var(--motion-state-medium) var(--ease-standard);
   user-select: none;
   -webkit-user-select: none;
+}
+
+.tree-item-row:active {
+  cursor: grabbing;
 }
 
 .tree-item-row:focus-visible {
@@ -1343,32 +1365,19 @@ textarea[aria-label='Markdown editor'] {
 }
 
 .tree-drag-handle {
-  border: 0;
-  background: transparent;
   color: var(--color-text-dim);
-  font: inherit;
   font-size: 0.72rem;
   line-height: 1;
-  width: 18px;
-  min-width: 18px;
+  width: 14px;
+  min-width: 14px;
   height: 18px;
-  min-height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: grab;
   border-radius: var(--radius-sm);
-  opacity: 0.75;
-}
-
-.tree-drag-handle:active {
-  cursor: grabbing;
-}
-
-.tree-drag-handle:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-muted);
-  opacity: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-feedback-fast) var(--ease-standard);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1767,16 +1776,10 @@ body {
   box-shadow: var(--shadow-lg);
 }
 
-.tree-drag-handle {
-  opacity: 0;
-  transition:
-    opacity var(--motion-feedback-fast) var(--ease-standard),
-    color var(--motion-feedback-fast) var(--ease-standard);
-}
-
 .tree-item:hover .tree-drag-handle,
-.tree-item:focus-within .tree-drag-handle {
-  opacity: 0.72;
+.tree-item:focus-within .tree-drag-handle,
+.tree-item.selected .tree-drag-handle {
+  opacity: 0.7;
 }
 
 .tree-chevron {
