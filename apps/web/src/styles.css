@@ -1594,6 +1594,7 @@ body {
   border-color: color-mix(in oklab, var(--color-danger) 42%, var(--color-border));
 }
 
+/* Keep sidebar action labels readable and prevent overflow in narrow sidebars. */
 .action-btn span {
   white-space: nowrap;
 }
