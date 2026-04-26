@@ -200,38 +200,13 @@ body {
 
 .brand {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  color: var(--color-text);
+  align-items: center;
 }
 
-/* The brand "mark" is now a typographic flourish: an italic serif "M"
-   that anchors the wordmark with character. No gradient square. */
-.brand-mark {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
+.brand-logo {
+  height: 32px;
   width: auto;
-  height: auto;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--color-accent);
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 1.4rem;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  margin-right: 0.05rem;
-  transform: translateY(0.05em);
-}
-
-.brand-name {
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  font-size: 0.95rem;
-  color: var(--color-text);
+  display: block;
 }
 
 .topbar-left-group {
@@ -1641,14 +1616,9 @@ body {
   height: 16px;
 }
 
-.brand-mark svg {
-  width: 14px;
-  height: 14px;
-}
-
-.brand-name {
-  font-size: var(--type-section);
-  font-weight: 600;
+.brand-logo {
+  height: 28px;
+  width: auto;
 }
 
 .breadcrumbs,

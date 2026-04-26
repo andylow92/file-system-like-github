@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
+  <!-- Document icon -->
+  <g transform="translate(4, 4)">
+    <!-- Page body -->
+    <path d="M4 0 H52 L68 16 V76 Q68 80 64 80 H4 Q0 80 0 76 V4 Q0 0 4 0Z" fill="white" stroke="#1a2333" stroke-width="3"/>
+    <!-- Folded corner -->
+    <path d="M52 0 L52 16 L68 16" fill="#e8eaed" stroke="#1a2333" stroke-width="3" stroke-linejoin="round"/>
+    <!-- # symbol -->
+    <text x="12" y="30" font-family="monospace" font-size="16" font-weight="700" fill="#47b84b">#</text>
+    <!-- Bullet lines -->
+    <circle cx="15" cy="43" r="2.5" fill="#1a2333"/>
+    <rect x="21" y="41" width="30" height="3" rx="1.5" fill="#1a2333"/>
+    <circle cx="15" cy="53" r="2.5" fill="#1a2333"/>
+    <rect x="21" y="51" width="24" height="3" rx="1.5" fill="#1a2333"/>
+    <circle cx="15" cy="63" r="2.5" fill="#1a2333"/>
+    <rect x="21" y="61" width="27" height="3" rx="1.5" fill="#1a2333"/>
+    <!-- </> tag -->
+    <text x="10" y="78" font-family="monospace" font-size="13" font-weight="700" fill="#47b84b">&lt;/&gt;</text>
+  </g>
+  <!-- NoteMD text -->
+  <text x="88" y="50" font-family="'Inter Tight', 'Inter', system-ui, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#1a2333">Note</text>
+  <text x="183" y="50" font-family="'Inter Tight', 'Inter', system-ui, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#47b84b">MD</text>
+</svg>

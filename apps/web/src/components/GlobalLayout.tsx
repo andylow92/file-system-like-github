@@ -728,8 +728,7 @@ export function GlobalLayout({
             <IconMenu />
           </button>
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">M</span>
-            <span className="brand-name">Markdown Workspace</span>
+            <img src="/logo.svg" alt="NoteMD" className="brand-logo" />
           </div>
         </div>
         <nav className="breadcrumbs" aria-label="Current file">
