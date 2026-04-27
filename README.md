@@ -1,152 +1,212 @@
-# Monorepo: Web + API + Shared
+# File-System-Like GitHub for Markdown
 
-This repository is a TypeScript monorepo for a markdown-file workspace with a React frontend and Node backend.
+> A fast, local-first markdown workspace that feels like **GitHub’s file tree** and **Notion-style editing**—built for docs, notes, wikis, and knowledge bases.
 
-## Quick Start
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](#)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=000)](#)
+[![Node.js](https://img.shields.io/badge/Node.js-22.x-339933?logo=node.js&logoColor=white)](#)
+[![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite&logoColor=white)](#)
 
-1. **Prerequisites**
-   - Node.js 22.x and npm 10.x (the repo does not pin `engines`, so use these recommended versions).
-2. **Install dependencies**
-   - `npm install`
-3. **Start development servers (two terminals)**
-   - Terminal 1: `npm run dev:api`
-   - Terminal 2: `npm run dev:web`
-4. **Verify both services are up**
-   - API health endpoint: `http://localhost:3001/health`
-   - Web dev URL: `http://localhost:5173`
-5. **Expected result**
-   - The health URL returns a success JSON response, and the web URL loads the markdown workspace UI.
+If you’ve ever wanted your markdown content to be:
 
-## Architecture
+- **easy to navigate** like a repo,
+- **easy to edit** like a modern docs tool,
+- and **stored as real files** (not locked in a database),
 
-### Textual architecture diagram
+this project is for you.
+
+---
+
+## Why this project exists
+
+Most note/documentation tools force a tradeoff:
+
+- Great UX, but proprietary storage.
+- Great storage (plain files), but clunky UX.
+
+This repo bridges both worlds:
+
+- ✅ Familiar tree-based navigation
+- ✅ Markdown-first editing and preview
+- ✅ Safe filesystem-backed API
+- ✅ Monorepo structure for easy extension
+
+---
+
+## What you can do with it
+
+- Browse markdown content in a GitHub-like file tree
+- Open files and switch between **Preview** and **Edit** tabs
+- Create files and folders
+- Rename or move files/folders
+- Delete files/folders
+- Save with optimistic concurrency metadata (`etag` / `lastModified`)
+- Keep your content under a configurable `CONTENT_ROOT`
+
+---
+
+## Built for real-world use cases
+
+- Personal knowledge management (PKM)
+- Team docs portals
+- Internal runbooks/playbooks
+- Product/project documentation
+- Lightweight markdown CMS foundations
+
+---
+
+## Architecture at a glance
 
 ```txt
-+-------------------------+        HTTP/JSON        +-------------------------+
-| apps/web (React + Vite) | <---------------------> | apps/api (Node HTTP)    |
-| - file tree UI           |                         | - path validation        |
-| - preview/edit tabs      |                         | - markdown file CRUD     |
-| - save interactions      |                         | - tree generation        |
-+-------------------------+                         +-------------------------+
-              ^                                                 |
-              | imports shared contracts                        | reads/writes
-              |                                                 v
-        +------------------------------+              +-------------------------+
-        | packages/shared              |              | CONTENT_ROOT directory  |
-        | - FileNode/FileContent types |              | host filesystem storage |
-        | - API response envelopes     |              +-------------------------+
-        +------------------------------+
+apps/web (React + Vite)
+   ├─ File tree + editor/preview UI
+   └─ Calls API over HTTP/JSON
+
+apps/api (Node HTTP server)
+   ├─ Validates and resolves logical paths
+   ├─ Performs markdown-focused file CRUD
+   └─ Enforces safe access inside CONTENT_ROOT
+
+packages/shared
+   └─ Shared TypeScript contracts and response shapes
 ```
 
-## Repository layout
+Repository structure:
 
 ```txt
 apps/
-  api/      # Backend server + filesystem storage layer
-  web/      # Frontend UI and component tests
+  api/      # Backend server + filesystem storage
+  web/      # Frontend UI
 packages/
-  shared/   # Shared TypeScript contracts
+  shared/   # Shared types/contracts
 docs/
   integration-test-plan.md
 ```
 
-## Environment variables
+---
 
-Backend (`apps/api`) supports:
+## Quick start (under 5 minutes)
 
-- `CONTENT_ROOT`: base directory where markdown files/directories are read and written.
-  - Recommended in local/dev/production so data location is explicit.
-  - If unset, backend defaults to `<repo>/content`.
-- `PORT`: API server port.
-  - Defaults to `3001`.
+### 1) Prerequisites
 
-## Local run commands
+- Node.js **22.x**
+- npm **10.x**
 
-1. Install dependencies:
+### 2) Install
 
 ```bash
 npm install
 ```
 
-2. Start backend:
+### 3) Run API + Web (two terminals)
+
+Terminal A:
 
 ```bash
 npm run dev:api
 ```
 
-3. Start frontend in a separate terminal:
+Terminal B:
 
 ```bash
 npm run dev:web
 ```
 
-4. Confirm API health responds **before** testing UI actions:
+### 4) Open the app
+
+- Web UI: `http://localhost:5173`
+- API health: `http://localhost:3001/health`
+
+---
+
+## Environment variables
+
+For `apps/api`:
+
+- `CONTENT_ROOT`
+  - Base directory for markdown files/directories.
+  - If unset, defaults to `<repo>/content`.
+- `PORT`
+  - API server port (default: `3001`).
+
+Example:
 
 ```bash
-curl -sf http://localhost:3001/health
+CONTENT_ROOT=/absolute/path/to/content PORT=3001 npm run dev:api
 ```
 
-5. Run tests:
+---
+
+## API snapshot
+
+- `GET /health`
+- `GET /api/tree?path=...`
+- `GET /api/file?path=...`
+- `POST /api/file`
+- `PUT /api/file`
+- `POST /api/dir`
+- `PATCH /api/path`
+- `DELETE /api/path?path=...&recursive=true|false`
+
+For endpoint details and request/response examples, see [`apps/api/README.md`](apps/api/README.md).
+
+---
+
+## Local quality checks
 
 ```bash
 npm test
-```
-
-6. Lint + format checks:
-
-```bash
 npm run lint
 npm run format
 ```
 
-## Security notes (filesystem access)
+---
 
-- Filesystem access is intentionally isolated to `apps/api` storage modules.
-- Path resolution normalizes logical paths and rejects traversal or absolute path usage.
-- Markdown-specific operations enforce `.md` extension checks.
-- Backend operations should always resolve and verify paths remain inside `CONTENT_ROOT`.
-- Avoid exposing raw absolute host paths to client responses.
+## Security model (important)
 
-## Deployment notes (persistent storage)
+- API path handling rejects traversal and absolute paths.
+- File operations are markdown-focused (`.md`).
+- Storage resolution ensures requests remain within `CONTENT_ROOT`.
 
-To keep markdown files/directories across restarts, mount a persistent host volume and pass it as `CONTENT_ROOT`.
+This helps protect the host filesystem while still enabling file-based workflows.
 
-### Docker example
+---
 
-```bash
-docker run \
-  -p 3001:3001 \
-  -e CONTENT_ROOT=/data/content \
-  -v /srv/markdown-content:/data/content \
-  your-api-image
-```
+## Deployment note
 
-### docker-compose example
+For persistent content in production, mount a host volume and point `CONTENT_ROOT` to it.
 
-```yaml
-services:
-  api:
-    image: your-api-image
-    ports:
-      - '3001:3001'
-    environment:
-      CONTENT_ROOT: /data/content
-    volumes:
-      - /srv/markdown-content:/data/content
-```
+See the full deployment examples in this README’s history and backend docs.
 
-Use the manual integration checklist in `docs/integration-test-plan.md` during release validation.
+---
 
-## Documentation
+## Roadmap ideas
 
-- [`apps/api/README.md`](apps/api/README.md) — Start here for backend endpoint coverage and detailed request/response behavior.
-- [`docs/integration-test-plan.md`](docs/integration-test-plan.md) — Open this next for manual release validation and end-to-end verification steps.
-- `apps/web/` frontend docs — No frontend-specific Markdown docs are currently present under `apps/web/`; this README and in-code component tests are the current references.
+- Search across markdown files
+- Git sync workflows
+- Multi-user auth + permissions
+- Real-time collaborative editing
+- Pluggable storage adapters
 
-## Troubleshooting
+---
 
-- **Symptom:** `curl -sf http://localhost:3001/health` fails or exits non-zero. **Likely cause:** the API process is not running, crashed on startup, or is bound to a different `PORT`. **Corrective action:** restart the backend (`npm run dev:api`) and verify startup logs show it listening on `http://localhost:3001` (or update the curl URL to the configured port).
-- **Symptom:** the frontend loads, but file/tree requests fail in the browser or show network/CORS-style errors. **Likely cause:** the web app is calling the wrong API base URL (commonly a port mismatch such as `3000` vs `3001`, or an incorrect env/base-URL setting). **Corrective action:** check the frontend API base URL/env configuration and point it to the running backend origin (default `http://localhost:3001`), then restart the web dev server.
-- **Symptom:** tree responses are empty or file reads return "not found" even though content exists on disk. **Likely cause:** `CONTENT_ROOT` points to the wrong directory (or an unexpected default path is being used). **Corrective action:** set `CONTENT_ROOT` explicitly to the intended content directory and restart the API.
-- **Symptom:** API requests fail with permission-denied errors when listing, reading, or saving files. **Likely cause:** the mounted/host content directory does not grant read/write access to the API process user. **Corrective action:** fix directory ownership/permissions on the mounted path (and container bind mount, if used) so the API process can read and write under `CONTENT_ROOT`.
-- **Symptom:** creating/saving some files is rejected while directory operations still work. **Likely cause:** file endpoints enforce markdown-only behavior and reject non-`.md` file paths. **Corrective action:** use `.md` filenames for file CRUD requests (or rename existing targets to `.md`) to match API validation rules.
+## Contributing
+
+PRs are welcome. If you want to contribute:
+
+1. Open an issue with the use case/problem statement.
+2. Submit a focused PR with tests.
+3. Keep markdown/file safety guarantees intact.
+
+---
+
+## Extra docs
+
+- Backend API details: [`apps/api/README.md`](apps/api/README.md)
+- Manual integration validation: [`docs/integration-test-plan.md`](docs/integration-test-plan.md)
+
+---
+
+## SEO-friendly keywords (for discoverability)
+
+markdown workspace, github-like file tree, notion-style markdown editor, filesystem CMS, markdown knowledge base, react markdown editor, node filesystem api
