@@ -9,43 +9,53 @@
 
   /* Editorial ink-blue canvas. Warmer than navy, cooler than pure ink, with
      near-neutral surface variations so color does the talking only when it
-     should. No multi-color "atmosphere" — that's an AI-default tell. */
+     should. */
   --color-bg: #0b1018;
   --color-bg-raised: #10151e;
   --color-surface: #161c27;
   --color-surface-hover: #1d2431;
   --color-surface-strong: #242c3b;
-  --color-border: rgba(255, 240, 220, 0.06);
-  --color-border-strong: rgba(255, 240, 220, 0.12);
+  --color-border: rgba(255, 240, 220, 0.07);
+  --color-border-strong: rgba(255, 240, 220, 0.14);
 
-  /* Warm paper white instead of cold blue-white. Pairs with the warm accent
-     and prevents the whole UI from feeling like a saturated screenshot. */
+  /* Warm paper white instead of cold blue-white. */
   --color-text: #ece6d9;
-  --color-text-muted: #9d978a;
-  --color-text-dim: #65605a;
+  --color-text-muted: #a5a092;
+  --color-text-dim: #6c6760;
 
-  /* Single signature color: a muted desk-lamp champagne. Used sparingly —
-     never as a gradient — so when it appears it actually means something. */
-  --color-accent: #d4a76a;
-  --color-accent-strong: #b88a4f;
-  --color-accent-soft: rgba(212, 167, 106, 0.10);
-  --color-accent-ring: rgba(212, 167, 106, 0.35);
+  /* Signature warm champagne accent. */
+  --color-accent: #e0b478;
+  --color-accent-strong: #c79657;
+  --color-accent-soft: rgba(224, 180, 120, 0.12);
+  --color-accent-ring: rgba(224, 180, 120, 0.42);
   --color-on-accent: #1a1206;
 
   --color-success: #7cb89a;
-  --color-success-soft: rgba(124, 184, 154, 0.10);
-  --color-danger: #d97a72;
-  --color-danger-soft: rgba(217, 122, 114, 0.10);
+  --color-success-soft: rgba(124, 184, 154, 0.12);
+  --color-danger: #e08178;
+  --color-danger-soft: rgba(224, 129, 120, 0.13);
   --color-on-danger: #1f0807;
 
-  /* Folder/file accents desaturated so the tree reads as one calm column,
-     not a cluttered mosaic. */
-  --color-folder: #c8a575;
-  --color-folder-soft: rgba(200, 165, 117, 0.10);
-  --color-folder-ring: rgba(200, 165, 117, 0.28);
-  --color-file: #8d96a8;
-  --color-file-soft: rgba(141, 150, 168, 0.08);
-  --row-height: 30px;
+  /* Tree row icon accents, kept slightly desaturated. */
+  --color-folder: #d6b07a;
+  --color-folder-soft: rgba(214, 176, 122, 0.13);
+  --color-folder-ring: rgba(214, 176, 122, 0.34);
+  --color-file: #93a0bb;
+  --color-file-soft: rgba(147, 160, 187, 0.1);
+
+  /* Drop highlight uses a slightly cooler, more attention-grabbing tone so
+     the eye snaps to it during a drag. */
+  --color-drop: #6fa8d6;
+  --color-drop-soft: rgba(111, 168, 214, 0.16);
+  --color-drop-strong: rgba(111, 168, 214, 0.55);
+
+  /* Brand mark fills (used by the inline NoteMD SVG). */
+  --brand-paper: #ece6d9;
+  --brand-paper-fold: #cfc6b4;
+  --brand-paper-stroke: #1a1f2b;
+  --brand-accent: #e0b478;
+
+  --row-height: 32px;
 
   /* Spacing scale (4pt grid) */
   --space-1: 0.25rem;
@@ -73,10 +83,9 @@
      plain Inter); Fraunces italic only on the wordmark and section labels
      for editorial flavor. */
   --font-sans:
-    'Inter Tight', ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system,
-    BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-  --font-serif:
-    'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+    'Inter Tight', ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', sans-serif;
+  --font-serif: 'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono:
     ui-monospace, 'JetBrains Mono', 'Fira Code', SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -107,8 +116,8 @@
     --color-surface: #ffffff;
     --color-surface-hover: #f5f2ea;
     --color-surface-strong: #ebe5d7;
-    --color-border: rgba(60, 50, 30, 0.10);
-    --color-border-strong: rgba(60, 50, 30, 0.20);
+    --color-border: rgba(60, 50, 30, 0.1);
+    --color-border-strong: rgba(60, 50, 30, 0.2);
     --color-text: #1f1a13;
     --color-text-muted: #5b544b;
     --color-text-dim: #8a847a;
@@ -122,6 +131,13 @@
     --color-success-soft: color-mix(in oklab, var(--color-success) 14%, white);
     --color-on-accent: #fffaf0;
     --color-on-danger: #fff7f6;
+    --color-drop: #2f6da4;
+    --color-drop-soft: color-mix(in oklab, var(--color-drop) 12%, white);
+    --color-drop-strong: color-mix(in oklab, var(--color-drop) 38%, transparent);
+    --brand-paper: #ffffff;
+    --brand-paper-fold: #e8eaed;
+    --brand-paper-stroke: #1a1f2b;
+    --brand-accent: #9c6f2c;
   }
 }
 
@@ -192,7 +208,9 @@ body {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-fluid-5);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: color-mix(in oklab, var(--color-bg) 86%, transparent);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  backdrop-filter: saturate(140%) blur(10px);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -201,10 +219,12 @@ body {
 .brand {
   display: inline-flex;
   align-items: center;
+  color: var(--color-text);
+  letter-spacing: -0.005em;
 }
 
-.brand-logo {
-  height: 32px;
+.brand-svg {
+  height: 30px;
   width: auto;
   display: block;
 }
@@ -220,30 +240,36 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.2rem 0.1rem;
+  gap: 0.2rem 0.15rem;
   min-width: 0;
   color: var(--color-text-muted);
   font-size: 0.8125rem;
+  padding-left: var(--space-2);
 }
 
 .breadcrumb-group {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .breadcrumb {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .breadcrumb.current {
   color: var(--color-text);
   font-weight: 500;
+  background: var(--color-surface-hover);
 }
 
 .breadcrumb-sep {
   color: var(--color-text-dim);
+  opacity: 0.7;
 }
 
 .breadcrumb-empty {
@@ -258,11 +284,11 @@ body {
 }
 
 .topbar-status {
-  font-size: 0.75rem;
+  font-size: var(--type-caption);
   color: var(--color-text-dim);
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   font-style: italic;
   font-family: var(--font-serif);
   letter-spacing: 0;
@@ -271,10 +297,11 @@ body {
 .topbar-status::before {
   content: '';
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  background: var(--color-text-dim);
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px var(--color-success-soft);
 }
 
 .topbar-status.is-dirty {
@@ -283,6 +310,18 @@ body {
 
 .topbar-status.is-dirty::before {
   background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  animation: dirty-pulse 1.6s var(--ease-standard) infinite;
+}
+
+@keyframes dirty-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 5px var(--color-accent-soft);
+  }
 }
 
 .topbar-save {
@@ -294,11 +333,12 @@ body {
 .save-kbd {
   font-family: var(--font-mono);
   font-size: 0.7rem;
-  padding: 0.05rem 0.3rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 4px;
-  background: rgba(12, 15, 24, 0.25);
+  background: rgba(12, 15, 24, 0.3);
   color: inherit;
-  opacity: 0.8;
+  opacity: 0.85;
+  letter-spacing: 0.02em;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -307,14 +347,14 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 288px 1fr;
+  grid-template-columns: 296px 1fr;
   flex: 1;
   background: var(--color-bg);
 }
 
 .left-panel {
   border-right: 1px solid var(--color-border);
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-4) var(--space-3) var(--space-5);
   background: var(--color-bg-raised);
   display: flex;
   flex-direction: column;
@@ -332,13 +372,14 @@ body {
   padding: 0 var(--space-2);
   min-width: 0;
   gap: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .left-panel h2 {
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;
-  font-size: 0.95rem;
+  font-size: 1rem;
   letter-spacing: 0;
   text-transform: none;
   color: var(--color-text);
@@ -351,10 +392,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: 26px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   border: 0;
   background: transparent;
   color: var(--color-text-muted);
@@ -370,6 +411,10 @@ body {
 .icon-btn:hover:not(:disabled) {
   background-color: var(--color-surface-hover);
   color: var(--color-text);
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
 .icon-btn:disabled {
@@ -403,17 +448,25 @@ body {
 
 .filter-input {
   width: 100%;
-  padding: 0.4rem 0.6rem 0.4rem 2rem;
+  padding: 0.45rem 0.65rem 0.45rem 2rem;
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   color: var(--color-text);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font: inherit;
   font-size: 0.8125rem;
+  transition:
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    box-shadow var(--motion-feedback-fast) var(--ease-standard),
+    background-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .filter-input::placeholder {
   color: var(--color-text-dim);
+}
+
+.filter-input:hover {
+  border-color: var(--color-border-strong);
 }
 
 .filter-input:focus-visible {
@@ -423,7 +476,7 @@ body {
 }
 
 .right-panel {
-  padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2rem) clamp(1.1rem, 3vw, 2.2rem);
+  padding: var(--space-fluid-5) clamp(1rem, 2.5vw, 2.5rem) clamp(1.1rem, 3vw, 2.5rem);
   max-width: 100%;
   overflow-x: hidden;
   background: transparent;
@@ -433,6 +486,8 @@ body {
   width: 100%;
   max-width: 1100px;
   margin-inline: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .split-view {
@@ -545,6 +600,19 @@ select:focus-visible {
   border: 1px solid var(--color-border);
   padding: var(--space-3);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  animation: inline-form-in var(--motion-state-medium) var(--ease-emphasis);
+}
+
+@keyframes inline-form-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .inline-form label {
@@ -594,7 +662,7 @@ select:focus-visible {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .tree-item {
@@ -605,28 +673,36 @@ select:focus-visible {
   position: relative;
   transition:
     background-color var(--motion-state-medium) var(--ease-standard),
-    box-shadow var(--motion-state-medium) var(--ease-standard);
+    box-shadow var(--motion-state-medium) var(--ease-standard),
+    opacity var(--motion-state-medium) var(--ease-standard);
 }
 
 .tree-item-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   width: 100%;
   min-height: var(--row-height);
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 0.35rem 0.6rem;
+  padding: 0.35rem 0.5rem;
   color: inherit;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.825rem;
   text-decoration: none;
   border-radius: inherit;
-  cursor: pointer;
+  cursor: grab;
   transition: color var(--motion-state-medium) var(--ease-standard);
   user-select: none;
   -webkit-user-select: none;
+  /* Belt-and-suspenders: ensure no inner element steals the drag from the
+     draggable parent. The drag handle, chevron, icon and label are all
+     decorative as far as input is concerned. */
+}
+
+.tree-item-row > * {
+  pointer-events: none;
 }
 
 .tree-item-row:active {
@@ -642,8 +718,8 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 5px;
   flex-shrink: 0;
   transition:
@@ -655,13 +731,13 @@ select:focus-visible {
 .tree-icon-folder {
   color: var(--color-folder);
   background: var(--color-folder-soft);
-  box-shadow: inset 0 0 0 1px rgba(240, 184, 108, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(214, 176, 122, 0.22);
 }
 
 .tree-icon-file {
   color: var(--color-file);
   background: var(--color-file-soft);
-  box-shadow: inset 0 0 0 1px rgba(154, 166, 212, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(147, 160, 187, 0.2);
 }
 
 .tree-item-folder .tree-label {
@@ -693,7 +769,7 @@ select:focus-visible {
 
 .tree-item.selected,
 .tree-item.active {
-  background: var(--color-surface-hover);
+  background: color-mix(in oklab, var(--color-accent-soft) 80%, var(--color-surface-hover));
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
@@ -704,27 +780,30 @@ select:focus-visible {
 }
 
 .tree-item.selected.tree-item-folder .tree-icon-folder {
-  color: #fff;
+  color: var(--color-on-accent);
   background: var(--color-folder);
-  box-shadow: 0 0 0 2px rgba(240, 184, 108, 0.25);
+  box-shadow: 0 0 0 2px var(--color-folder-ring);
 }
 
 .tree-item.selected.tree-item-file .tree-icon-file {
-  color: #fff;
+  color: var(--color-on-accent);
   background: var(--color-accent);
   box-shadow: 0 0 0 2px var(--color-accent-ring);
 }
 
 .tree-item.dragging {
-  opacity: 0.4;
-  transform: scale(0.99);
+  opacity: 0.45;
+  transform: scale(0.985);
 }
 
+/* Drop targets use a cooler, brighter highlight than selection so that during
+   a drag the eye locks onto the target instantly. The inset rule + outer ring
+   make the row feel like it's "lifted" toward the cursor. */
 .tree-item.drop-target {
-  background: var(--color-folder-soft);
+  background: var(--color-drop-soft);
   box-shadow:
-    inset 0 0 0 1.5px var(--color-folder),
-    0 0 0 3px var(--color-folder-ring);
+    inset 0 0 0 1.5px var(--color-drop),
+    0 0 0 3px var(--color-drop-strong);
 }
 
 .tree-item.drop-target .tree-label {
@@ -733,36 +812,103 @@ select:focus-visible {
 }
 
 .tree-item.drop-target.tree-item-folder .tree-icon-folder {
-  color: #fff;
-  background: var(--color-folder);
+  color: var(--color-on-accent);
+  background: var(--color-drop);
+  box-shadow: 0 0 0 2px var(--color-drop-strong);
 }
 
-/* When dragging is active, dim non-targets so the highlight pops */
+/* When a drag is active, dim non-targets so the drop highlight pops. */
 .tree:has(.tree-item.dragging) .tree-item:not(.dragging):not(.drop-target) {
-  opacity: 0.7;
+  opacity: 0.55;
+}
+
+/* While a drag is in progress, give the user an unmistakable "you can move
+   things now" cursor across the whole tree. */
+.tree:has(.tree-item.dragging) {
+  cursor: grabbing;
+}
+
+.tree:has(.tree-item.dragging) .tree-item-row {
+  cursor: grabbing;
 }
 
 .root-drop {
-  padding: 0.6rem var(--space-3);
+  padding: 0.65rem var(--space-3);
   border: 1.5px dashed var(--color-border-strong);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   text-align: center;
   background: transparent;
+  margin-bottom: var(--space-2);
+  letter-spacing: 0.01em;
   transition:
     background-color var(--motion-state-medium) var(--ease-standard),
     border-color var(--motion-state-medium) var(--ease-standard),
     color var(--motion-state-medium) var(--ease-standard),
     box-shadow var(--motion-state-medium) var(--ease-standard);
+  animation: root-drop-in var(--motion-state-medium) var(--ease-emphasis);
 }
 
 .root-drop.drop-target {
   border-style: solid;
-  border-color: var(--color-folder);
-  background: var(--color-folder-soft);
-  color: var(--color-folder);
-  box-shadow: 0 0 0 3px var(--color-folder-ring);
+  border-color: var(--color-drop);
+  background: var(--color-drop-soft);
+  color: var(--color-text);
+  box-shadow: 0 0 0 3px var(--color-drop-strong);
+}
+
+@keyframes root-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Drag preview ghost                                                         */
+/* -------------------------------------------------------------------------- */
+
+/* Custom drag image we attach via dataTransfer.setDragImage. Lives off-screen
+   for one frame, then is removed. */
+.drag-ghost {
+  position: fixed;
+  top: -1000px;
+  left: -1000px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--color-accent);
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  border-radius: var(--radius-md);
+  font: 500 0.825rem / 1 var(--font-sans);
+  letter-spacing: -0.005em;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drag-ghost::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--color-file);
+  flex-shrink: 0;
+}
+
+.drag-ghost[data-kind='directory']::before {
+  background: var(--color-folder);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -770,33 +916,40 @@ select:focus-visible {
 /* -------------------------------------------------------------------------- */
 
 .tabs {
-  display: flex;
-  gap: var(--space-fluid-3);
+  display: inline-flex;
+  gap: 2px;
   margin-bottom: var(--space-fluid-5);
-  padding-bottom: 0;
-  border-bottom: 1px solid var(--color-border);
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  align-self: flex-start;
 }
 
 .tab {
   border: 0;
   background: transparent;
   color: var(--color-text-muted);
-  padding: 0.6rem 1rem;
-  border-radius: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-sm);
+  margin: 0;
   font-weight: 500;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+  transition:
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .tab:hover {
   color: var(--color-text);
-  background: transparent;
+  background: var(--color-surface-hover);
 }
 
 .tab.active {
   color: var(--color-text);
-  border-bottom-color: var(--color-accent);
-  background: transparent;
+  background: var(--color-surface-hover);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
 .tab-content {
@@ -1036,6 +1189,9 @@ select:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
 }
 
 .editor-title {
@@ -1078,18 +1234,28 @@ select:focus-visible {
   border: 1px solid var(--color-accent-strong);
   color: var(--color-on-accent);
   padding: 0.45rem 0.95rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font: inherit;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.8125rem;
   letter-spacing: 0.005em;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   transition:
-    background-color var(--motion-feedback-fast) var(--ease-standard);
+    background-color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard),
+    box-shadow var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
   background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
+.save-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .save-button:disabled {
@@ -1097,15 +1263,18 @@ select:focus-visible {
   border-color: var(--color-border);
   color: var(--color-text-dim);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* Toolbar + textarea editor */
 .editor-surface {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .editor-toolbar {
@@ -1115,7 +1284,7 @@ select:focus-visible {
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-border);
-  background: transparent;
+  background: var(--color-bg-raised);
 }
 
 .toolbar-btn {
@@ -1125,7 +1294,7 @@ select:focus-visible {
   min-width: 30px;
   height: 30px;
   min-height: 30px;
-  padding: 0 0.5rem;
+  padding: 0 0.55rem;
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
@@ -1136,12 +1305,17 @@ select:focus-visible {
   font-weight: 600;
   transition:
     background-color var(--motion-feedback-fast) var(--ease-standard),
-    color var(--motion-feedback-fast) var(--ease-standard);
+    color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .toolbar-btn:hover {
   background: var(--color-surface-hover);
   color: var(--color-text);
+}
+
+.toolbar-btn:active {
+  transform: scale(0.96);
 }
 
 .toolbar-btn.italic {
@@ -1158,9 +1332,10 @@ select:focus-visible {
 
 .toolbar-sep {
   width: 1px;
-  height: 18px;
-  background: var(--color-border);
-  margin: 0 var(--space-1);
+  height: 16px;
+  background: var(--color-border-strong);
+  margin: 0 var(--space-2);
+  opacity: 0.5;
 }
 
 .markdown-textarea {
@@ -1175,7 +1350,7 @@ select:focus-visible {
   font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.7;
-  padding: var(--space-5) var(--space-5);
+  padding: var(--space-5);
   tab-size: 2;
 }
 
@@ -1189,10 +1364,11 @@ select:focus-visible {
   align-items: center;
   padding: var(--space-2) var(--space-4);
   border-top: 1px solid var(--color-border);
-  background: transparent;
-  font-size: 0.75rem;
+  background: var(--color-bg-raised);
+  font-size: 0.72rem;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
+  letter-spacing: 0.01em;
 }
 
 /* Legacy EditorPane (kept for tests) */
@@ -1222,6 +1398,7 @@ textarea[aria-label='Markdown editor'] {
   display: grid;
   gap: var(--space-2);
   z-index: 50;
+  pointer-events: none;
 }
 
 .toast {
@@ -1232,10 +1409,11 @@ textarea[aria-label='Markdown editor'] {
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  padding: 0.6rem 0.85rem;
-  min-width: 240px;
+  padding: 0.65rem 0.9rem;
+  min-width: 260px;
   font-size: 0.8125rem;
   box-shadow: var(--shadow-md);
+  pointer-events: auto;
 }
 
 .toast-icon {
@@ -1322,9 +1500,12 @@ textarea[aria-label='Markdown editor'] {
 .sidebar-quick-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
-  padding: 0 var(--space-1);
+  gap: 4px;
+  padding: 4px;
   min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .action-btn {
@@ -1334,7 +1515,7 @@ textarea[aria-label='Markdown editor'] {
   height: 30px;
   min-width: 0;
   width: 100%;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
   border-radius: var(--radius-sm);
@@ -1346,18 +1527,22 @@ textarea[aria-label='Markdown editor'] {
   transition:
     background-color var(--motion-feedback-fast) var(--ease-standard),
     color var(--motion-feedback-fast) var(--ease-standard),
-    border-color var(--motion-feedback-fast) var(--ease-standard);
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    transform var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .action-btn:hover:not(:disabled),
 .action-btn:focus-visible {
   color: var(--color-text);
-  border-color: var(--color-border-strong);
   background: var(--color-surface-hover);
 }
 
+.action-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
 .action-btn:disabled {
-  opacity: 0.35;
+  opacity: 0.32;
   cursor: not-allowed;
 }
 
@@ -1369,7 +1554,6 @@ textarea[aria-label='Markdown editor'] {
 .action-btn-danger:focus-visible {
   color: var(--color-danger);
   background: var(--color-danger-soft);
-  border-color: color-mix(in oklab, var(--color-danger) 28%, var(--color-border));
 }
 
 .sidebar-collapse-btn {
@@ -1404,16 +1588,18 @@ textarea[aria-label='Markdown editor'] {
   color: var(--color-text-dim);
   font-size: 0.72rem;
   line-height: 1;
-  width: 14px;
-  min-width: 14px;
+  width: 12px;
+  min-width: 12px;
   height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
   pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--motion-feedback-fast) var(--ease-standard);
+  opacity: 0.35;
+  transition:
+    opacity var(--motion-feedback-fast) var(--ease-standard),
+    color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1445,31 +1631,40 @@ textarea[aria-label='Markdown editor'] {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(8, 10, 16, 0.72);
+  background: rgba(8, 10, 16, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 60;
   padding: var(--space-4);
+  animation: modal-backdrop-in var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .modal-dialog {
-  width: min(100%, 420px);
+  width: min(100%, 440px);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
   background: var(--color-bg-raised);
-  padding: var(--space-4);
+  padding: var(--space-5);
   box-shadow: var(--shadow-lg);
 }
 
 .modal-dialog h2 {
   margin: 0;
-  font-size: 1rem;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.15rem;
+  letter-spacing: -0.005em;
+  color: var(--color-text);
 }
 
 .modal-dialog p {
   margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
+  line-height: 1.55;
 }
 
 .modal-actions {
@@ -1477,6 +1672,15 @@ textarea[aria-label='Markdown editor'] {
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-4);
+}
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-dialog.modal-destructive {
@@ -1616,8 +1820,8 @@ body {
   height: 16px;
 }
 
-.brand-logo {
-  height: 28px;
+.brand-svg {
+  height: 30px;
   width: auto;
 }
 
@@ -1655,9 +1859,7 @@ body {
     transform var(--motion-state-medium) var(--ease-standard);
 }
 
-.topbar-status.is-dirty::before,
 .editor-meta.is-dirty::before {
-  box-shadow: none;
   transform: scale(1.12);
 }
 
@@ -1752,12 +1954,12 @@ body {
 }
 
 .editor-title {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 1.25rem;
-  font-weight: 400;
-  letter-spacing: -0.005em;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--color-text);
+  word-break: break-all;
 }
 
 .editor-footer {
@@ -1795,7 +1997,8 @@ body {
 .tree-item:hover .tree-drag-handle,
 .tree-item:focus-within .tree-drag-handle,
 .tree-item.selected .tree-drag-handle {
-  opacity: 0.7;
+  opacity: 0.85;
+  color: var(--color-text-muted);
 }
 
 .tree-chevron {

@@ -46,6 +46,69 @@ function IconMenu() {
   );
 }
 
+function BrandMark() {
+  return (
+    <svg viewBox="0 0 220 56" aria-label="NoteMD" className="brand-svg" role="img">
+      <g transform="translate(2, 4)">
+        <path
+          d="M4 0 H38 L52 14 V44 Q52 48 48 48 H4 Q0 48 0 44 V4 Q0 0 4 0Z"
+          fill="var(--brand-paper)"
+          stroke="var(--brand-paper-stroke)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M38 0 L38 14 L52 14"
+          fill="var(--brand-paper-fold)"
+          stroke="var(--brand-paper-stroke)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <text
+          x="9"
+          y="22"
+          fontFamily="ui-monospace, JetBrains Mono, monospace"
+          fontSize="11"
+          fontWeight="700"
+          fill="var(--brand-accent)"
+        >
+          #
+        </text>
+        <circle cx="11" cy="30" r="1.6" fill="var(--brand-paper-stroke)" />
+        <rect x="15" y="29" width="22" height="2" rx="1" fill="var(--brand-paper-stroke)" />
+        <circle cx="11" cy="36" r="1.6" fill="var(--brand-paper-stroke)" />
+        <rect x="15" y="35" width="17" height="2" rx="1" fill="var(--brand-paper-stroke)" />
+        <circle cx="11" cy="42" r="1.6" fill="var(--brand-paper-stroke)" />
+        <rect x="15" y="41" width="20" height="2" rx="1" fill="var(--brand-paper-stroke)" />
+      </g>
+      <g transform="translate(64, 0)">
+        <text
+          x="0"
+          y="36"
+          fontFamily="'Inter Tight', 'Inter', system-ui, sans-serif"
+          fontSize="24"
+          fontWeight="600"
+          letterSpacing="-0.6"
+          fill="currentColor"
+        >
+          Note
+        </text>
+        <text
+          x="68"
+          y="36"
+          fontFamily="'Inter Tight', 'Inter', system-ui, sans-serif"
+          fontSize="24"
+          fontWeight="600"
+          letterSpacing="-0.6"
+          fill="var(--brand-accent)"
+        >
+          MD
+        </text>
+      </g>
+    </svg>
+  );
+}
+
 function IconNewFile() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -56,8 +119,20 @@ function IconNewFile() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M9.5 1.25v3.25h3.25" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="M8 7.75v3.5M6.25 9.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M9.5 1.25v3.25h3.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 7.75v3.5M6.25 9.5h3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -72,7 +147,13 @@ function IconNewFolder() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M8 7.5v3M6.5 9h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M8 7.5v3M6.5 9h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -87,7 +168,13 @@ function IconRename() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M9.4 3.6 12 6.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M9.4 3.6 12 6.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -95,7 +182,13 @@ function IconRename() {
 function IconTrash() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2.75 4.25h10.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M2.75 4.25h10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
       <path
         d="M6.25 4.25V3a.75.75 0 0 1 .75-.75h2a.75.75 0 0 1 .75.75v1.25"
         fill="none"
@@ -110,7 +203,14 @@ function IconTrash() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M6.75 7v4.5M9.25 7v4.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
+      <path
+        d="M6.75 7v4.5M9.25 7v4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
     </svg>
   );
 }
@@ -294,26 +394,48 @@ export function GlobalLayout({
     }
   }
 
-  function resolveDraggedPath(event: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): string {
+  function resolveDraggedPath(
+    event: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>,
+  ): string {
     return draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
   }
 
-  function isOwnDrag(event?: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): boolean {
+  function isOwnDrag(
+    event?: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>,
+  ): boolean {
     if (draggedPathRef.current) return true;
     if (!event) return false;
     return Boolean(event.dataTransfer?.getData('text/plain'));
   }
 
-  function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
+  function handleItemDragStart(event: DragEvent<HTMLElement>, node: FileNode) {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
     try {
-      event.dataTransfer.setData('text/plain', nodePath);
+      event.dataTransfer.setData('text/plain', node.path);
     } catch {
       // Some browsers throw if setData is called after drag already started; ignore.
     }
-    draggedPathRef.current = nodePath;
-    setDraggedPath(nodePath);
+
+    // Custom drag image: a clean chip with the icon + name, instead of the
+    // default screenshot of the entire row (which includes the chevron, drag
+    // handle, and any selection highlight). The chip is rendered off-screen
+    // and detached on the next frame so the browser has a chance to snapshot
+    // it before it's removed.
+    if (typeof document !== 'undefined' && event.dataTransfer.setDragImage) {
+      const ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      ghost.dataset.kind = node.isDirectory ? 'directory' : 'file';
+      ghost.textContent = node.name;
+      document.body.appendChild(ghost);
+      event.dataTransfer.setDragImage(ghost, 12, 14);
+      window.requestAnimationFrame(() => {
+        ghost.remove();
+      });
+    }
+
+    draggedPathRef.current = node.path;
+    setDraggedPath(node.path);
   }
 
   function handleItemDragEnd() {
@@ -738,8 +860,8 @@ export function GlobalLayout({
           >
             <IconMenu />
           </button>
-          <div className="brand">
-            <img src="/logo.svg" alt="NoteMD" className="brand-logo" />
+          <div className="brand" aria-label="NoteMD">
+            <BrandMark />
           </div>
         </div>
         <nav className="breadcrumbs" aria-label="Current file">
@@ -897,9 +1019,7 @@ export function GlobalLayout({
                           : 'new-name.md'
                     }
                   />
-                  {validationMessage ? (
-                    <p className="validation-msg">{validationMessage}</p>
-                  ) : null}
+                  {validationMessage ? <p className="validation-msg">{validationMessage}</p> : null}
                   <div className="inline-form-actions">
                     <button type="button" onClick={() => void submitCurrentMode()}>
                       Confirm
@@ -1003,7 +1123,7 @@ export function GlobalLayout({
                               className="tree-item-row"
                               style={{ paddingLeft: `${depth * 14 + 6}px` }}
                               draggable={true}
-                              onDragStart={(event) => handleItemDragStart(event, node.path)}
+                              onDragStart={(event) => handleItemDragStart(event, node)}
                               onDragEnd={handleItemDragEnd}
                               onDragEnter={(event) => handleItemDragOver(event, node)}
                               onDragOver={(event) => handleItemDragOver(event, node)}
@@ -1115,7 +1235,9 @@ export function GlobalLayout({
       <ModalDialog
         open={Boolean(pendingDeleteNode)}
         title="Delete item"
-        description={pendingDeleteNode ? `Delete ${pendingDeleteNode.name}? This action cannot be undone.` : ''}
+        description={
+          pendingDeleteNode ? `Delete ${pendingDeleteNode.name}? This action cannot be undone.` : ''
+        }
         variant="destructive"
         confirmLabel="Delete"
         cancelLabel="Cancel"
