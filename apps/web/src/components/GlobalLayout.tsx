@@ -294,8 +294,14 @@ export function GlobalLayout({
     }
   }
 
-  function isOwnDrag(): boolean {
-    return draggedPathRef.current !== null;
+  function resolveDraggedPath(event: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): string {
+    return draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
+  }
+
+  function isOwnDrag(event?: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): boolean {
+    if (draggedPathRef.current) return true;
+    if (!event) return false;
+    return Boolean(event.dataTransfer?.getData('text/plain'));
   }
 
   function handleItemDragStart(event: DragEvent<HTMLElement>, nodePath: string) {
@@ -317,7 +323,7 @@ export function GlobalLayout({
   }
 
   function handleItemDragOver(event: DragEvent<HTMLElement>, node: FileNode) {
-    if (!isOwnDrag()) {
+    if (!isOwnDrag(event)) {
       return;
     }
 
@@ -327,8 +333,13 @@ export function GlobalLayout({
     // between rows.
     event.stopPropagation();
 
+    const sourcePath = resolveDraggedPath(event);
+    if (!sourcePath) {
+      return;
+    }
+
     const targetDir = targetDirectoryFor(node);
-    if (!validateMove(draggedPathRef.current!, targetDir).ok) {
+    if (!validateMove(sourcePath, targetDir).ok) {
       return;
     }
 
@@ -381,7 +392,7 @@ export function GlobalLayout({
   }
 
   function handleRootDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!isOwnDrag()) {
+    if (!isOwnDrag(event)) {
       return;
     }
     event.preventDefault();
@@ -423,7 +434,7 @@ export function GlobalLayout({
   // We treat such drops as "drop into root", matching the Finder/VSCode
   // convention for the empty area of a list.
   function handleTreeDragOver(event: DragEvent<HTMLUListElement>) {
-    if (!isOwnDrag()) return;
+    if (!isOwnDrag(event)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   }
@@ -958,7 +969,6 @@ export function GlobalLayout({
                         if (draggedPath === node.path) classes.push('dragging');
                         const itemDropTargetKey = dropTargetKeyFor(node);
                         const isDropTarget =
-                          node.isDirectory &&
                           dropTargetKey === itemDropTargetKey &&
                           draggedPath !== null &&
                           draggedPath !== node.path;
