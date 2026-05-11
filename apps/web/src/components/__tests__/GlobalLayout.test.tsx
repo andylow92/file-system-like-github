@@ -460,4 +460,146 @@ describe('GlobalLayout', () => {
     const stored = JSON.parse(localStorage.getItem('collapsedFolders') ?? '[]') as string[];
     expect(stored).toContain('docs');
   });
+
+  // -------------------------------------------------------------------------
+  // Tree organization: sort + default-collapse-deep
+  // -------------------------------------------------------------------------
+
+  it('sorts each level: folders before files, then alphabetical', () => {
+    const mixed = [
+      { name: 'zeta.md', path: 'zeta.md', isDirectory: false },
+      {
+        name: 'docs',
+        path: 'docs',
+        isDirectory: true,
+        children: [
+          { name: 'guide.md', path: 'docs/guide.md', isDirectory: false },
+          { name: 'archive', path: 'docs/archive', isDirectory: true, children: [] },
+        ],
+      },
+      { name: 'README.md', path: 'README.md', isDirectory: false },
+      { name: 'apps', path: 'apps', isDirectory: true, children: [] },
+    ];
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={mixed}
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={vi.fn(async () => {})}
+          onDeletePath={vi.fn(async () => {})}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+
+    const rows = screen.getAllByRole('treeitem').map((row) => row.getAttribute('data-path'));
+    // Top level: folders (apps, docs) before files (README.md, zeta.md), all alphabetical.
+    // Inside docs: archive (folder) before guide.md (file).
+    expect(rows).toEqual(['apps', 'docs', 'docs/archive', 'docs/guide.md', 'README.md', 'zeta.md']);
+  });
+
+  it('collapses folders past depth 2 on first ever load (no saved preference)', () => {
+    const deep = [
+      {
+        name: 'docs',
+        path: 'docs',
+        isDirectory: true,
+        children: [
+          {
+            name: 'guide',
+            path: 'docs/guide',
+            isDirectory: true,
+            children: [
+              {
+                name: 'intro',
+                path: 'docs/guide/intro',
+                isDirectory: true,
+                children: [{ name: 'a.md', path: 'docs/guide/intro/a.md', isDirectory: false }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={deep}
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={vi.fn(async () => {})}
+          onDeletePath={vi.fn(async () => {})}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+
+    // docs (depth 1) and guide (depth 2) are visible. intro (depth 3) is
+    // visible because guide is expanded — but intro is itself collapsed,
+    // so a.md (depth 4) is hidden.
+    expect(screen.getByRole('treeitem', { name: 'docs' })).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: 'guide' })).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: 'intro' })).toBeInTheDocument();
+    expect(screen.queryByRole('treeitem', { name: 'a.md' })).not.toBeInTheDocument();
+
+    // Default-collapse choice was persisted, so future renders are stable.
+    const stored = JSON.parse(localStorage.getItem('collapsedFolders') ?? '[]') as string[];
+    expect(stored).toContain('docs/guide/intro');
+  });
+
+  it('respects saved collapsedFolders preference and does not auto-collapse', () => {
+    // User had previously chosen to collapse nothing — that choice wins
+    // over the default-collapse heuristic, even for deep trees.
+    localStorage.setItem('collapsedFolders', JSON.stringify([]));
+
+    const deep = [
+      {
+        name: 'docs',
+        path: 'docs',
+        isDirectory: true,
+        children: [
+          {
+            name: 'guide',
+            path: 'docs/guide',
+            isDirectory: true,
+            children: [
+              {
+                name: 'intro',
+                path: 'docs/guide/intro',
+                isDirectory: true,
+                children: [{ name: 'a.md', path: 'docs/guide/intro/a.md', isDirectory: false }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalLayout
+          tree={deep}
+          onSelectFile={vi.fn()}
+          onCreateFile={vi.fn(async () => {})}
+          onCreateFolder={vi.fn(async () => {})}
+          onRenamePath={vi.fn(async () => {})}
+          onDeletePath={vi.fn(async () => {})}
+          onSave={vi.fn(async () => {})}
+        >
+          <div />
+        </GlobalLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('treeitem', { name: 'a.md' })).toBeInTheDocument();
+  });
 });
