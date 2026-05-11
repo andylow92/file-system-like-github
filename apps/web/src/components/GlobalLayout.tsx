@@ -514,7 +514,7 @@ export function GlobalLayout({
 
     const timer = window.setTimeout(() => {
       setToasts((prev) => prev.slice(1));
-    }, 2600);
+    }, 6000);
 
     return () => window.clearTimeout(timer);
   }, [toasts]);

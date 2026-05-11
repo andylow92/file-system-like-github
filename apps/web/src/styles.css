@@ -629,6 +629,15 @@ select:focus-visible {
   -webkit-user-select: none;
 }
 
+/* All children of a draggable tree row must be transparent to pointer
+ * events so dragover/drop fire on the row itself and bubble cleanly.
+ * Without this, the cursor can land on an inner <svg> or <span> and
+ * some browsers fail to bubble `drop` even though `dragover` was
+ * canceled — the symptom is "row lights up but nothing moves." */
+.tree-item-row > * {
+  pointer-events: none;
+}
+
 .tree-item-row:active {
   cursor: grabbing;
 }
