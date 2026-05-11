@@ -623,10 +623,26 @@ select:focus-visible {
   font-size: 0.8125rem;
   text-decoration: none;
   border-radius: inherit;
-  cursor: pointer;
+  cursor: grab;
   transition: color var(--motion-state-medium) var(--ease-standard);
   user-select: none;
   -webkit-user-select: none;
+  /* WebKit (and some Chromium versions) disable element dragging when an
+   * ancestor sets user-select: none unless we explicitly opt the row
+   * back in. Without these, draggable="true" is silently ignored and
+   * dragstart never fires — the symptom is "row hover-highlights but
+   * I can't pick it up." */
+  -webkit-user-drag: element;
+  -khtml-user-drag: element;
+}
+
+/* Children of the row should not steal drag/drop events from the row
+ * itself. Without this, an inner <svg> or <span> can become the drag
+ * source (or interrupt dragstart) and the row's onDragStart handler
+ * never runs. */
+.tree-item-row > * {
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .tree-item-row:active {
