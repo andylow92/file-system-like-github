@@ -122,6 +122,26 @@ function flattenTree(nodes: FileNode[], depth = 1): FlatTreeNode[] {
   ]);
 }
 
+// Sort each level: folders before files, then alphabetical (natural order
+// so "file2" < "file10"). Applied recursively so nested children sort too.
+function sortTree(nodes: FileNode[]): FileNode[] {
+  return [...nodes]
+    .sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    })
+    .map((node) =>
+      node.children ? { ...node, children: sortTree(node.children) } : node,
+    );
+}
+
+const DEFAULT_COLLAPSE_DEPTH = 3;
+
 function getParentDirectoryPath(path: string): string | null {
   if (!path.includes('/')) {
     return null;
@@ -192,7 +212,7 @@ export function GlobalLayout({
   const draggedPathRef = useRef<string | null>(null);
   const mobileSidebarTriggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const flatTree = useMemo(() => flattenTree(tree), [tree]);
+  const flatTree = useMemo(() => flattenTree(sortTree(tree)), [tree]);
 
   const visibleFlatTree = useMemo(() => {
     const query = filterQuery.trim().toLowerCase();
@@ -506,6 +526,34 @@ export function GlobalLayout({
       setSelectedPath(fallback ?? '');
     }
   }, [flatTree, selectedPath, tree.length]);
+
+  // First-load default: collapse folders at depth >= DEFAULT_COLLAPSE_DEPTH
+  // so a freshly opened deep workspace stays scannable. Skipped if the user
+  // already has a saved collapsedFolders preference.
+  const hasInitializedDefaultCollapse = useRef(false);
+  useEffect(() => {
+    if (hasInitializedDefaultCollapse.current) return;
+    if (!tree.length) return;
+
+    let alreadySaved = false;
+    try {
+      alreadySaved = localStorage.getItem('collapsedFolders') !== null;
+    } catch {
+      alreadySaved = true; // can't read — don't touch anything
+    }
+    hasInitializedDefaultCollapse.current = true;
+    if (alreadySaved) return;
+
+    const deepFolders = flatTree
+      .filter(({ node, depth }) => node.isDirectory && depth >= DEFAULT_COLLAPSE_DEPTH)
+      .map(({ node }) => node.path);
+
+    if (!deepFolders.length) return;
+
+    const next = new Set(deepFolders);
+    setCollapsedFolders(next);
+    writeLocalStorage('collapsedFolders', JSON.stringify([...next]));
+  }, [tree.length, flatTree]);
 
   useEffect(() => {
     if (!toasts.length) {
