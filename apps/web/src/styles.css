@@ -28,20 +28,20 @@
      never as a gradient — so when it appears it actually means something. */
   --color-accent: #d4a76a;
   --color-accent-strong: #b88a4f;
-  --color-accent-soft: rgba(212, 167, 106, 0.10);
+  --color-accent-soft: rgba(212, 167, 106, 0.1);
   --color-accent-ring: rgba(212, 167, 106, 0.35);
   --color-on-accent: #1a1206;
 
   --color-success: #7cb89a;
-  --color-success-soft: rgba(124, 184, 154, 0.10);
+  --color-success-soft: rgba(124, 184, 154, 0.1);
   --color-danger: #d97a72;
-  --color-danger-soft: rgba(217, 122, 114, 0.10);
+  --color-danger-soft: rgba(217, 122, 114, 0.1);
   --color-on-danger: #1f0807;
 
   /* Folder/file accents desaturated so the tree reads as one calm column,
      not a cluttered mosaic. */
   --color-folder: #c8a575;
-  --color-folder-soft: rgba(200, 165, 117, 0.10);
+  --color-folder-soft: rgba(200, 165, 117, 0.1);
   --color-folder-ring: rgba(200, 165, 117, 0.28);
   --color-file: #8d96a8;
   --color-file-soft: rgba(141, 150, 168, 0.08);
@@ -73,10 +73,9 @@
      plain Inter); Fraunces italic only on the wordmark and section labels
      for editorial flavor. */
   --font-sans:
-    'Inter Tight', ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system,
-    BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-  --font-serif:
-    'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+    'Inter Tight', ui-sans-serif, system-ui, 'Segoe UI Variable', -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', sans-serif;
+  --font-serif: 'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
   --font-mono:
     ui-monospace, 'JetBrains Mono', 'Fira Code', SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -107,8 +106,8 @@
     --color-surface: #ffffff;
     --color-surface-hover: #f5f2ea;
     --color-surface-strong: #ebe5d7;
-    --color-border: rgba(60, 50, 30, 0.10);
-    --color-border-strong: rgba(60, 50, 30, 0.20);
+    --color-border: rgba(60, 50, 30, 0.1);
+    --color-border-strong: rgba(60, 50, 30, 0.2);
     --color-text: #1f1a13;
     --color-text-muted: #5b544b;
     --color-text-dim: #8a847a;
@@ -1100,8 +1099,7 @@ select:focus-visible {
   font-weight: 500;
   font-size: 0.8125rem;
   letter-spacing: 0.005em;
-  transition:
-    background-color var(--motion-feedback-fast) var(--ease-standard);
+  transition: background-color var(--motion-feedback-fast) var(--ease-standard);
 }
 
 .save-button:hover:not(:disabled) {
@@ -1177,6 +1175,40 @@ select:focus-visible {
   height: 18px;
   background: var(--color-border);
   margin: 0 var(--space-1);
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.fix-format-btn {
+  padding-inline: 0.7rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+
+.fix-format-btn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-accent) 20%, var(--color-bg));
+  color: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+}
+
+.fix-format-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.fix-format-error {
+  margin: var(--space-2) var(--space-3) 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--color-danger) 30%, var(--color-border));
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--type-caption);
 }
 
 .markdown-textarea {
@@ -1501,6 +1533,230 @@ textarea[aria-label='Markdown editor'] {
 
 .modal-dialog.modal-error {
   border-color: rgba(239, 106, 106, 0.45);
+}
+
+/* -------------------------------------------------------------------------- */
+/* OpenRouter settings dialog                                                 */
+/* -------------------------------------------------------------------------- */
+
+.openrouter-settings {
+  width: min(100%, 480px);
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings-label {
+  font-size: var(--type-caption);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.settings-field input {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.settings-key-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.settings-key-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-key-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: var(--type-caption);
+  color: var(--color-text-dim);
+}
+
+.settings-hint a {
+  color: var(--color-accent);
+}
+
+.settings-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--color-surface);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fix-format preview dialog                                                  */
+/* -------------------------------------------------------------------------- */
+
+.fix-format-dialog {
+  width: min(100%, 960px);
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.fix-format-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.fix-format-header h2 {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+}
+
+.fix-format-subtitle {
+  margin: 0;
+  font-size: var(--type-caption);
+  color: var(--color-text-muted);
+}
+
+.fix-format-subtitle code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--color-surface);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+}
+
+.fix-format-view-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.fix-format-view-toggle .tab {
+  border-radius: 0;
+  border-bottom: 0;
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: var(--type-caption);
+}
+
+.fix-format-view-toggle .tab.active {
+  background: var(--color-surface-hover);
+  border-bottom: 0;
+  color: var(--color-text);
+}
+
+.fix-format-body {
+  flex: 1 1 auto;
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.fix-format-pane {
+  height: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+.fix-format-pane .github-markdown {
+  max-width: 100%;
+  margin: 0;
+}
+
+.fix-format-source {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  max-height: 60vh;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: var(--space-4);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.fix-format-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  min-height: 320px;
+}
+
+.fix-format-compare-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fix-format-compare-pane + .fix-format-compare-pane {
+  border-left: 1px solid var(--color-border);
+}
+
+.fix-format-compare-pane h3 {
+  margin: 0;
+  padding: 0.45rem var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-bg-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fix-format-compare-pane .fix-format-source {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fix-format-actions {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .fix-format-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .fix-format-compare-pane + .fix-format-compare-pane {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
 }
 
 .mobile-sidebar-trigger {
