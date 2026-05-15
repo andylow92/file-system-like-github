@@ -815,7 +815,7 @@ select:focus-visible {
 }
 
 .tab-content {
-  min-height: 420px;
+  min-height: calc(100vh - 200px);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1214,16 +1214,17 @@ select:focus-visible {
 .markdown-textarea {
   display: block;
   width: 100%;
-  min-height: 480px;
+  min-height: max(560px, calc(100vh - 260px));
   border: 0;
   outline: none;
   resize: vertical;
   background: transparent;
   color: var(--color-text);
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  line-height: 1.7;
-  padding: var(--space-5) var(--space-5);
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  letter-spacing: -0.005em;
+  padding: var(--space-6) clamp(1rem, 4vw, 3.5rem);
   tab-size: 2;
 }
 
@@ -1342,7 +1343,9 @@ textarea[aria-label='Markdown editor'] {
 }
 
 .split-edit .markdown-textarea {
-  min-height: 520px;
+  min-height: max(560px, calc(100vh - 240px));
+  padding: var(--space-5) clamp(0.75rem, 2vw, 1.75rem);
+  font-size: 1rem;
 }
 
 @media (max-width: 1100px) {
