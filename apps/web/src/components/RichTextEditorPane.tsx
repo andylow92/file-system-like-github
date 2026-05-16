@@ -1,4 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { fixMarkdownFormat, OpenRouterError } from '../openrouter/client';
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  loadOpenRouterApiKey,
+  loadOpenRouterModel,
+  saveOpenRouterApiKey,
+  saveOpenRouterModel,
+} from '../openrouter/storage';
+import { FixFormatPreviewDialog } from './FixFormatPreviewDialog';
+import { OpenRouterSettingsDialog } from './OpenRouterSettingsDialog';
 
 interface RichTextEditorPaneProps {
   filePath: string | null;
@@ -43,10 +53,23 @@ export function RichTextEditorPane({
 }: RichTextEditorPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [value, setValue] = useState(markdown);
+  const [apiKey, setApiKey] = useState(() => loadOpenRouterApiKey());
+  const [model, setModel] = useState(() => loadOpenRouterModel());
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFixing, setIsFixing] = useState(false);
+  const [fixError, setFixError] = useState<string | null>(null);
+  const [proposedMarkdown, setProposedMarkdown] = useState<string | null>(null);
+  const fixAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setValue(markdown);
   }, [filePath, markdown]);
+
+  useEffect(() => {
+    return () => {
+      fixAbortRef.current?.abort();
+    };
+  }, []);
 
   const commitChange = useCallback(
     (nextValue: string) => {
@@ -142,6 +165,78 @@ export function RichTextEditorPane({
     },
     [commitChange],
   );
+
+  const handleSaveSettings = useCallback((next: { apiKey: string; model: string }) => {
+    const nextModel = next.model || DEFAULT_OPENROUTER_MODEL;
+    setApiKey(next.apiKey);
+    setModel(nextModel);
+    saveOpenRouterApiKey(next.apiKey);
+    saveOpenRouterModel(nextModel);
+    setIsSettingsOpen(false);
+    setFixError(null);
+  }, []);
+
+  const handleFixFormat = useCallback(async () => {
+    if (isFixing) {
+      return;
+    }
+    if (!apiKey) {
+      setFixError('Add your OpenRouter API key to use Fix Format.');
+      setIsSettingsOpen(true);
+      return;
+    }
+    if (!value.trim()) {
+      setFixError('Nothing to format yet — write some markdown first.');
+      return;
+    }
+
+    fixAbortRef.current?.abort();
+    const controller = new AbortController();
+    fixAbortRef.current = controller;
+
+    setFixError(null);
+    setIsFixing(true);
+    try {
+      const result = await fixMarkdownFormat({
+        apiKey,
+        model: model || DEFAULT_OPENROUTER_MODEL,
+        markdown: value,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) {
+        return;
+      }
+      setProposedMarkdown(result);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (error instanceof OpenRouterError) {
+        setFixError(error.message);
+      } else if (error instanceof Error) {
+        setFixError(error.message);
+      } else {
+        setFixError('Fix Format failed for an unknown reason.');
+      }
+    } finally {
+      if (fixAbortRef.current === controller) {
+        fixAbortRef.current = null;
+      }
+      setIsFixing(false);
+    }
+  }, [apiKey, isFixing, model, value]);
+
+  const handleAcceptProposed = useCallback(() => {
+    if (proposedMarkdown == null) {
+      return;
+    }
+    commitChange(proposedMarkdown);
+    setProposedMarkdown(null);
+  }, [commitChange, proposedMarkdown]);
+
+  const handleRejectProposed = useCallback(() => {
+    setProposedMarkdown(null);
+  }, []);
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     const isMod = event.metaKey || event.ctrlKey;
@@ -275,7 +370,48 @@ export function RichTextEditorPane({
           >
             ↗
           </button>
+          <span className="toolbar-spacer" aria-hidden="true" />
+          <button
+            type="button"
+            className="toolbar-btn fix-format-btn"
+            onClick={() => {
+              void handleFixFormat();
+            }}
+            disabled={isFixing}
+            title={
+              apiKey
+                ? `Fix format with ${model || DEFAULT_OPENROUTER_MODEL}`
+                : 'Fix format (add OpenRouter API key first)'
+            }
+            aria-label="Fix format with OpenRouter"
+          >
+            {isFixing ? 'Formatting…' : 'Fix format'}
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => setIsSettingsOpen(true)}
+            title="OpenRouter settings"
+            aria-label="OpenRouter settings"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14">
+              <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M3.4 12.6l1.2-1.2M11.4 4.6l1.2-1.2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
+
+        {fixError ? (
+          <p className="fix-format-error" role="alert">
+            {fixError}
+          </p>
+        ) : null}
 
         <textarea
           ref={textareaRef}
@@ -301,6 +437,24 @@ export function RichTextEditorPane({
       {!savedMarkdown.trim() && !isDirty ? (
         <p className="empty-state">This file is empty. Start writing to add content.</p>
       ) : null}
+
+      <OpenRouterSettingsDialog
+        open={isSettingsOpen}
+        initialApiKey={apiKey}
+        initialModel={model}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={handleSaveSettings}
+      />
+
+      <FixFormatPreviewDialog
+        open={proposedMarkdown !== null}
+        filePath={filePath}
+        originalMarkdown={value}
+        proposedMarkdown={proposedMarkdown ?? ''}
+        model={model || DEFAULT_OPENROUTER_MODEL}
+        onAccept={handleAcceptProposed}
+        onReject={handleRejectProposed}
+      />
     </div>
   );
 }
