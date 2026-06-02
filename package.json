@@ -8,6 +8,9 @@
   "scripts": {
     "dev:web": "npm --workspace @repo/web run dev",
     "dev:api": "npm --workspace @repo/api run dev",
+    "start:agent": "npm --workspace @repo/mcp run start",
+    "start:agent:dev": "npm --workspace @repo/mcp run dev",
+    "doctor": "node scripts/doctor.mjs",
     "build": "npm run --workspaces --if-present build",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --check .",

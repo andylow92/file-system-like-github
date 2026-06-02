@@ -20,14 +20,15 @@ see it. See _What's built_ below.
 
 Always orient yourself using these documents before acting:
 
-| You want to know...                             | Read this                                                        |
-| ----------------------------------------------- | ---------------------------------------------------------------- |
-| What exists, what's done, what's next           | [`docs/implementation.md`](docs/implementation.md)               |
-| How to run, test, and validate the app          | [`docs/implementation.md`](docs/implementation.md) → _Commands_  |
-| Manual integration checks                       | [`docs/integration-test-plan.md`](docs/integration-test-plan.md) |
-| Backend API endpoints + request/response shapes | [`apps/api/README.md`](apps/api/README.md)                       |
-| Agent tools (MCP) + how writes are attributed   | [`apps/mcp/README.md`](apps/mcp/README.md)                       |
-| Project overview / human-facing pitch           | [`README.md`](README.md)                                         |
+| You want to know...                              | Read this                                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| What exists, what's done, what's next            | [`docs/implementation.md`](docs/implementation.md)               |
+| How to run, test, and validate the app           | [`docs/implementation.md`](docs/implementation.md) → _Commands_  |
+| Manual integration checks                        | [`docs/integration-test-plan.md`](docs/integration-test-plan.md) |
+| Backend API endpoints + request/response shapes  | [`apps/api/README.md`](apps/api/README.md)                       |
+| Agent tools (MCP) + how writes are attributed    | [`apps/mcp/README.md`](apps/mcp/README.md)                       |
+| Connect an MCP host (OpenClaw / Claude / Cursor) | [`docs/CONNECT.md`](docs/CONNECT.md)                             |
+| Project overview / human-facing pitch            | [`README.md`](README.md)                                         |
 
 `docs/implementation.md` is the **source of truth for project state**. When you
 finish a unit of work, update it (see _Goal-driven execution_ below).
@@ -89,9 +90,23 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It proxies
-  the HTTP API, so agent writes flow through the same validation,
-  concurrency, and audit trail, attributed as `agent:mcp`.
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It runs
+  the storage API **in-process** by default, so it is a single
+  self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
+  Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
+  the bundled `node apps/mcp/dist/server.js`. Copy-paste host configs live
+  in [`docs/CONNECT.md`](docs/CONNECT.md). On startup it prints a one-line
+  readiness banner on stderr (`fsbrain-mcp ready · mode=… · vault=… ·
+tools=… · actor=…`) so a host log immediately shows whether the spawn
+  worked. Agent writes carry `X-Actor: agent:mcp` (override via
+  `MCP_ACTOR`) and flow through the same validation, optimistic-
+  concurrency, and audit trail as the web UI.
+- **Clone-and-run guarantee** — `apps/mcp/src/__tests__/freshClone.test.ts`
+  spawns the MCP bin as a real stdio child against a temp `CONTENT_ROOT`,
+  drives it via the official MCP SDK client (tools/list + create/read/
+  search/semantic_search + propose_edit/list_proposals + recent_activity),
+  and asserts the write landed both on disk and in the audit log. Runs in
+  `npm test`, so a green test bar is the proof that a fresh clone works.
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
 semantic search, and a live SSE/file-watcher layer. See the roadmap in
@@ -105,7 +120,8 @@ semantic search, and a live SSE/file-watcher layer. See the roadmap in
 apps/
   api/   # Node HTTP server + filesystem storage (CONTENT_ROOT). Endpoints under /api/*.
   web/   # React + Vite UI: file tree, editor/preview/activity tabs, Ctrl/Cmd-K search.
-  mcp/   # MCP stdio server exposing the vault as agent tools (proxies the API).
+  mcp/   # MCP stdio server exposing the vault as agent tools. Embeds the API in-process
+         # by default; bundled to a single bin (`apps/mcp/dist/server.js`, npm `fsbrain-mcp`).
 packages/
   shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts.
 docs/      # Agent + human knowledge base. Start at implementation.md.
@@ -206,8 +222,11 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
 npm install        # install workspaces
 npm run dev:api    # run API   (http://localhost:3001)
 npm run dev:web    # run web UI (http://localhost:5173)
-npm test           # run all workspace tests (vitest)
+npm run start:agent  # launch the self-contained MCP server (`fsbrain-mcp`, stdio)
+npm run doctor     # preflight: Node version + vault writable
+npm test           # run all workspace tests (vitest), incl. fresh-clone MCP e2e
 npm run lint       # eslint
+npm run build      # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 npm run format     # prettier --check
 ```
 
