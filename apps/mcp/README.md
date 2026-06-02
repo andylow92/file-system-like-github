@@ -80,9 +80,11 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 ## Fresh-clone guarantee
 
-`src/__tests__/freshClone.test.ts` spawns the bin as a real stdio child against
-a temp `CONTENT_ROOT`, drives it via the official MCP SDK client (`tools/list`
-
-- `create_note` → `read_note` → `search_notes` / `semantic_search` +
-  `propose_edit` / `list_proposals` + `recent_activity`), then asserts the write
-  landed on disk and in `.fsbrain/audit.jsonl`. Runs in `npm test`.
+`src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
+against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
+It asserts `tools/list` returns all 16 expected names, round-trips
+`create_note` → `read_note` → `search_notes` → `semantic_search` →
+`propose_edit` → `list_proposals` → `recent_activity`, and confirms the write
+landed both on disk and in `.fsbrain/audit.jsonl`. A second test exercises
+the bundled `dist/server.js` (skipped if `npm run build` hasn't been run).
+Runs in `npm test`.

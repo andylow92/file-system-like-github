@@ -2,20 +2,20 @@
  * Fresh-clone end-to-end test for the MCP server.
  *
  * The proof that "tell an agent to clone the repo and use the brain" works:
- * spawn the self-contained MCP server as a real stdio child process
- * (`node node_modules/tsx/dist/cli.mjs apps/mcp/src/server.ts`), drive it via
- * the real MCP SDK client, run a round-trip of writes/reads/search/proposals,
- * and assert the write landed both in the vault on disk and in the audit log.
+ * the first test spawns the self-contained MCP server as a real stdio child
+ * process (via `tsx` so no prior `npm run build` is required), drives it via
+ * the real MCP SDK client, and asserts the write landed both on disk and in
+ * the audit log.
  *
- * Tests intentionally do not depend on `npm run build` — they exercise the
- * same code path an MCP host like OpenClaw uses minus the bundled bin. The
- * bundled bin (`dist/server.js`) is covered by `npm run build` and the bin
- * config in `package.json`.
+ * The second test exercises the bundled bin (`dist/server.js`) when it
+ * exists: spawns it via `node`, drives a `tools/list` round-trip, and
+ * asserts the readiness banner. It's skipped silently if `npm run build`
+ * hasn't been run, so `npm test` doesn't fail on a clean checkout.
  */
-import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -130,6 +130,9 @@ describe('fresh-clone MCP end-to-end', () => {
     const onDisk = await fs.readFile(path.join(vault, 'notes', 'idea.md'), 'utf8');
     expect(onDisk).toContain('Key idea');
 
+    // 3a) The empty-vault seed should have created welcome.md.
+    await expect(fs.access(path.join(vault, 'welcome.md'))).resolves.toBeUndefined();
+
     // 4) search_notes should find the new note.
     const searchResult = (await client.callTool({
       name: 'search_notes',
@@ -189,10 +192,10 @@ describe('fresh-clone MCP end-to-end', () => {
     expect(lastEntry.path).toBe('notes/idea.md');
   });
 
-  it('starts via `node dist/server.js` when the bin has been built', async () => {
+  it('drives `tools/list` over the bundled `dist/server.js` when it exists', async () => {
     // Skip silently when the bundle hasn't been produced — `npm run build` is
-    // its own gate. The fresh-clone test above already exercises the same code
-    // path via `tsx`; this just confirms the published bin works end-to-end.
+    // its own gate. This second test catches bundle-config regressions (e.g. a
+    // dep accidentally externalized) that the `tsx` path above can't see.
     const distEntry = path.join(mcpRoot, 'dist', 'server.js');
     try {
       await fs.access(distEntry);
@@ -200,47 +203,35 @@ describe('fresh-clone MCP end-to-end', () => {
       return;
     }
 
-    // Probe with a one-shot child: spawn, give it a short window to print the
-    // readiness banner, then terminate. The banner proves the bin imports and
-    // boots the embedded API cleanly.
-    const child = spawn(process.execPath, [distEntry], {
+    let stderr = '';
+    transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [distEntry],
       env: {
         ...process.env,
         CONTENT_ROOT: vault,
         API_BASE_URL: '',
       },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stderr: 'pipe',
     });
-
-    let stderr = '';
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => {
+    // Capture the readiness banner off the child's stderr. The SDK types the
+    // getter as `Stream | null`; the underlying object is a Readable.
+    const childStderr = transport.stderr as Readable | null;
+    childStderr?.setEncoding('utf8');
+    childStderr?.on('data', (chunk: string) => {
       stderr += chunk;
     });
 
-    const banner = await new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        child.kill('SIGTERM');
-        reject(new Error(`Timed out waiting for readiness banner; stderr was:\n${stderr}`));
-      }, 10000);
-      const onData = (chunk: string) => {
-        stderr += chunk;
-        if (stderr.includes('fsbrain-mcp ready')) {
-          clearTimeout(timeout);
-          child.stderr.off('data', onData);
-          resolve(stderr);
-        }
-      };
-      child.stderr.on('data', onData);
-      child.once('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-    });
-    expect(banner).toMatch(/fsbrain-mcp ready/);
-    expect(banner).toMatch(/mode=embedded/);
+    client = new Client({ name: 'fresh-clone-bin-test', version: '0.0.0' });
+    await client.connect(transport);
 
-    child.kill('SIGTERM');
-    await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(16);
+    expect(tools.map((tool) => tool.name)).toContain('create_note');
+
+    // The readiness banner is what an MCP host log shows on a spawn — assert
+    // both the prefix and the mode so a silent regression here is visible.
+    expect(stderr).toMatch(/fsbrain-mcp ready/);
+    expect(stderr).toMatch(/mode=embedded/);
   });
 });
