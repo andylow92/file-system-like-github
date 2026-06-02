@@ -31,7 +31,7 @@ describe('PATCH /api/path', () => {
     const repository = createFileRepository(pathResolver);
     const auditLog = createAuditLog(rootPath);
     const proposalStore = createProposalStore(rootPath);
-    const patchIdempotency = createIdempotencyCache();
+    const patchIdempotency = createIdempotencyCache<import('./files.js').PatchFileResponse>();
     return { repository, pathResolver, auditLog, proposalStore, patchIdempotency };
   }
 

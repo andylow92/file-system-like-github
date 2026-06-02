@@ -87,4 +87,17 @@ describe('MarkdownPreviewPane rich rendering', () => {
     fireEvent.click(link!);
     expect(onNavigate).not.toHaveBeenCalled();
   });
+
+  it('renders trailing `^block-id` anchors as a low-key inline marker', () => {
+    const { container } = render(
+      <MarkdownPreviewPane filePath="t.md" markdown={'A claim worth citing. ^claim-1'} />,
+    );
+
+    const anchor = container.querySelector('a.block-anchor');
+    expect(anchor).toBeInTheDocument();
+    expect(anchor).toHaveTextContent('^claim-1');
+    expect(anchor).toHaveAttribute('id', 'block-claim-1');
+    // The body text before the anchor is preserved.
+    expect(container).toHaveTextContent('A claim worth citing.');
+  });
 });

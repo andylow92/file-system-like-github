@@ -11,22 +11,24 @@ the agent did.
 
 ## Tools
 
-| Tool              | Description                                                       |
-| ----------------- | ----------------------------------------------------------------- |
-| `list_notes`      | List all note paths (optionally under a subtree).                 |
-| `read_note`       | Read a note's content + etag.                                     |
-| `create_note`     | Create a new note.                                                |
-| `update_note`     | Overwrite a note (pass `etag` for safe writes).                   |
-| `patch_note`      | Append/prepend/replace-section with etag + idempotency + dry-run. |
-| `search_notes`    | Full-text and/or tag search.                                      |
-| `semantic_search` | Relevance-ranked retrieval (TF-IDF) for RAG.                      |
-| `get_backlinks`   | Notes linking to a note via `[[wikilinks]]`.                      |
-| `recent_activity` | Read the provenance/audit trail.                                  |
-| `create_folder`   | Create a folder.                                                  |
-| `move_path`       | Move/rename a note or folder.                                     |
-| `delete_path`     | Delete a note or folder.                                          |
-| `propose_edit`    | Propose a create/update/delete for human review.                  |
-| `list_proposals`  | List proposals + review status (resolve is human).                |
+| Tool                | Description                                                             |
+| ------------------- | ----------------------------------------------------------------------- |
+| `list_notes`        | List all note paths (optionally under a subtree).                       |
+| `read_note`         | Read a note by path or stable id (returns content + etag + `id`).       |
+| `read_block`        | Read a single `^block-id` block + surrounding context.                  |
+| `get_block_anchors` | List every `^block-id` anchor in a note.                                |
+| `create_note`       | Create a new note.                                                      |
+| `update_note`       | Overwrite a note (pass `etag` for safe writes).                         |
+| `patch_note`        | append/prepend/replace_section/replace_block/ensure_id, etag + dry-run. |
+| `search_notes`      | Full-text and/or tag search.                                            |
+| `semantic_search`   | Relevance-ranked retrieval (TF-IDF) for RAG.                            |
+| `get_backlinks`     | Notes linking to a note via `[[wikilinks]]` (includes `rel:` type).     |
+| `recent_activity`   | Read the provenance/audit trail.                                        |
+| `create_folder`     | Create a folder.                                                        |
+| `move_path`         | Move/rename a note or folder.                                           |
+| `delete_path`       | Delete a note or folder.                                                |
+| `propose_edit`      | Propose a create/update/delete for human review.                        |
+| `list_proposals`    | List proposals + review status (resolve is human).                      |
 
 ## Run
 

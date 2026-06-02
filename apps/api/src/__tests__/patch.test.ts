@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BlockNotFoundError,
   SectionNotFoundError,
   applyAppend,
   applyPatchOp,
   applyPrepend,
+  replaceBlock,
   replaceSection,
 } from '@repo/shared';
 
@@ -86,6 +88,44 @@ describe('replaceSection', () => {
   });
 });
 
+describe('replaceBlock', () => {
+  it('replaces a paragraph block and re-attaches the anchor', () => {
+    const note = 'First paragraph. ^claim-1\n\nNext.';
+    const result = replaceBlock(note, 'claim-1', 'Revised claim text.');
+    expect(result.content).toBe('Revised claim text. ^claim-1\n\nNext.');
+    expect(result.changed).toBe(true);
+  });
+
+  it('replaces a list item including its indented continuations', () => {
+    const note = ['- item one', '- item two ^a', '  detail', '  more', '- item three'].join('\n');
+    const result = replaceBlock(note, 'a', '- item two updated');
+    expect(result.content).toBe(['- item one', '- item two updated ^a', '- item three'].join('\n'));
+  });
+
+  it('replaces a heading section, keeping siblings intact', () => {
+    const note = ['# Doc', '', '## Tasks ^sec', '- old', '', '## Next', 'tail'].join('\n');
+    const result = replaceBlock(note, 'sec', '## Tasks\n- new');
+    expect(result.content).toBe(
+      ['# Doc', '', '## Tasks ^sec', '- new', '## Next', 'tail'].join('\n'),
+    );
+  });
+
+  it('preserves the frontmatter and works in body coordinates', () => {
+    const note = '---\ntitle: T\n---\n\nbody. ^x\nafter';
+    const result = replaceBlock(note, 'x', 'new body.\nafter');
+    expect(result.content).toBe('---\ntitle: T\n---\n\nnew body. ^x\nafter');
+  });
+
+  it('respects an anchor the caller already included in the body', () => {
+    const result = replaceBlock('original. ^x', 'x', 'new body ^x');
+    expect(result.content).toBe('new body ^x');
+  });
+
+  it('throws BlockNotFoundError when the anchor is missing', () => {
+    expect(() => replaceBlock('no anchor here', 'missing', 'x')).toThrow(BlockNotFoundError);
+  });
+});
+
 describe('applyPatchOp', () => {
   it('routes to the matching transform', () => {
     expect(applyPatchOp('a', { type: 'append', text: 'b' }).content).toBe('a\nb');
@@ -93,5 +133,12 @@ describe('applyPatchOp', () => {
     expect(
       applyPatchOp('## H\nold', { type: 'replace_section', heading: '## H', body: 'new' }).content,
     ).toBe('## H\nnew');
+    expect(
+      applyPatchOp('paragraph ^x\n\nafter', {
+        type: 'replace_block',
+        blockId: 'x',
+        body: 'fresh',
+      }).content,
+    ).toBe('fresh ^x\n\nafter');
   });
 });

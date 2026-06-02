@@ -5,7 +5,7 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-02 (granular agent writes)_
+_Last updated: 2026-06-02 (structured knowledge)_
 
 ---
 
@@ -28,22 +28,25 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 ```
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
-  FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags)
-    Activity|Review)               /api/file PATCH  granular edits  patch.ts (append/prepend/
-  MarkdownPreviewPane (react-      /api/dir      create folder        replace_section)
-    markdown: GFM/math/highlight   /api/path     move / delete      search.ts  (text match)
-    + wikilinks)                   /api/backlinks        link graph semantic.ts (TF-IDF)
-  BacklinksPanel / ActivityPanel   /api/search           full-text  markdown/remarkWikilinks.ts
-  SearchDialog (Text|Semantic)     /api/semantic-search  ranked     Audit/Search/Proposal/Patch
-  ReviewPanel (proposals)          /api/audit            provenance   types
-  api/files.ts (HTTP client)       /api/proposals[/resolve]  review queue
-  openrouter/ (Fix Format)         storage/ (FileRepository, PathResolver,
+  FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags,
+    Activity|Review)               /api/file PATCH  granular edits    typed `rel:` aliases)
+  MarkdownPreviewPane (react-      /api/dir      create folder      patch.ts (append/prepend/
+    markdown: GFM/math/highlight   /api/path     move / delete       replace_section/_block,
+    + wikilinks + ^block-anchors)  /api/backlinks        link graph    ensure_id)
+  BacklinksPanel / ActivityPanel   /api/block            block read blocks.ts (^id helpers)
+  SearchDialog (Text|Semantic)     /api/block-anchors    list ^ids  noteId.ts (stable id)
+  ReviewPanel (proposals)          /api/search           full-text  search.ts  (text match)
+  api/files.ts (HTTP client)       /api/semantic-search  ranked     semantic.ts (TF-IDF)
+  openrouter/ (Fix Format)         /api/audit            provenance markdown/remarkWikilinks.ts
+                                   /api/proposals[/resolve]  review queue
+                                   storage/ (FileRepository, PathResolver,
                                               AuditLog, ProposalStore, IdempotencyCache)
 
-apps/mcp (MCP stdio server, 14 tools) — proxies the HTTP API: list/read/create/
+apps/mcp (MCP stdio server, 16 tools) — proxies the HTTP API: list/read/create/
   update/patch/search/semantic_search/backlinks/recent_activity/move/delete plus
-  propose_edit + list_proposals. Writes carry X-Actor: agent:mcp, so they land
-  in the human Activity feed; proposals await human approval in the Review tab.
+  read_block, get_block_anchors, propose_edit + list_proposals. Writes carry
+  X-Actor: agent:mcp, so they land in the human Activity feed; proposals await
+  human approval in the Review tab.
 ```
 
 Key facts an agent must know:
@@ -84,7 +87,9 @@ Key facts an agent must know:
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`     |
 | Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool |
 | section + idempotency + dry-run)            |        |                                                      |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (14 tools) — proxies API as `agent:mcp`   |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`     |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                       |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — proxies API as `agent:mcp`   |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
@@ -119,7 +124,7 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | **Provenance**: per-change attribution + audit feed  |    P0    |   ✅   |
 | agent-edit review/approval queue                     |    P1    |   ✅   |
 | Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
-| Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
+| Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ✅   |
 | typed link graph)                                    |          |        |
 | Section/append/patch writes + idempotency + dry-run  |    P1    |   ✅   |
 | Live state (SSE/WebSocket + file watcher)            |    P2    |   ⬜   |
@@ -128,9 +133,10 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 
 ‡ chunking + TF-IDF cosine ranking shipped (`semantic.ts`, no API key, runs
 offline); swapping in real vector embeddings via a provider is the follow-up.
-◑ = wikilink graph + tags exist; note IDs / block anchors still open. The
-audit feed records attribution; an explicit human review/approval queue for
-agent edits is the natural next provenance step.
+Structured knowledge: Obsidian-style block anchors (`^id`), a frontmatter
+`id:` for stable note identity (opt-in), and typed wikilinks
+`[[Target|rel:type]]` all shipped together; a visual link graph view is the
+remaining follow-up.
 
 ---
 
@@ -176,6 +182,22 @@ next.
    so a retried patch is a no-op (in-memory LRU cache; resets on API
    restart), supports `dryRun` to preview without writing or auditing, and
    records audit attribution via `X-Actor`.
+9. **Slice 8 — Structured knowledge.** ✅ Done.
+   Obsidian-style **block anchors** (`^id`) give agents stable addresses
+   inside a note. Pure helpers live in `@repo/shared` (`blocks.ts`):
+   `extractBlockAnchors`, `findBlock` (paragraph / list-item /
+   heading-section), `upsertBlockAnchor`. `GET /api/block` returns a block
+   - surrounding context; `GET /api/block-anchors` lists every anchor.
+     `PATCH /api/file` gains a `replace_block` op (anchor re-attached so the
+     block stays addressable) and an `ensure_id` op (adds frontmatter `id:`
+     if missing — idempotent). `/api/file` and the patch endpoint accept
+     `id=` as an alternative to `path=`. Wikilink parsing recognizes
+     `[[Target|rel:supports]]` and `/api/backlinks` surfaces the relation
+     (`type`). The MCP server adds `read_block` and `get_block_anchors`, and
+     `patch_note` exposes `replace_block` / `ensure_id`. The preview
+     unobtrusively renders trailing `^id` markers; everything else stays the
+     same. Provenance is preserved — block writes audit under the requesting
+     actor like any other PATCH.
 
 ### Prioritization
 
@@ -187,15 +209,14 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
 ### Next up (open, in priority order)
 
-9. **Structured knowledge for precise retrieval/citation.** Stable note IDs and
-   block anchors (`^id`) so agents can reference a specific paragraph; typed links.
 10. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
     Activity feed / Review queue) updates the moment an agent writes.
 11. **Real embeddings + index cache + context bundles.** Swap the TF-IDF ranker
     for vector embeddings (remote `/v1/embeddings` or on-device); cache the
     chunk/IDF index (invalidate on writes); add a token-budgeted context-bundle
     endpoint for RAG.
-12. **Visual graph view** (human) — render the wikilink graph; Mermaid diagrams.
+12. **Visual graph view** (human) — render the wikilink graph (now with `rel:`
+    relations); Mermaid diagrams.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily

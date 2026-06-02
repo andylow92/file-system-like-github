@@ -38,6 +38,11 @@ export interface Backlink {
   path: string;
   /** Display name (basename) of the linking note. */
   name: string;
+  /**
+   * Typed relation extracted from the wikilink, e.g. `[[Target|rel:supports]]`
+   * → `"supports"`. Absent when the link did not carry a `rel:` marker.
+   */
+  type?: string;
 }
 
 export type AuditAction = 'create' | 'update' | 'move' | 'delete' | 'create_dir';
@@ -101,7 +106,9 @@ export interface EditProposal {
   resolvedBy?: string;
 }
 
+export * from './blocks.js';
 export * from './markdown.js';
+export * from './noteId.js';
 export * from './patch.js';
 export * from './search.js';
 export * from './semantic.js';
