@@ -9,6 +9,11 @@ over a filesystem-backed API) that is being grown into a **shared "brain"**:
 plain markdown files that **humans edit and read**, and that **agents can also
 read, search, link, and write** — with every change legible to the human.
 
+If you are an agent operating this vault, you do not have to scrape the UI:
+there is a first-class **MCP server** (`apps/mcp`) that exposes the vault as
+tools, and every write you make is recorded with attribution so the human can
+see it. See _What's built_ below.
+
 ---
 
 ## Where the knowledge lives (route yourself here)
@@ -21,10 +26,38 @@ Always orient yourself using these documents before acting:
 | How to run, test, and validate the app          | [`docs/implementation.md`](docs/implementation.md) → _Commands_  |
 | Manual integration checks                       | [`docs/integration-test-plan.md`](docs/integration-test-plan.md) |
 | Backend API endpoints + request/response shapes | [`apps/api/README.md`](apps/api/README.md)                       |
+| Agent tools (MCP) + how writes are attributed   | [`apps/mcp/README.md`](apps/mcp/README.md)                       |
 | Project overview / human-facing pitch           | [`README.md`](README.md)                                         |
 
 `docs/implementation.md` is the **source of truth for project state**. When you
 finish a unit of work, update it (see _Goal-driven execution_ below).
+
+---
+
+## What's built (current surface)
+
+Done and on `main`-track (details + status tables in `docs/implementation.md`):
+
+- **Files & tree** — GitHub-style tree, CRUD for `.md` files and folders,
+  optimistic-concurrency writes (`etag` / `lastModified`), `CONTENT_ROOT`
+  sandboxing. Hidden dotfiles/dirs (e.g. `.fsbrain/`) are excluded from the tree.
+- **Links & metadata** — `[[wikilinks]]` (clickable, resolved), a backlinks
+  panel (`GET /api/backlinks`), and frontmatter + `#tags` parsing. The pure
+  helpers live in `@repo/shared` (`markdown.ts`).
+- **Search** — full-text + tag search (`GET /api/search`), with a Ctrl/Cmd-K
+  quick-switcher in the web UI (prefix `#` to search a tag).
+- **Provenance** — mutations read an `X-Actor` header (default `human`) and are
+  appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
+  `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
+- **MCP server** (`apps/mcp`) — a stdio server exposing 10 vault tools
+  (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
+  `get_backlinks`, `recent_activity`, `create_folder`, `move_path`,
+  `delete_path`). It proxies the HTTP API, so agent writes flow through the same
+  validation, concurrency, and audit trail, attributed as `agent:mcp`.
+
+**Not yet built (next):** a real CommonMark/GFM renderer (Slice 2), an
+agent-edit review/approval queue, semantic search, and a live SSE/file-watcher
+layer. See the roadmap in `docs/implementation.md`.
 
 ---
 
@@ -33,9 +66,10 @@ finish a unit of work, update it (see _Goal-driven execution_ below).
 ```
 apps/
   api/   # Node HTTP server + filesystem storage (CONTENT_ROOT). Endpoints under /api/*.
-  web/   # React + Vite UI: file tree, editor/preview tabs.
+  web/   # React + Vite UI: file tree, editor/preview/activity tabs, Ctrl/Cmd-K search.
+  mcp/   # MCP stdio server exposing the vault as agent tools (proxies the API).
 packages/
-  shared/  # Shared TypeScript contracts + pure markdown utilities (@repo/shared).
+  shared/  # Shared TS contracts + pure utilities: markdown.ts (links/tags), search.ts.
 docs/      # Agent + human knowledge base. Start at implementation.md.
 ```
 
@@ -43,6 +77,10 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
   runner of its own — co-locate its unit tests in `apps/api` (node vitest).
 - The API is **markdown-focused** and sandboxed to `CONTENT_ROOT`; path handling
   rejects traversal and absolute paths. Keep those guarantees intact.
+- **Provenance is a guarantee, not an option:** any new mutating path must read
+  `X-Actor` and record an `AuditEntry`. Don't add writes that bypass the log.
+- Relative imports under the API/MCP packages (NodeNext) use explicit `.js`
+  extensions. `npm run build` is green across all workspaces — keep it green.
 
 ---
 
