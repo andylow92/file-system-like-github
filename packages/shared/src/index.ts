@@ -40,4 +40,37 @@ export interface Backlink {
   name: string;
 }
 
-export * from './markdown';
+export type AuditAction = 'create' | 'update' | 'move' | 'delete' | 'create_dir';
+
+/** A single recorded change to the vault, for human-visible provenance. */
+export interface AuditEntry {
+  /** ISO timestamp of the change. */
+  ts: string;
+  /** Who made the change, e.g. `human` or `agent:mcp`. */
+  actor: string;
+  action: AuditAction;
+  /** Logical path affected (source path for moves). */
+  path: string;
+  /** Destination path, for moves. */
+  toPath?: string;
+  /** Resulting content etag, when applicable. */
+  etag?: string;
+}
+
+/** A single full-text / tag search hit. */
+export interface SearchMatch {
+  path: string;
+  /** Basename of the matched note. */
+  name: string;
+  /** Higher means more relevant (occurrence count, or 1 for tag-only hits). */
+  score: number;
+  /** Excerpt of the first matching line (empty for tag-only hits). */
+  snippet: string;
+  /** 1-based line of the first match (0 for tag-only hits). */
+  line: number;
+  /** Tags declared by the note. */
+  tags: string[];
+}
+
+export * from './markdown.js';
+export * from './search.js';

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FileNode } from '@repo/shared';
+import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
 import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
+import { SearchDialog } from './components/SearchDialog';
 import { ModalDialog } from './components/ModalDialog';
 import { RichTextEditorPane } from './components/RichTextEditorPane';
 import {
@@ -36,7 +38,11 @@ export function App() {
   const [savedFiles, setSavedFiles] = useState<Record<string, RemoteFile>>({});
   const [draftContents, setDraftContents] = useState<Record<string, string>>({});
   const [modalState, setModalState] = useState<AppModalState | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activityKey, setActivityKey] = useState(0);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const bumpActivity = () => setActivityKey((value) => value + 1);
 
   const currentSavedFile = selectedFilePath ? savedFiles[selectedFilePath] : undefined;
   const currentSavedMarkdown = currentSavedFile?.content ?? '';
@@ -157,13 +163,18 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const isSaveHotkey = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
-      if (!isSaveHotkey) {
+      const modifier = event.ctrlKey || event.metaKey;
+
+      if (modifier && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
         return;
       }
 
-      event.preventDefault();
-      void saveCurrentFile();
+      if (modifier && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void saveCurrentFile();
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -231,6 +242,7 @@ export function App() {
     });
 
     await refreshTreeAndCurrentFile(selectedFilePath);
+    bumpActivity();
   }
 
   return (
@@ -248,6 +260,7 @@ export function App() {
           try {
             await createFile(path, '');
             await refreshTreeAndCurrentFile(path);
+            bumpActivity();
           } catch (error: unknown) {
             setSelectedFilePath((current) => (current === path ? null : current));
             throw new Error(getErrorMessage(error));
@@ -256,6 +269,7 @@ export function App() {
         onCreateFolder={async (path) => {
           await createDirectory(path);
           await refreshTree();
+          bumpActivity();
         }}
         onRenamePath={async (fromPath, toPath) => {
           const previousSelected = selectedFilePath;
@@ -269,6 +283,7 @@ export function App() {
           try {
             await renamePath(fromPath, toPath);
             await refreshTree();
+            bumpActivity();
             setSelectedFilePath(remappedPath ?? null);
 
             if (!remappedPath) {
@@ -305,6 +320,7 @@ export function App() {
           try {
             await deletePath(path, recursive);
             await refreshTree();
+            bumpActivity();
 
             if (previousSelected === path) {
               setDraftContents((current) => {
@@ -367,8 +383,24 @@ export function App() {
               }}
             />
           }
+          activity={
+            <ActivityPanel
+              refreshKey={activityKey}
+              onSelectFile={(path) => {
+                void navigateToFile(path);
+              }}
+            />
+          }
         />
       </GlobalLayout>
+
+      <SearchDialog
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelectFile={(path) => {
+          void navigateToFile(path);
+        }}
+      />
 
       <ModalDialog
         open={Boolean(modalState)}

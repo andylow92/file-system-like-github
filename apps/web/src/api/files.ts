@@ -1,4 +1,4 @@
-import type { ApiResponse, Backlink, FileNode } from '@repo/shared';
+import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
 
 export interface RemoteFile {
   path: string;
@@ -72,6 +72,46 @@ export async function fetchFile(path: string): Promise<RemoteFile> {
 
 export async function fetchBacklinks(path: string): Promise<Backlink[]> {
   return requestJson<Backlink[]>(`/api/backlinks?path=${encodeURIComponent(path)}`, {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+export async function searchNotes(params: {
+  query?: string;
+  tag?: string;
+  limit?: number;
+}): Promise<SearchMatch[]> {
+  const search = new URLSearchParams();
+  if (params.query) {
+    search.set('q', params.query);
+  }
+  if (params.tag) {
+    search.set('tag', params.tag);
+  }
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  return requestJson<SearchMatch[]>(`/api/search?${search.toString()}`, {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+export async function fetchAudit(
+  params: { path?: string; limit?: number } = {},
+): Promise<AuditEntry[]> {
+  const search = new URLSearchParams();
+  if (params.path) {
+    search.set('path', params.path);
+  }
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  const query = search.toString();
+  return requestJson<AuditEntry[]>(`/api/audit${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: {},
   });

@@ -4,9 +4,10 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import type { ApiResponse, Backlink, FileNode } from '@repo/shared';
-import { extractWikilinks, resolveWikilink } from '@repo/shared';
+import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
+import { extractWikilinks, findTextMatch, parseNote, resolveWikilink } from '@repo/shared';
 
+import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
@@ -21,6 +22,9 @@ interface RequestContext {
   url: URL;
   repository: FileRepository;
   pathResolver: PathResolver;
+  auditLog: AuditLog;
+  /** Who is making the request, from the `X-Actor` header (default `human`). */
+  actor: string;
 }
 
 type ErrorCode =
@@ -48,6 +52,25 @@ interface FileResponse {
 export interface FileRouteDependencies {
   repository: FileRepository;
   pathResolver: PathResolver;
+  auditLog: AuditLog;
+}
+
+const MAX_ACTOR_LENGTH = 64;
+
+function readActor(req: http.IncomingMessage): string {
+  const header = req.headers['x-actor'];
+  const value = Array.isArray(header) ? header[0] : header;
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, MAX_ACTOR_LENGTH) : 'human';
+}
+
+/** Best-effort audit write: provenance must never break the underlying op. */
+async function recordAudit(context: RequestContext, entry: Omit<AuditEntry, 'ts' | 'actor'>) {
+  try {
+    await context.auditLog.record({ actor: context.actor, ...entry });
+  } catch {
+    // Intentionally swallowed — the file operation has already succeeded.
+  }
 }
 
 function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
@@ -240,6 +263,7 @@ async function handlePutFile(context: RequestContext): Promise<void> {
 
   await repository.updateMarkdownFile(logicalPath, content);
   const updated = await loadFileFromContext(context, logicalPath);
+  await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
   sendJson(res, 200, { success: true, data: updated });
 }
 
@@ -261,18 +285,22 @@ async function handlePostFile(context: RequestContext): Promise<void> {
   }
 
   const created = await loadFileFromContext(context, logicalPath);
+  await recordAudit(context, { action: 'create', path: logicalPath, etag: created.etag });
   sendJson(res, 201, { success: true, data: created });
 }
 
-async function handlePostDir({ req, res, repository }: RequestContext): Promise<void> {
+async function handlePostDir(context: RequestContext): Promise<void> {
+  const { req, res, repository } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
   const logicalPath = requireString(body.path, 'path');
 
   await repository.createDirectory(logicalPath);
+  await recordAudit(context, { action: 'create_dir', path: logicalPath });
   sendJson(res, 201, { success: true, data: { path: logicalPath } });
 }
 
-async function handlePatchPath({ req, res, pathResolver }: RequestContext): Promise<void> {
+async function handlePatchPath(context: RequestContext): Promise<void> {
+  const { req, res, pathResolver } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
   const fromPath = requireString(body.fromPath, 'fromPath');
   const toPath = requireString(body.toPath, 'toPath');
@@ -309,13 +337,15 @@ async function handlePatchPath({ req, res, pathResolver }: RequestContext): Prom
   await fs.mkdir(path.dirname(destinationAbsolutePath), { recursive: true });
   await fs.rename(sourceAbsolutePath, destinationAbsolutePath);
 
+  await recordAudit(context, { action: 'move', path: fromPath, toPath });
   sendJson(res, 200, {
     success: true,
     data: { fromPath, toPath },
   });
 }
 
-async function handleDeletePath({ req, res, url, repository }: RequestContext): Promise<void> {
+async function handleDeletePath(context: RequestContext): Promise<void> {
+  const { req, res, url, repository } = context;
   const logicalPath = requireString(url.searchParams.get('path'), 'path');
   const recursiveFlag = url.searchParams.get('recursive');
   const recursive = recursiveFlag === '1' || recursiveFlag === 'true';
@@ -325,7 +355,69 @@ async function handleDeletePath({ req, res, url, repository }: RequestContext): 
   }
 
   await repository.deletePath(logicalPath, { recursive });
+  await recordAudit(context, { action: 'delete', path: logicalPath });
   sendJson(res, 200, { success: true, data: { path: logicalPath, deleted: true } });
+}
+
+const DEFAULT_SEARCH_LIMIT = 50;
+
+async function handleSearch({ res, url, repository }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const tag = (url.searchParams.get('tag') ?? '').trim().replace(/^#/, '');
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_SEARCH_LIMIT;
+
+  if (!query && !tag) {
+    throw new Error('"q" or "tag" is required');
+  }
+
+  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  const tagLower = tag.toLowerCase();
+  const matches: SearchMatch[] = [];
+
+  for (const filePath of allPaths) {
+    const content = await repository.readMarkdownFile(filePath);
+    const note = parseNote(content);
+
+    if (tag && !note.tags.some((noteTag) => noteTag.toLowerCase() === tagLower)) {
+      continue;
+    }
+
+    const name = filePath.split('/').pop() ?? filePath;
+
+    if (query) {
+      const textMatch = findTextMatch(note.body, query);
+      const nameMatches = name.toLowerCase().includes(query.toLowerCase());
+      if (!textMatch && !nameMatches) {
+        continue;
+      }
+
+      matches.push({
+        path: filePath,
+        name,
+        score: (textMatch?.count ?? 0) + (nameMatches ? 1 : 0),
+        snippet: textMatch?.snippet ?? '',
+        line: textMatch?.line ?? 0,
+        tags: note.tags,
+      });
+      continue;
+    }
+
+    // Tag-only search.
+    matches.push({ path: filePath, name, score: 1, snippet: '', line: 0, tags: note.tags });
+  }
+
+  matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  sendJson(res, 200, { success: true, data: matches.slice(0, limit) });
+}
+
+async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<void> {
+  const pathFilter = url.searchParams.get('path')?.trim() || undefined;
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 50;
+
+  const entries = await auditLog.list({ path: pathFilter, limit });
+  sendJson(res, 200, { success: true, data: entries });
 }
 
 async function executeHandler(
@@ -360,7 +452,7 @@ export async function handleFileRoutes(
   }
 
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
-  const context: RequestContext = { req, res, url, ...dependencies };
+  const context: RequestContext = { req, res, url, actor: readActor(req), ...dependencies };
 
   if (req.method === 'GET' && url.pathname === '/api/tree') {
     await executeHandler(context, handleGetTree);
@@ -374,6 +466,16 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/backlinks') {
     await executeHandler(context, handleGetBacklinks);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/search') {
+    await executeHandler(context, handleSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/audit') {
+    await executeHandler(context, handleGetAudit);
     return { handled: true };
   }
 

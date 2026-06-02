@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { PathResolver, StoragePathError } from './pathResolver';
+import { PathResolver, StoragePathError } from './pathResolver.js';
 
 export interface TreeNode {
   name: string;
@@ -57,6 +57,12 @@ export function createFileRepository(pathResolver: PathResolver): FileRepository
     const nodes: TreeNode[] = [];
 
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      // Hidden files/directories (e.g. the `.fsbrain` audit store) are internal
+      // and never surfaced in the user-facing tree.
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+
       const absolutePath = path.join(basePath, entry.name);
       pathResolver.ensureInsideRoot(absolutePath);
 
