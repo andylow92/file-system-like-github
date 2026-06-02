@@ -31,7 +31,9 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 | `propose_edit`      | Propose a create/update/delete for human review.                        |
 | `list_proposals`    | List proposals + review status (resolve is human).                      |
 
-## Run
+`update_note` and `move_path` reject stale writes via the API's optimistic
+concurrency check. There is **no** `resolve` tool: edit-proposal resolution is
+human-only by design.
 
 Build once, then launch:
 
@@ -58,6 +60,9 @@ Or attach to an externally-running API:
 ```bash
 API_BASE_URL=http://localhost:3001 npm --workspace @repo/mcp run start
 ```
+
+After building, the bin is reachable as `fsbrain-mcp` (npm `bin`) or directly
+as `node apps/mcp/dist/server.js`.
 
 ## Configuration
 
