@@ -231,7 +231,11 @@ export function semanticSearch(
     return [];
   }
 
-  const chunkTokens = chunks.map((chunk) => tokenize(chunk.text));
+  // Include the chunk's heading in its ranked tokens (the heading is a strong
+  // relevance signal) while keeping `chunk.text` clean for the display snippet.
+  const chunkTokens = chunks.map((chunk) =>
+    tokenize(chunk.heading ? `${chunk.heading}\n${chunk.text}` : chunk.text),
+  );
 
   const documentFrequency = new Map<string, number>();
   for (const tokens of chunkTokens) {

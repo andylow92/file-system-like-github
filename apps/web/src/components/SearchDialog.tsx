@@ -205,15 +205,20 @@ export function SearchDialog({ open, onClose, onSelectFile }: SearchDialogProps)
 async function runSearch(mode: SearchMode, trimmed: string): Promise<DisplayItem[]> {
   if (mode === 'semantic') {
     const hits = await semanticSearch({ query: trimmed, limit: 20 });
-    return hits.map((hit) => ({
-      key: `${hit.path}#${hit.chunkIndex}`,
-      path: hit.path,
-      title: basename(hit.path),
-      subtitle: hit.heading ? `${hit.path} › ${hit.heading}` : hit.path,
-      snippet: hit.snippet,
-      tags: [],
-      score: hit.score,
-    }));
+    // Hits are per-chunk and sorted by score; collapse to the best chunk per
+    // note so one file doesn't dominate the human switcher.
+    const seen = new Set<string>();
+    return hits
+      .filter((hit) => !seen.has(hit.path) && Boolean(seen.add(hit.path)))
+      .map((hit) => ({
+        key: hit.path,
+        path: hit.path,
+        title: basename(hit.path),
+        subtitle: hit.heading ? `${hit.path} › ${hit.heading}` : hit.path,
+        snippet: hit.snippet,
+        tags: [],
+        score: hit.score,
+      }));
   }
 
   const params = trimmed.startsWith('#') ? { tag: trimmed.slice(1) } : { query: trimmed };

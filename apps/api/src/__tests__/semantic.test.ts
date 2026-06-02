@@ -60,4 +60,16 @@ describe('semanticSearch', () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].path).toBe('finance/budget.md');
   });
+
+  it('ranks on heading terms even when the body never repeats them', () => {
+    const docs = [
+      {
+        path: 'ops/backups.md',
+        content: '# Backup strategy\nSnapshots run nightly to cold storage.',
+      },
+      { path: 'ops/network.md', content: '# Networking\nVLANs, routing, and firewall rules.' },
+    ];
+    const hits = semanticSearch(docs, 'backups');
+    expect(hits[0]?.path).toBe('ops/backups.md');
+  });
 });

@@ -163,7 +163,9 @@ next.
 
 7. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
    embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
-   context-bundle endpoint for RAG; add Mermaid diagrams to the renderer.
+   context-bundle endpoint for RAG. Cache the chunk/IDF index instead of
+   re-reading + re-ranking the whole vault per query (invalidate on writes via
+   the existing mutation/audit paths). Add Mermaid diagrams to the renderer.
 8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
    propose edits a human approves/rejects, with diffs. Closes the trust loop.
 9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
