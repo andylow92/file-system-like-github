@@ -1,4 +1,11 @@
-import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
+import type {
+  ApiResponse,
+  AuditEntry,
+  Backlink,
+  FileNode,
+  SearchMatch,
+  SemanticHit,
+} from '@repo/shared';
 
 export interface RemoteFile {
   path: string;
@@ -94,6 +101,21 @@ export async function searchNotes(params: {
   }
 
   return requestJson<SearchMatch[]>(`/api/search?${search.toString()}`, {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+export async function semanticSearch(params: {
+  query: string;
+  limit?: number;
+}): Promise<SemanticHit[]> {
+  const search = new URLSearchParams({ q: params.query });
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  return requestJson<SemanticHit[]>(`/api/semantic-search?${search.toString()}`, {
     method: 'GET',
     headers: {},
   });

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuditEntry, FileNode, SearchMatch } from '@repo/shared';
+import type { AuditEntry, FileNode, SearchMatch, SemanticHit } from '@repo/shared';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -104,5 +104,22 @@ describe('search, audit, and hidden-file handling', () => {
 
     const missingParams = await api('GET', '/api/search');
     expect(missingParams.status).toBe(422);
+  });
+
+  it('ranks notes by relevance via semantic search', async () => {
+    await api('POST', '/api/file', {
+      body: { path: 'cats.md', content: '# Cats\nFelines purr and chase mice; great pets.' },
+    });
+    await api('POST', '/api/file', {
+      body: { path: 'budget.md', content: '# Budget\nRevenue, expenses, and cash flow.' },
+    });
+
+    const result = await api<SemanticHit[]>('GET', '/api/semantic-search?q=feline pet that purrs');
+    expect(result.status).toBe(200);
+    expect(result.body.data?.[0]?.path).toBe('cats.md');
+    expect(result.body.data?.[0]?.score).toBeGreaterThan(0);
+
+    const missing = await api('GET', '/api/semantic-search');
+    expect(missing.status).toBe(422);
   });
 });

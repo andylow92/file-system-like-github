@@ -74,3 +74,4 @@ export interface SearchMatch {
 
 export * from './markdown.js';
 export * from './search.js';
+export * from './semantic.js';

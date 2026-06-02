@@ -5,7 +5,13 @@ import path from 'node:path';
 import { URL } from 'node:url';
 
 import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
-import { extractWikilinks, findTextMatch, parseNote, resolveWikilink } from '@repo/shared';
+import {
+  extractWikilinks,
+  findTextMatch,
+  parseNote,
+  resolveWikilink,
+  semanticSearch,
+} from '@repo/shared';
 
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
@@ -411,6 +417,27 @@ async function handleSearch({ res, url, repository }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: matches.slice(0, limit) });
 }
 
+async function handleSemanticSearch({ res, url, repository }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 10;
+
+  if (!query) {
+    throw new Error('"q" is required');
+  }
+
+  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  const documents = await Promise.all(
+    allPaths.map(async (filePath) => ({
+      path: filePath,
+      content: await repository.readMarkdownFile(filePath),
+    })),
+  );
+
+  const hits = semanticSearch(documents, query, { limit });
+  sendJson(res, 200, { success: true, data: hits });
+}
+
 async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<void> {
   const pathFilter = url.searchParams.get('path')?.trim() || undefined;
   const limitParam = Number(url.searchParams.get('limit'));
@@ -471,6 +498,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/search') {
     await executeHandler(context, handleSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/semantic-search') {
+    await executeHandler(context, handleSemanticSearch);
     return { handled: true };
   }
 

@@ -30,15 +30,17 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
   FileViewerTabs (Prev|Edit|       /api/file     read/create/update markdown.ts (links/tags)
     Split|Activity)                /api/dir      create folder      search.ts  (text match)
-  MarkdownPreviewPane (+wikilinks) /api/path     move / delete      Audit/Search types
-  BacklinksPanel / ActivityPanel   /api/backlinks  link graph
-  SearchDialog (Ctrl/Cmd-K)        /api/search   full-text + tags
-  api/files.ts (HTTP client)       /api/audit    provenance feed
-  openrouter/ (Fix Format)         storage/ (FileRepository, PathResolver, AuditLog)
+  MarkdownPreviewPane (+wikilinks) /api/path     move / delete      semantic.ts (TF-IDF)
+  BacklinksPanel / ActivityPanel   /api/backlinks    link graph      Audit/Search types
+  SearchDialog (Text|Semantic)     /api/search       full-text + tags
+  api/files.ts (HTTP client)       /api/semantic-search  ranked retrieval
+  openrouter/ (Fix Format)         /api/audit        provenance feed
+                                   storage/ (FileRepository, PathResolver, AuditLog)
 
 apps/mcp (MCP stdio server) — proxies the HTTP API, exposing the vault as agent
-  tools (list/read/create/update/search/backlinks/recent_activity/move/delete).
-  Writes carry X-Actor: agent:mcp, so they land in the human Activity feed.
+  tools (list/read/create/update/search/semantic_search/backlinks/
+  recent_activity/move/delete). Writes carry X-Actor: agent:mcp, so they land
+  in the human Activity feed.
 ```
 
 Key facts an agent must know:
@@ -73,6 +75,7 @@ Key facts an agent must know:
 | Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                   |
 | Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`                         |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
 | **MCP server** (agent tools)                |   ✅   | `apps/mcp` — proxies API, attributes `agent:mcp`     |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
@@ -107,7 +110,7 @@ switcher + split done; palette/outline/daily-notes open.
 | Machine-facing API / **MCP server** over the vault   |    P0    |   ✅   |
 | **Provenance**: per-change attribution + audit feed  |    P0    |   ✅   |
 | agent-edit review/approval queue                     |    P1    |   ⬜   |
-| Semantic retrieval (chunking + embeddings + hybrid)  |    P1    |   ⬜   |
+| Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
 | Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
 | typed link graph)                                    |          |        |
 | Section/append/patch writes + idempotency + dry-run  |    P1    |   ⬜   |
@@ -115,6 +118,8 @@ switcher + split done; palette/outline/daily-notes open.
 | Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
 
+‡ chunking + TF-IDF cosine ranking shipped (`semantic.ts`, no API key, runs
+offline); swapping in real vector embeddings via a provider is the follow-up.
 ◑ = wikilink graph + tags exist; note IDs / block anchors still open. The
 audit feed records attribution; an explicit human review/approval queue for
 agent edits is the natural next provenance step.
@@ -138,18 +143,24 @@ next.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
+5. **Slice 5 — Semantic search.** ✅ Done (local).
+   `semantic.ts` chunks notes and ranks them by TF-IDF cosine similarity;
+   `GET /api/semantic-search`, a Text|Semantic toggle in `SearchDialog`, and a
+   `semantic_search` MCP tool. Runs offline, no API key. A real embedding
+   provider can replace the ranking engine without changing callers.
 
 ### Next up (open)
 
-5. **Slice 2 — Real renderer.** Replace the hand-rolled parser with
+6. **Slice 2 — Real renderer.** Replace the hand-rolled parser with
    `remark`/`rehype` (tables, images, task lists, h3–h6, links, code highlight,
-   math). Keep the Slice 1 wikilink/tag rendering as plugins. _Highest remaining
-   human-facing win._
-6. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
+   math). Keep the Slice 1 wikilink/tag rendering as plugins. _(In review on a
+   separate branch.)_
+7. **Embeddings provider.** Swap the TF-IDF ranker for real vector embeddings
+   (remote `/v1/embeddings` or on-device), plus a token-budgeted context-bundle
+   endpoint for RAG.
+8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
    propose edits a human approves/rejects, with diffs. Closes the trust loop.
-7. **Slice 5 — Semantic search.** Chunking + embeddings + hybrid retrieval; a
-   token-budgeted context-bundle endpoint for RAG.
-8. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
+9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
    Activity feed) updates the moment an agent writes.
 
 Slices 1–4 above close most of the Obsidian-for-humans gap and build what
