@@ -5,7 +5,27 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-02 (structured knowledge)_
+_Last updated: 2026-06-02 (clone-and-run hardening)_
+
+> **Latest change.** The project is now **clone-and-run testable** for an
+> agent. `npm run start:agent` launches the self-contained `fsbrain-mcp` —
+> when `API_BASE_URL` is unset it starts the storage API in-process on
+> `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT` (default
+> `~/.fsbrain/vault`), seeds a `welcome.md` on an empty vault, prints a
+> one-line readiness banner to stderr, and bundles to a runnable
+> `dist/server.js` (npm bin `fsbrain-mcp`). Copy-paste host configs for
+> OpenClaw / Claude Desktop / Claude Code / Cursor live in
+> [`CONNECT.md`](CONNECT.md). The guarantee is enforced by an automated
+> fresh-clone e2e test (`apps/mcp/src/__tests__/freshClone.test.ts`) that
+> spawns the bin as a real stdio child against a temp vault, drives it via
+> the MCP SDK client, and asserts writes land both on disk and in the audit
+> log — runs in `npm test`.
+>
+> **Heads-up for existing local setups.** The default `CONTENT_ROOT` moved
+> from `<cwd>/content` to `~/.fsbrain/vault`. Existing `./content` notes
+> aren't deleted, but `npm run dev:api` / `dev:web` without `CONTENT_ROOT`
+> set will now read the new path. Set `CONTENT_ROOT=./content` (e.g. in
+> `apps/api/.env` or your shell) to keep the old location.
 
 ---
 
@@ -42,11 +62,15 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    storage/ (FileRepository, PathResolver,
                                               AuditLog, ProposalStore, IdempotencyCache)
 
-apps/mcp (MCP stdio server, 16 tools) — proxies the HTTP API: list/read/create/
-  update/patch/search/semantic_search/backlinks/recent_activity/move/delete plus
-  read_block, get_block_anchors, propose_edit + list_proposals. Writes carry
-  X-Actor: agent:mcp, so they land in the human Activity feed; proposals await
-  human approval in the Review tab.
+apps/mcp (MCP stdio server, 16 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/backlinks/recent_activity/move/delete
+  plus read_block, get_block_anchors, propose_edit + list_proposals. When
+  API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
+  port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
+  an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
+  one `node dist/server.js` (npm bin `fsbrain-mcp`). Writes carry X-Actor:
+  agent:mcp (override via MCP_ACTOR) and land in the human Activity feed;
+  proposals await human approval in the Review tab.
 ```
 
 Key facts an agent must know:
@@ -68,29 +92,31 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                |
-| ------------------------------------------- | :----: | ---------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                    |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                 |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`           |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)     |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                       |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents    |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                     |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                     |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                   |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview       |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex     |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
-| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`     |
-| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool |
-| section + idempotency + dry-run)            |        |                                                      |
-| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`     |
-| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                       |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — proxies API as `agent:mcp`   |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
+| Capability                                  | Status | Notes                                                     |
+| ------------------------------------------- | :----: | --------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                         |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                      |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)          |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                            |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents         |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                          |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                          |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                        |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview            |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex          |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                             |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)            |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`      |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`          |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool      |
+| section + idempotency + dry-run)            |        |                                                           |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`          |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                            |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`             |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`               |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                 |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -152,8 +178,19 @@ next.
    `GET /api/search` (text + tag), `search.ts` helper, Ctrl/Cmd-K `SearchDialog`
    (prefix `#` for tag search).
 3. **Slice 4 — MCP server.** ✅ Done.
-   `apps/mcp` stdio server proxying the HTTP API (now 14 tools); writes carry
-   `X-Actor: agent:mcp` and flow through the audit trail.
+   `apps/mcp` stdio server exposing the vault as 16 tools. Self-contained: when
+   `API_BASE_URL` is unset it starts the storage API in-process on
+   `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT`
+   (default `~/.fsbrain/vault`), and seeds a `welcome.md` on first run.
+   Bundled to a single-file bin via esbuild (`fsbrain-mcp` →
+   `apps/mcp/dist/server.js`) so an MCP host can spawn it with one
+   `node dist/server.js`. Writes carry `X-Actor: agent:mcp` (override via
+   `MCP_ACTOR`) and flow through the audit trail. Copy-paste host configs
+   for OpenClaw / Claude Desktop / Claude Code / Cursor:
+   [`CONNECT.md`](CONNECT.md). The clone-and-run guarantee is enforced by
+   `apps/mcp/src/__tests__/freshClone.test.ts`, which spawns the bin as a
+   real stdio child against a temp vault and asserts writes land on disk
+   and in the audit log — runs in `npm test`.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
@@ -245,10 +282,12 @@ above deepens agent interaction on the local machine.
 ## 7. Commands
 
 ```bash
-npm install        # install workspaces
-npm run dev:api    # API   → http://localhost:3001
-npm run dev:web    # web   → http://localhost:5173
-npm test           # all workspace tests (vitest)
-npm run lint       # eslint
-npm run build      # tsc/vite build across workspaces
+npm install          # install workspaces
+npm run dev:api      # API   → http://localhost:3001
+npm run dev:web      # web   → http://localhost:5173
+npm run start:agent  # self-contained MCP server on stdio (fsbrain-mcp)
+npm run doctor       # preflight: Node version + vault writable
+npm test             # all workspace tests (vitest), incl. fresh-clone MCP e2e
+npm run lint         # eslint
+npm run build        # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 ```

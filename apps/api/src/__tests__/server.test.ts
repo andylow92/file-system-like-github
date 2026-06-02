@@ -55,19 +55,17 @@ function requestJson<T>(
 
 describe('server bootstrap', () => {
   let workspaceRoot = '';
+  let contentRoot = '';
   let originalContentRoot: string | undefined;
-  let originalCwd = '';
 
   beforeEach(async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), 'api-server-root-'));
+    contentRoot = path.join(workspaceRoot, 'content');
     originalContentRoot = process.env.CONTENT_ROOT;
-    originalCwd = process.cwd();
-    delete process.env.CONTENT_ROOT;
-    process.chdir(workspaceRoot);
+    process.env.CONTENT_ROOT = contentRoot;
   });
 
   afterEach(async () => {
-    process.chdir(originalCwd);
     if (originalContentRoot === undefined) {
       delete process.env.CONTENT_ROOT;
     } else {
@@ -76,7 +74,7 @@ describe('server bootstrap', () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  it('starts and serves file routes when CONTENT_ROOT is unset', async () => {
+  it('starts and serves file routes, auto-creating CONTENT_ROOT', async () => {
     const config = loadConfig();
     const server = createServer(config);
 
@@ -96,7 +94,7 @@ describe('server bootstrap', () => {
     );
     expect(health.statusCode).toBe(200);
     expect(health.body.success).toBe(true);
-    expect(health.body.data.contentRoot).toBe(path.join(workspaceRoot, 'content'));
+    expect(health.body.data.contentRoot).toBe(contentRoot);
 
     const createDir = await requestJson<{ success: boolean }>(port, 'POST', '/api/dir', {
       path: 'docs',

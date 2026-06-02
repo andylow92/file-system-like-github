@@ -1,13 +1,14 @@
 # @repo/mcp — Vault MCP server
 
 An [MCP](https://modelcontextprotocol.io) server that exposes the markdown vault
-as tools an AI agent can call. It is a thin client over the HTTP API
-(`apps/api`), so every write goes through the same path validation,
-optimistic-concurrency checks, and **audit trail** as the web UI.
+as tools an AI agent can call. It is a **single-command launcher**: the storage
+API (`apps/api`) runs in-process on `127.0.0.1` by default, so an MCP host
+(OpenClaw, Claude Desktop, Claude Code, Cursor) only needs to spawn one stdio
+process.
 
-Agent writes are attributed via the `X-Actor` header (default `agent:mcp`), so
-they appear in the human-facing **Activity** feed — the human always sees what
-the agent did.
+Agent writes are attributed via the `X-Actor` header (default `agent:mcp`,
+override via `MCP_ACTOR`), so they appear in the human-facing **Activity**
+feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 
 ## Tools
 
@@ -32,30 +33,58 @@ the agent did.
 
 ## Run
 
-Start the API first, then the MCP server (stdio transport):
+Build once, then launch:
 
 ```bash
-npm run dev:api                       # terminal A
-npm --workspace @repo/mcp run start   # terminal B (or wire into an MCP client)
+npm install
+npm run build              # produces apps/mcp/dist/server.js
+npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
+```
+
+The server prints a one-line readiness banner on stderr:
+
+```
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=16 · actor=agent:mcp
+```
+
+For active development with auto-reload:
+
+```bash
+npm --workspace @repo/mcp run dev
+```
+
+Or attach to an externally-running API:
+
+```bash
+API_BASE_URL=http://localhost:3001 npm --workspace @repo/mcp run start
 ```
 
 ## Configuration
 
-| Env var        | Default                 | Purpose                             |
-| -------------- | ----------------------- | ----------------------------------- |
-| `API_BASE_URL` | `http://localhost:3001` | Where the vault HTTP API is served. |
-| `MCP_ACTOR`    | `agent:mcp`             | Actor label recorded on writes.     |
+| Env var        | Default              | Purpose                                                          |
+| -------------- | -------------------- | ---------------------------------------------------------------- |
+| `CONTENT_ROOT` | `~/.fsbrain/vault`   | Vault directory; auto-created on first run.                      |
+| `MCP_ACTOR`    | `agent:mcp`          | Actor label recorded on writes.                                  |
+| `API_BASE_URL` | _(unset)_            | When set, proxy this URL instead of starting the in-process API. |
+| `PORT`         | _(ephemeral)_        | Port for the in-process API (use `0` or omit for any).           |
+| `HOST`         | `127.0.0.1` in embed | Bind address for the in-process API.                             |
 
-## Example MCP client config
+When the vault is empty on first launch in embedded mode, the server seeds a
+`welcome.md` so an MCP host has something to list. (Running `npm run dev:api`
+against an empty vault does **not** auto-seed — only the MCP launcher does.)
 
-```json
-{
-  "mcpServers": {
-    "fsbrain-vault": {
-      "command": "npx",
-      "args": ["tsx", "apps/mcp/src/server.ts"],
-      "env": { "API_BASE_URL": "http://localhost:3001" }
-    }
-  }
-}
-```
+## Connect an MCP host
+
+Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
+[`../../docs/CONNECT.md`](../../docs/CONNECT.md).
+
+## Fresh-clone guarantee
+
+`src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
+against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
+It asserts `tools/list` returns all 16 expected names, round-trips
+`create_note` → `read_note` → `search_notes` → `semantic_search` →
+`propose_edit` → `list_proposals` → `recent_activity`, and confirms the write
+landed both on disk and in `.fsbrain/audit.jsonl`. A second test exercises
+the bundled `dist/server.js` (skipped if `npm run build` hasn't been run).
+Runs in `npm test`.

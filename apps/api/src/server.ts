@@ -2,7 +2,7 @@ import http from 'node:http';
 
 import type { ApiResponse, HealthResponse } from '@repo/shared';
 
-import { loadConfig } from './config.js';
+import { ensureContentRoot, loadConfig } from './config.js';
 import { handleFileRoutes, type PatchFileResponse } from './routes/files.js';
 import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
@@ -10,7 +10,11 @@ import { createIdempotencyCache } from './storage/idempotencyCache.js';
 import { createPathResolver } from './storage/pathResolver.js';
 import { createProposalStore } from './storage/proposalStore.js';
 
+export { loadConfig, ensureContentRoot, defaultContentRoot } from './config.js';
+export type { ServerConfig } from './config.js';
+
 export function createServer(config = loadConfig()): http.Server {
+  ensureContentRoot(config.contentRoot);
   const pathResolver = createPathResolver(config.contentRoot);
   const repository = createFileRepository(pathResolver);
   const auditLog = createAuditLog(config.contentRoot);
@@ -62,15 +66,20 @@ export function createServer(config = loadConfig()): http.Server {
 
 export function startServer(config = loadConfig()): http.Server {
   const server = createServer(config);
-  server.listen(config.port, () => {
+  const listener = () => {
+    const address = server.address();
+    const bound =
+      typeof address === 'object' && address ? `${address.address}:${address.port}` : config.port;
     // eslint-disable-next-line no-console
-    console.log(`API server listening on http://localhost:${config.port}`);
+    console.log(`API server listening on http://${bound}`);
     // eslint-disable-next-line no-console
     console.log(`CONTENT_ROOT resolved to: ${config.contentRoot}`);
-  });
-  return server;
-}
+  };
 
-if (process.env.NODE_ENV !== 'test') {
-  startServer();
+  if (config.host) {
+    server.listen(config.port, config.host, listener);
+  } else {
+    server.listen(config.port, listener);
+  }
+  return server;
 }
