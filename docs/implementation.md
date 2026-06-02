@@ -30,12 +30,13 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
   FileViewerTabs (Prev|Edit|       /api/file     read/create/update markdown.ts (links/tags)
     Split|Activity)                /api/dir      create folder      search.ts  (text match)
-  MarkdownPreviewPane (+wikilinks) /api/path     move / delete      semantic.ts (TF-IDF)
-  BacklinksPanel / ActivityPanel   /api/backlinks    link graph      Audit/Search types
-  SearchDialog (Text|Semantic)     /api/search       full-text + tags
-  api/files.ts (HTTP client)       /api/semantic-search  ranked retrieval
-  openrouter/ (Fix Format)         /api/audit        provenance feed
-                                   storage/ (FileRepository, PathResolver, AuditLog)
+  MarkdownPreviewPane (react-      /api/path     move / delete      semantic.ts (TF-IDF)
+    markdown: GFM/math/highlight   /api/backlinks        link graph   markdown/remarkWikilinks.ts
+    + wikilinks)                   /api/search           full-text    Audit/Search types
+  BacklinksPanel / ActivityPanel   /api/semantic-search  ranked retrieval
+  SearchDialog (Text|Semantic)     /api/audit            provenance feed
+  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver, AuditLog)
+  openrouter/ (Fix Format)
 
 apps/mcp (MCP stdio server) — proxies the HTTP API, exposing the vault as agent
   tools (list/read/create/update/search/semantic_search/backlinks/
@@ -71,9 +72,10 @@ Key facts an agent must know:
 | Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                       |
 | Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents    |
 | "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                     |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `MarkdownPreviewPane`                 |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                     |
 | Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                   |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`                         |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview       |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex     |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
@@ -88,20 +90,21 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 
 ### For humans (vs Obsidian)
 
-| Gap                                                 | Priority | Status |
-| --------------------------------------------------- | :------: | :----: |
-| `[[wikilinks]]`, backlinks, link graph              |    P0    |  ✅\*  |
-| Real CommonMark/GFM renderer (tables, images, task  |    P0    |   ⬜   |
-| lists, h3–h6, links, code highlight, math, mermaid) |          |        |
-| Full-text **content** search + quick switcher       |    P1    |   ✅   |
-| Frontmatter / tags / properties                     |    P1    |   ✅   |
-| Non-markdown attachments (images, PDFs, canvas)     |    P2    |   ⬜   |
-| Command palette, tabs/splits, outline, daily notes  |    P2    |   ◑    |
-| Version history / trash / Git sync                  |    P2    |   ⬜   |
-| Plugin system, themes, mobile, multi-device sync    |    P3    |   ⬜   |
+| Gap                                                | Priority | Status |
+| -------------------------------------------------- | :------: | :----: |
+| `[[wikilinks]]`, backlinks, link graph             |    P0    |  ✅\*  |
+| Real CommonMark/GFM renderer (tables, images, task |    P0    |  ✅†   |
+| lists, h3–h6, links, code highlight, math)         |          |        |
+| Full-text **content** search + quick switcher      |    P1    |   ✅   |
+| Frontmatter / tags / properties                    |    P1    |   ✅   |
+| Non-markdown attachments (images, PDFs, canvas)    |    P2    |   ⬜   |
+| Command palette, tabs/splits, outline, daily notes |    P2    |   ◑    |
+| Version history / trash / Git sync                 |    P2    |   ⬜   |
+| Plugin system, themes, mobile, multi-device sync   |    P3    |   ⬜   |
 
 \* link graph exists as backlinks; a visual graph view is still open. ◑ = quick
-switcher + split done; palette/outline/daily-notes open.
+switcher + split done; palette/outline/daily-notes open. † renderer shipped and
+lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 
 ### For agents (the brain)
 
@@ -143,7 +146,14 @@ next.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
-5. **Slice 5 — Semantic search.** ✅ Done (local).
+5. **Slice 2 — Real renderer.** ✅ Done.
+   `MarkdownPreviewPane` uses `react-markdown` + `remark-gfm` (tables, task
+   lists, strikethrough, autolinks, h3–h6), `remark-math` + `rehype-katex`
+   (math), and highlight.js for fenced code (keeping the copy button). The
+   `remarkWikilinks` plugin preserves `[[wikilinks]]`; frontmatter is stripped
+   and tags render as chips. The pane is lazy-loaded (`React.lazy`), so the main
+   bundle stays ~63 kB gzip and the renderer (~186 kB gzip) loads on demand.
+6. **Slice 5 — Semantic search.** ✅ Done (local).
    `semantic.ts` chunks notes and ranks them by TF-IDF cosine similarity;
    `GET /api/semantic-search`, a Text|Semantic toggle in `SearchDialog`, and a
    `semantic_search` MCP tool. Runs offline, no API key. A real embedding
@@ -151,21 +161,17 @@ next.
 
 ### Next up (open)
 
-6. **Slice 2 — Real renderer.** Replace the hand-rolled parser with
-   `remark`/`rehype` (tables, images, task lists, h3–h6, links, code highlight,
-   math). Keep the Slice 1 wikilink/tag rendering as plugins. _(In review on a
-   separate branch.)_
-7. **Embeddings provider.** Swap the TF-IDF ranker for real vector embeddings
-   (remote `/v1/embeddings` or on-device), plus a token-budgeted context-bundle
-   endpoint for RAG.
+7. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
+   embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
+   context-bundle endpoint for RAG; add Mermaid diagrams to the renderer.
 8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
    propose edits a human approves/rejects, with diffs. Closes the trust loop.
 9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
    Activity feed) updates the moment an agent writes.
 
-Slices 1–4 above close most of the Obsidian-for-humans gap and build what
-Obsidian lacks: a vault that is natively an agent's brain _and_ auditable by the
-human. The renderer (Slice 2) is the biggest open human-facing item.
+Slices 1–4 + the renderer close most of the Obsidian-for-humans gap and build
+what Obsidian lacks: a vault that is natively an agent's brain _and_ auditable
+by the human.
 
 ---
 

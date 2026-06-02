@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { MarkdownPreviewPane } from './MarkdownPreviewPane';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+
+// Lazy so the heavy markdown renderer is loaded on demand and stays in its own
+// code-split chunk (shared with the main preview).
+const MarkdownPreviewPane = lazy(() =>
+  import('./MarkdownPreviewPane').then((module) => ({ default: module.MarkdownPreviewPane })),
+);
 
 interface FixFormatPreviewDialogProps {
   open: boolean;
@@ -137,7 +142,9 @@ export function FixFormatPreviewDialog({
         <div className="fix-format-body">
           {viewMode === 'rendered' ? (
             <div className="fix-format-pane">
-              <MarkdownPreviewPane filePath={filePath} markdown={proposedMarkdown} />
+              <Suspense fallback={<p className="empty-state">Loading preview…</p>}>
+                <MarkdownPreviewPane filePath={filePath} markdown={proposedMarkdown} />
+              </Suspense>
             </div>
           ) : viewMode === 'source' ? (
             <textarea

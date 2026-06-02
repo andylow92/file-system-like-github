@@ -2403,3 +2403,96 @@ textarea:focus-visible {
   font-size: var(--type-caption, 0.75rem);
   font-weight: 500;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Rich markdown rendering (GFM tables, task lists, headings, media)          */
+/* -------------------------------------------------------------------------- */
+
+.markdown-preview__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-4);
+}
+
+.github-markdown h4,
+.github-markdown h5,
+.github-markdown h6 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.github-markdown h4 {
+  font-size: 1.05rem;
+}
+
+.github-markdown h5 {
+  font-size: 0.95rem;
+}
+
+.github-markdown h6 {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.github-markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.github-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.github-markdown del {
+  color: var(--color-text-muted);
+}
+
+/* GFM tables */
+.github-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  font-size: 0.9rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.github-markdown th,
+.github-markdown td {
+  border: 1px solid var(--color-border-strong);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.github-markdown th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+
+.github-markdown tbody tr:nth-child(even) {
+  background: var(--color-surface-hover);
+}
+
+/* GFM task lists */
+.github-markdown li:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.2em;
+}
+
+.github-markdown input[type='checkbox'] {
+  margin-right: 0.5em;
+  accent-color: var(--color-accent);
+}
+
+/* KaTeX blocks should scroll rather than overflow the pane */
+.github-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}

@@ -44,6 +44,11 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Links & metadata** — `[[wikilinks]]` (clickable, resolved), a backlinks
   panel (`GET /api/backlinks`), and frontmatter + `#tags` parsing. The pure
   helpers live in `@repo/shared` (`markdown.ts`).
+- **Rich rendering** — the preview uses `react-markdown` + `remark-gfm`
+  (tables, task lists, strikethrough, autolinks, h3–h6), `remark-math` +
+  `rehype-katex` (math), and highlight.js for fenced code (with a copy button).
+  Frontmatter is stripped and tags render as chips. Wikilinks are a remark
+  plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
 - **Search** — full-text + tag search (`GET /api/search`) and **semantic
   (relevance) search** (`GET /api/semantic-search`, TF-IDF cosine over chunked
   notes; `semantic.ts`). The Ctrl/Cmd-K quick-switcher has a Text|Semantic
@@ -59,10 +64,9 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   through the same validation, concurrency, and audit trail, attributed as
   `agent:mcp`.
 
-**Not yet built (next):** a real CommonMark/GFM renderer (Slice 2, in review on
-a separate branch), real vector embeddings to back semantic search, an
-agent-edit review/approval queue, and a live SSE/file-watcher layer. See the
-roadmap in `docs/implementation.md`.
+**Not yet built (next):** Mermaid diagrams, real vector embeddings to back
+semantic search, an agent-edit review/approval queue, and a live
+SSE/file-watcher layer. See the roadmap in `docs/implementation.md`.
 
 ---
 
