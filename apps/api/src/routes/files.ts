@@ -50,6 +50,7 @@ type ErrorCode =
   | 'io_error'
   | 'conflict'
   | 'stale_write'
+  | 'forbidden'
   | 'bad_request';
 
 interface ErrorResponse {
@@ -502,6 +503,19 @@ async function applyProposal(context: RequestContext, proposal: EditProposal): P
   const { repository, res } = context;
 
   if (proposal.action === 'delete') {
+    // Share the stale-write contract with `update`: don't delete a file that
+    // materially changed since the proposal was made.
+    if (proposal.baseEtag) {
+      const current = await loadFileFromContext(context, proposal.path);
+      if (proposal.baseEtag !== current.etag) {
+        sendError(res, 409, {
+          code: 'stale_write',
+          message:
+            'The file changed since this proposal was created; re-propose against the latest.',
+        });
+        throw new ProposalAborted();
+      }
+    }
     await repository.deletePath(proposal.path, { recursive: false });
     await recordAuditAs(context, proposal.actor, { action: 'delete', path: proposal.path });
     return;
@@ -558,6 +572,16 @@ async function recordAuditAs(
 
 async function handleResolveProposal(context: RequestContext): Promise<void> {
   const { req, res, proposalStore, actor } = context;
+
+  // Resolution is a human action. This guard rejects the obvious case (an
+  // `agent:` actor approving its own work); it is convention-level, not
+  // airtight, because `X-Actor` is unauthenticated — true enforcement needs
+  // authn/z (intentionally out of scope for this local, single-user tool).
+  if (/^agent:/i.test(actor)) {
+    sendError(res, 403, { code: 'forbidden', message: 'Only a human can resolve proposals.' });
+    return;
+  }
+
   const body = await readJsonBody<Record<string, unknown>>(req);
   const id = requireString(body.id, 'id');
   const decision = requireString(body.decision, 'decision');

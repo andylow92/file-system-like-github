@@ -59,11 +59,15 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
 - **Edit review queue** — instead of writing directly, an agent can submit a
   **proposal** (`POST /api/proposals`, or the `propose_edit` MCP tool) for a
-  create/update/delete. A human reviews the diff in the web **Review** tab and
-  approves (the edit is applied and audited as the proposing agent) or rejects.
-  Proposals live in `CONTENT_ROOT/.fsbrain/proposals/`. Approval/rejection is a
-  human-only action — agents can `propose_edit` and `list_proposals`, not
-  resolve.
+  create/update/delete. A human reviews the before/after in the web **Review**
+  tab and approves (the edit is applied and audited as the proposing agent) or
+  rejects. Proposals live in `CONTENT_ROOT/.fsbrain/proposals/`. Both
+  destructive paths (`update`, `delete`) honor `baseEtag` and 409 on a stale
+  approval. Resolution is human-only — agents get `propose_edit` /
+  `list_proposals`, the MCP server omits a resolve tool, and the API rejects an
+  `agent:` resolver (403). This is convention-level (X-Actor is unauthenticated);
+  airtight enforcement would need authn/z, intentionally out of scope for this
+  local, single-user tool.
 - **MCP server** (`apps/mcp`) — a stdio server exposing 13 vault tools
   (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
   `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,

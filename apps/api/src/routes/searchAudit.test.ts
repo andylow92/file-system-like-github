@@ -168,4 +168,41 @@ describe('search, audit, and hidden-file handling', () => {
     expect(rejected.body.data?.status).toBe('rejected');
     expect((await api('GET', '/api/file?path=nope.md')).status).toBe(404);
   });
+
+  it('forbids an agent actor from resolving a proposal', async () => {
+    const proposed = await api<EditProposal>('POST', '/api/proposals', {
+      body: { action: 'create', path: 'guarded.md', content: 'x' },
+      actor: 'agent:test',
+    });
+    const id = proposed.body.data!.id;
+
+    const forbidden = await api('POST', '/api/proposals/resolve', {
+      body: { id, decision: 'approve' },
+      actor: 'agent:test',
+    });
+    expect(forbidden.status).toBe(403);
+    // The proposal stays pending and nothing was written.
+    expect((await api('GET', '/api/file?path=guarded.md')).status).toBe(404);
+  });
+
+  it('rejects approving a stale delete proposal', async () => {
+    await api('POST', '/api/file', { body: { path: 'doomed.md', content: 'v1' } });
+    const file = await api<{ etag: string }>('GET', '/api/file?path=doomed.md');
+    const baseEtag = file.body.data!.etag;
+
+    const proposed = await api<EditProposal>('POST', '/api/proposals', {
+      body: { action: 'delete', path: 'doomed.md', baseEtag },
+      actor: 'agent:test',
+    });
+    const id = proposed.body.data!.id;
+
+    // The file changes after the proposal was made.
+    await api('PUT', '/api/file', { body: { path: 'doomed.md', content: 'v2 changed' } });
+
+    const stale = await api('POST', '/api/proposals/resolve', {
+      body: { id, decision: 'approve' },
+    });
+    expect(stale.status).toBe(409);
+    expect((await api('GET', '/api/file?path=doomed.md')).status).toBe(200);
+  });
 });

@@ -166,19 +166,36 @@ next.
    in the **Review** tab and approves (applied + audited as the proposer) or
    rejects. Resolution is human-only. Closes the provenance trust loop.
 
-### Next up (open)
+### Prioritization
 
-8. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
-   embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
-   context-bundle endpoint for RAG. Cache the chunk/IDF index instead of
-   re-reading + re-ranking the whole vault per query (invalidate on writes via
-   the existing mutation/audit paths). Add Mermaid diagrams to the renderer.
-9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
-   Activity feed) updates the moment an agent writes.
+This is a **local, single-user tool optimized for agent interaction on the
+owner's machine** — not a multi-user / externally-exposed service. So the
+priorities are **agent depth** plus a **visual graph** for the human. Multi-user
+concerns (authn/z, per-agent scopes, rate limiting), CI, attachments, editor
+polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
-Slices 1–4 + the renderer close most of the Obsidian-for-humans gap and build
-what Obsidian lacks: a vault that is natively an agent's brain _and_ auditable
-by the human.
+### Next up (open, in priority order)
+
+8. **Granular agent writes.** Section/append/patch edits, idempotency keys, and a
+   dry-run mode so agents don't have to rewrite whole notes.
+9. **Structured knowledge for precise retrieval/citation.** Stable note IDs and
+   block anchors (`^id`) so agents can reference a specific paragraph; typed links.
+10. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
+    Activity feed / Review queue) updates the moment an agent writes.
+11. **Real embeddings + index cache + context bundles.** Swap the TF-IDF ranker
+    for vector embeddings (remote `/v1/embeddings` or on-device); cache the
+    chunk/IDF index (invalidate on writes); add a token-budgeted context-bundle
+    endpoint for RAG.
+12. **Visual graph view** (human) — render the wikilink graph; Mermaid diagrams.
+
+Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
+CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
+notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
+follow-ups also deferred: settled-proposal retention/pruning, a computed
+line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
+
+The vault is now natively an agent's brain _and_ auditable by the human; the work
+above deepens agent interaction on the local machine.
 
 ---
 
