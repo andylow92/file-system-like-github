@@ -6,6 +6,8 @@ import rehypeKatex from 'rehype-katex';
 import hljs from 'highlight.js/lib/common';
 import { parseNote, resolveWikilink } from '@repo/shared';
 import { remarkWikilinks } from '../markdown/remarkWikilinks';
+import 'highlight.js/styles/github-dark.css';
+import 'katex/dist/katex.min.css';
 
 interface MarkdownPreviewPaneProps {
   filePath: string | null;

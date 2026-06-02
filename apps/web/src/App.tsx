@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { FileNode } from '@repo/shared';
 import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
-import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
 import { SearchDialog } from './components/SearchDialog';
 import { ModalDialog } from './components/ModalDialog';
+
+// The markdown renderer (react-markdown + katex + highlight.js) is heavy, so it
+// is code-split and loaded on demand when a file preview is first shown.
+const MarkdownPreviewPane = lazy(() =>
+  import('./components/MarkdownPreviewPane').then((module) => ({
+    default: module.MarkdownPreviewPane,
+  })),
+);
 import { RichTextEditorPane } from './components/RichTextEditorPane';
 import {
   createDirectory,
@@ -345,14 +352,16 @@ export function App() {
           onTabChange={setActiveTab}
           preview={
             <>
-              <MarkdownPreviewPane
-                filePath={selectedFilePath}
-                markdown={currentDraftMarkdown}
-                allPaths={allPaths}
-                onNavigate={(path) => {
-                  void navigateToFile(path);
-                }}
-              />
+              <Suspense fallback={<p className="empty-state">Loading preview…</p>}>
+                <MarkdownPreviewPane
+                  filePath={selectedFilePath}
+                  markdown={currentDraftMarkdown}
+                  allPaths={allPaths}
+                  onNavigate={(path) => {
+                    void navigateToFile(path);
+                  }}
+                />
+              </Suspense>
               <BacklinksPanel
                 filePath={selectedFilePath}
                 refreshKey={allPaths.length}

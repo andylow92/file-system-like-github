@@ -151,9 +151,9 @@ next.
 
 ### Next up (open)
 
-6. **Renderer follow-ups.** Mermaid diagrams; lazy-load the preview bundle
-   (react-markdown + katex + highlight.js add ~250 kB gzip) so it loads on
-   demand and the >500 kB chunk warning goes away.
+6. **Renderer follow-ups.** Lazy-loading ✅ done — the preview pane is
+   code-split (`React.lazy`), so the main bundle is back to ~63 kB gzip and the
+   renderer (~186 kB gzip) loads on demand. Mermaid diagrams remain open.
 7. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
    propose edits a human approves/rejects, with diffs. Closes the trust loop.
 8. **Slice 5 — Semantic search.** Chunking + embeddings + hybrid retrieval; a
