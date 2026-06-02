@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FileNode } from '@repo/shared';
+import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
 import { MarkdownPreviewPane } from './components/MarkdownPreviewPane';
@@ -54,6 +55,21 @@ export function App() {
   const isCurrentFileDirty = selectedFilePath
     ? currentDraftMarkdown !== currentSavedMarkdown
     : false;
+
+  const allPaths = useMemo(() => {
+    const paths: string[] = [];
+    const walk = (nodes: FileNode[]) => {
+      for (const node of nodes) {
+        if (node.isDirectory) {
+          walk(node.children ?? []);
+        } else {
+          paths.push(node.path);
+        }
+      }
+    };
+    walk(tree);
+    return paths;
+  }, [tree]);
 
   function showInfoModal(title: string, description: string, variant: 'info' | 'error' = 'error') {
     setModalState({
@@ -186,6 +202,14 @@ export function App() {
     }
   }
 
+  async function navigateToFile(nextPath: string) {
+    try {
+      await handleSelectFile(nextPath);
+    } catch (error: unknown) {
+      showInfoModal('Could not open file', getErrorMessage(error), 'error');
+    }
+  }
+
   async function saveCurrentFile() {
     if (!selectedFilePath || !isCurrentFileDirty) {
       return;
@@ -304,7 +328,23 @@ export function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           preview={
-            <MarkdownPreviewPane filePath={selectedFilePath} markdown={currentDraftMarkdown} />
+            <>
+              <MarkdownPreviewPane
+                filePath={selectedFilePath}
+                markdown={currentDraftMarkdown}
+                allPaths={allPaths}
+                onNavigate={(path) => {
+                  void navigateToFile(path);
+                }}
+              />
+              <BacklinksPanel
+                filePath={selectedFilePath}
+                refreshKey={allPaths.length}
+                onSelectFile={(path) => {
+                  void navigateToFile(path);
+                }}
+              />
+            </>
           }
           edit={
             <RichTextEditorPane

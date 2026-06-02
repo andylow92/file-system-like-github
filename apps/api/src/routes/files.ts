@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import type { ApiResponse, FileNode } from '@repo/shared';
+import type { ApiResponse, Backlink, FileNode } from '@repo/shared';
+import { extractWikilinks, resolveWikilink } from '@repo/shared';
 
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { PathResolver } from '../storage/pathResolver.js';
@@ -128,7 +129,10 @@ function toEtag(content: string, lastModified: string): string {
   return createHash('sha1').update(content).update(lastModified).digest('hex');
 }
 
-async function loadFileFromContext(context: RequestContext, logicalPath: string): Promise<FileResponse> {
+async function loadFileFromContext(
+  context: RequestContext,
+  logicalPath: string,
+): Promise<FileResponse> {
   const absolutePath = context.pathResolver.resolveMarkdownPath(logicalPath);
   const stat = await fs.stat(absolutePath);
 
@@ -162,6 +166,43 @@ async function handleGetTree({ res, url, repository }: RequestContext): Promise<
   const tree = await repository.listTree(logicalPath);
   const data: FileNode[] = tree.map(toFileNode);
   sendJson(res, 200, { success: true, data });
+}
+
+function flattenMarkdownPaths(nodes: TreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.isDirectory) {
+      paths.push(...flattenMarkdownPaths(node.children ?? []));
+    } else {
+      paths.push(node.path);
+    }
+  }
+  return paths;
+}
+
+async function handleGetBacklinks({ res, url, repository }: RequestContext): Promise<void> {
+  const targetPath = requireString(url.searchParams.get('path'), 'path');
+  const tree = await repository.listTree('');
+  const allPaths = flattenMarkdownPaths(tree);
+
+  const backlinks: Backlink[] = [];
+
+  for (const sourcePath of allPaths) {
+    if (sourcePath === targetPath) {
+      continue;
+    }
+
+    const content = await repository.readMarkdownFile(sourcePath);
+    const linksToTarget = extractWikilinks(content).some(
+      (link) => resolveWikilink(link.target, allPaths) === targetPath,
+    );
+
+    if (linksToTarget) {
+      backlinks.push({ path: sourcePath, name: sourcePath.split('/').pop() ?? sourcePath });
+    }
+  }
+
+  sendJson(res, 200, { success: true, data: backlinks });
 }
 
 async function handleGetFile(context: RequestContext): Promise<void> {
@@ -287,7 +328,10 @@ async function handleDeletePath({ req, res, url, repository }: RequestContext): 
   sendJson(res, 200, { success: true, data: { path: logicalPath, deleted: true } });
 }
 
-async function executeHandler(context: RequestContext, handler: (ctx: RequestContext) => Promise<void>): Promise<void> {
+async function executeHandler(
+  context: RequestContext,
+  handler: (ctx: RequestContext) => Promise<void>,
+): Promise<void> {
   try {
     await handler(context);
   } catch (error: unknown) {
@@ -325,6 +369,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/file') {
     await executeHandler(context, handleGetFile);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/backlinks') {
+    await executeHandler(context, handleGetBacklinks);
     return { handled: true };
   }
 

@@ -2132,3 +2132,80 @@ textarea:focus-visible {
     animation-duration: 0ms !important;
   }
 }
+
+/* Wikilinks ([[...]]) rendered inside the markdown preview. */
+.markdown-preview .wikilink {
+  color: var(--color-accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-accent-ring);
+  cursor: pointer;
+}
+
+.markdown-preview .wikilink:hover {
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+}
+
+.markdown-preview .wikilink--unresolved {
+  color: var(--color-danger);
+  border-bottom-color: var(--color-danger-soft);
+  cursor: help;
+}
+
+/* Backlinks panel shown beneath the markdown preview. */
+.backlinks-panel {
+  margin-top: var(--space-5, 1.5rem);
+  padding-top: var(--space-4, 1rem);
+  border-top: 1px solid var(--color-border);
+}
+
+.backlinks-panel__title {
+  margin: 0 0 0.5rem;
+  font-size: var(--type-label, 0.8125rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.backlinks-panel__empty {
+  margin: 0;
+  font-size: var(--type-caption, 0.75rem);
+  color: var(--color-text-dim);
+}
+
+.backlinks-panel__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.backlinks-panel__link {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.backlinks-panel__link:hover {
+  background: var(--color-surface-hover);
+}
+
+.backlinks-panel__name {
+  font-size: var(--type-body, 0.9375rem);
+}
+
+.backlinks-panel__path {
+  font-size: var(--type-caption, 0.75rem);
+  color: var(--color-text-dim);
+}

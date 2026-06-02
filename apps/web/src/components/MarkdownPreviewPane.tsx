@@ -1,8 +1,36 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
+import { resolveWikilink } from '@repo/shared';
 
 interface MarkdownPreviewPaneProps {
   filePath: string | null;
   markdown: string;
+  /** All known logical file paths, used to resolve `[[wikilinks]]`. */
+  allPaths?: string[];
+  /** Called with the resolved logical path when a wikilink is clicked. */
+  onNavigate?: (path: string) => void;
+}
+
+type LinkResolver = (target: string) => string | null;
+
+function escapeAttr(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
+}
+
+function renderWikilinks(escaped: string, resolveLink?: LinkResolver): string {
+  return escaped.replace(/\[\[([^\]\n]+)\]\]/g, (_full, inner: string) => {
+    const trimmed = String(inner).trim();
+    const beforeAlias = trimmed.split('|')[0];
+    const alias = trimmed.includes('|') ? trimmed.slice(trimmed.indexOf('|') + 1).trim() : '';
+    const target = beforeAlias.split('#')[0].trim();
+    const display = alias || beforeAlias.trim();
+    const resolved = resolveLink ? resolveLink(target) : null;
+
+    if (resolved) {
+      return `<a class="wikilink" data-wikilink-path="${escapeAttr(resolved)}" href="#">${display}</a>`;
+    }
+
+    return `<a class="wikilink wikilink--unresolved" href="#">${display}</a>`;
+  });
 }
 
 type MarkdownNode =
@@ -20,11 +48,13 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function renderInlineFromEscaped(escaped: string): string {
-  return escaped
+function renderInlineFromEscaped(escaped: string, resolveLink?: LinkResolver): string {
+  const withInline = escaped
     .replace(/`([^`\n]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
+
+  return renderWikilinks(withInline, resolveLink);
 }
 
 function tokenizeMarkdown(markdown: string): string[] {
@@ -210,35 +240,35 @@ function CodeBlock({ content }: CodeBlockProps) {
   );
 }
 
-function renderNodes(nodes: MarkdownNode[]) {
+function renderNodes(nodes: MarkdownNode[], resolveLink?: LinkResolver) {
   return nodes.map((node, index) => {
     switch (node.type) {
       case 'h1':
         return (
           <h1
             key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
           />
         );
       case 'h2':
         return (
           <h2
             key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
           />
         );
       case 'blockquote':
         return (
           <blockquote
             key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
           />
         );
       case 'paragraph':
         return (
           <p
             key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content) }}
+            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
           />
         );
       case 'list':
@@ -247,7 +277,7 @@ function renderNodes(nodes: MarkdownNode[]) {
             {node.items.map((item, itemIndex) => (
               <li
                 key={itemIndex}
-                dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(item) }}
+                dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(item, resolveLink) }}
               />
             ))}
           </ul>
@@ -263,7 +293,12 @@ function renderNodes(nodes: MarkdownNode[]) {
   });
 }
 
-export function MarkdownPreviewPane({ filePath, markdown }: MarkdownPreviewPaneProps) {
+export function MarkdownPreviewPane({
+  filePath,
+  markdown,
+  allPaths,
+  onNavigate,
+}: MarkdownPreviewPaneProps) {
   if (!filePath) {
     return <p className="empty-state">Select a markdown file to preview.</p>;
   }
@@ -272,9 +307,30 @@ export function MarkdownPreviewPane({ filePath, markdown }: MarkdownPreviewPaneP
     return <p className="empty-state">This file has no content yet.</p>;
   }
 
+  const resolveLink: LinkResolver | undefined = allPaths
+    ? (target) => resolveWikilink(target, allPaths)
+    : undefined;
+
+  function handleClick(event: MouseEvent<HTMLElement>) {
+    const anchor = (event.target as HTMLElement).closest('a.wikilink');
+    if (!anchor) {
+      return;
+    }
+
+    event.preventDefault();
+    const path = anchor.getAttribute('data-wikilink-path');
+    if (path && onNavigate) {
+      onNavigate(path);
+    }
+  }
+
   const tokens = tokenizeMarkdown(markdown);
   const ast = parseMarkdown(tokens);
   const sanitizedAst = sanitizeMarkdownAst(ast);
 
-  return <article className="markdown-preview github-markdown">{renderNodes(sanitizedAst)}</article>;
+  return (
+    <article className="markdown-preview github-markdown" onClick={handleClick}>
+      {renderNodes(sanitizedAst, resolveLink)}
+    </article>
+  );
 }

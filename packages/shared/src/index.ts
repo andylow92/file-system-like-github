@@ -32,3 +32,12 @@ export interface HealthResponse {
   contentRoot: string;
   timestamp: string;
 }
+
+export interface Backlink {
+  /** Logical path of the note that links to the target. */
+  path: string;
+  /** Display name (basename) of the linking note. */
+  name: string;
+}
+
+export * from './markdown';

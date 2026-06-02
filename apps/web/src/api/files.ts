@@ -1,4 +1,4 @@
-import type { ApiResponse, FileNode } from '@repo/shared';
+import type { ApiResponse, Backlink, FileNode } from '@repo/shared';
 
 export interface RemoteFile {
   path: string;
@@ -65,6 +65,13 @@ export async function fetchTree(path = ''): Promise<FileNode[]> {
 
 export async function fetchFile(path: string): Promise<RemoteFile> {
   return requestJson<RemoteFile>(`/api/file?path=${encodeURIComponent(path)}`, {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+export async function fetchBacklinks(path: string): Promise<Backlink[]> {
+  return requestJson<Backlink[]>(`/api/backlinks?path=${encodeURIComponent(path)}`, {
     method: 'GET',
     headers: {},
   });
