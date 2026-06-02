@@ -4,9 +4,10 @@
  * so OpenClaw (and any other MCP host) can spawn it with one `node dist/...`
  * command — no workspace context or `tsx` runtime required.
  *
- * Strategy: bundle the in-repo workspace deps (`@repo/api`, `@repo/shared`)
- * inline, but keep the published npm deps external so they resolve from
- * `node_modules` at runtime.
+ * Strategy: inline the in-repo workspace deps (`@repo/api`, `@repo/shared`)
+ * and the pure-JS `zod` dep so the runtime dependency surface stays tight.
+ * The MCP SDK has its own native-ish layout and resolves cleanly from
+ * `node_modules`, so we keep it external.
  */
 import { build } from 'esbuild';
 import { chmodSync } from 'node:fs';
@@ -23,9 +24,6 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  // Keep the MCP SDK external (it has native-ish deps and ships its own
-  // node_modules entries). `zod` is pure JS and gets inlined so the runtime
-  // dependency surface stays tight.
   external: ['@modelcontextprotocol/sdk'],
   banner: { js: '#!/usr/bin/env node' },
   logLevel: 'info',

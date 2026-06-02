@@ -11,7 +11,7 @@
  * human-facing Activity feed.
  *
  * Run it standalone:
- *   npm --workspace @repo/mcp run start   # in-process API on 127.0.0.1
+ *   npm --workspace @repo/mcp run start            # in-process API on 127.0.0.1
  *   API_BASE_URL=http://localhost:3001 npm --workspace @repo/mcp run start
  */
 import { promises as fs } from 'node:fs';
@@ -21,19 +21,23 @@ import { fileURLToPath } from 'node:url';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createServer as createApiServer, loadConfig } from '@repo/api';
+import { createServer as createApiServer, loadConfig, type ServerConfig } from '@repo/api';
 import { z } from 'zod';
 
 import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  BlockAnchor,
+  EditProposal,
   FileNode,
   SearchMatch,
   SemanticHit,
 } from '@repo/shared';
 
-const EXPLICIT_API_BASE_URL = process.env.API_BASE_URL?.replace(/\/$/, '');
+// Empty string also counts as "not set" — that's what the fresh-clone e2e test
+// uses to force embedded mode while inheriting the rest of the parent env.
+const EXPLICIT_API_BASE_URL = process.env.API_BASE_URL?.replace(/\/$/, '') || undefined;
 const ACTOR = process.env.MCP_ACTOR ?? 'agent:mcp';
 
 class ApiError extends Error {
@@ -46,8 +50,10 @@ class ApiError extends Error {
   }
 }
 
-interface AppContext {
+export interface AppContext {
   apiBaseUrl: string;
+  /** Resolved vault path; `undefined` when proxying an external API. */
+  contentRoot?: string;
   /** Set when this process started the API itself; `undefined` if attached to an external API. */
   embeddedServer?: http.Server;
 }
@@ -103,13 +109,22 @@ function tool<Args>(handler: (args: Args) => Promise<unknown>) {
 
 /**
  * Start an in-process copy of the storage API on 127.0.0.1, ephemeral port (or
- * `PORT`). Returns the base URL the MCP tools should hit, and the underlying
- * `http.Server` so we can close it on shutdown.
+ * `PORT`). Returns the base URL the MCP tools should hit, the chosen
+ * `ServerConfig`, and the underlying `http.Server` so we can close it on shutdown.
  */
-async function startEmbeddedApi(): Promise<{ baseUrl: string; server: http.Server }> {
-  const config = loadConfig();
+async function startEmbeddedApi(): Promise<{
+  baseUrl: string;
+  server: http.Server;
+  config: ServerConfig;
+}> {
+  // `createServer` only builds the http.Server; this function owns `listen`
+  // because we need a loopback bind + ephemeral port (or `PORT`) regardless of
+  // what `loadConfig` saw in env. The config we return reflects the resolved
+  // values (CONTENT_ROOT, host, port) so callers — including the welcome-seed
+  // step and the readiness banner — see the real numbers.
+  const baseConfig = loadConfig();
   const port = Number(process.env.PORT ?? 0);
-  const server = createApiServer({ ...config, host: '127.0.0.1', port });
+  const server = createApiServer(baseConfig);
 
   await new Promise<void>((resolve, reject) => {
     const onError = (err: Error) => reject(err);
@@ -128,6 +143,7 @@ async function startEmbeddedApi(): Promise<{ baseUrl: string; server: http.Serve
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     server,
+    config: { ...baseConfig, host: '127.0.0.1', port: address.port },
   };
 }
 
@@ -163,8 +179,14 @@ async function maybeSeedWelcome(contentRoot: string): Promise<void> {
   }
 }
 
-function registerTools(server: McpServer, apiRequest: ReturnType<typeof createApiClient>) {
-  server.tool(
+function registerTools(server: McpServer, apiRequest: ReturnType<typeof createApiClient>): number {
+  let count = 0;
+  const register = ((...args: Parameters<typeof server.tool>) => {
+    count += 1;
+    return server.tool(...args);
+  }) as typeof server.tool;
+
+  register(
     'list_notes',
     'List all markdown note paths in the vault (optionally under a subtree).',
     { path: z.string().optional().describe('Subtree path; omit for the whole vault.') },
@@ -175,16 +197,67 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'read_note',
-    'Read the markdown content of a note by its logical path.',
-    { path: z.string().describe('Logical path, e.g. "notes/idea.md".') },
-    tool(async ({ path: notePath }: { path: string }) => {
-      return apiRequest(`/api/file?path=${encodeURIComponent(notePath)}`);
+    'Read the markdown content of a note by its logical path or its stable id.',
+    {
+      path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+      id: z.string().optional().describe('Stable note id from frontmatter `id:`.'),
+    },
+    tool(async ({ path: notePath, id }: { path?: string; id?: string }) => {
+      if (!notePath && !id) {
+        throw new Error('Either path or id is required');
+      }
+      const params = new URLSearchParams();
+      if (notePath) params.set('path', notePath);
+      else if (id) params.set('id', id);
+      return apiRequest(`/api/file?${params.toString()}`);
     }),
   );
 
-  server.tool(
+  register(
+    'read_block',
+    'Read a single block (paragraph / list-item / heading section) carrying a ' +
+      '`^block-id` anchor, plus a short surrounding context. Address the note by ' +
+      'path or by stable id.',
+    {
+      path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+      id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
+      block: z.string().describe('Anchor id without the leading `^`, e.g. "claim-1".'),
+    },
+    tool(async ({ path: notePath, id, block }: { path?: string; id?: string; block: string }) => {
+      if (!notePath && !id) {
+        throw new Error('Either path or id is required');
+      }
+      const params = new URLSearchParams();
+      if (notePath) params.set('path', notePath);
+      else if (id) params.set('id', id);
+      params.set('block', block);
+      return apiRequest(`/api/block?${params.toString()}`);
+    }),
+  );
+
+  register(
+    'get_block_anchors',
+    'List every `^block-id` anchor in a note. Useful before patching by block.',
+    {
+      path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+      id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
+    },
+    tool(async ({ path: notePath, id }: { path?: string; id?: string }) => {
+      if (!notePath && !id) {
+        throw new Error('Either path or id is required');
+      }
+      const params = new URLSearchParams();
+      if (notePath) params.set('path', notePath);
+      else if (id) params.set('id', id);
+      return apiRequest<{ path: string; anchors: BlockAnchor[] }>(
+        `/api/block-anchors?${params.toString()}`,
+      );
+    }),
+  );
+
+  register(
     'create_note',
     'Create a new markdown note. Fails if it already exists.',
     {
@@ -200,7 +273,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'update_note',
     'Overwrite an existing note. Pass the current etag for safe optimistic-concurrency writes.',
     {
@@ -227,7 +300,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     ),
   );
 
-  server.tool(
+  register(
     'search_notes',
     'Full-text and/or tag search across the vault. Provide query, tag, or both.',
     {
@@ -244,7 +317,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'semantic_search',
     'Relevance-ranked retrieval: find the note passages most "about" a query, ' +
       'even without exact keyword matches. Best for RAG-style context gathering.',
@@ -259,7 +332,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'get_backlinks',
     'List notes that link to the given note via [[wikilinks]].',
     { path: z.string() },
@@ -268,7 +341,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'recent_activity',
     'Read the provenance/audit trail of recent vault changes (who changed what).',
     {
@@ -284,7 +357,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'create_folder',
     'Create a folder in the vault.',
     { path: z.string() },
@@ -297,7 +370,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'move_path',
     'Move or rename a note or folder.',
     { fromPath: z.string(), toPath: z.string() },
@@ -310,7 +383,7 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     }),
   );
 
-  server.tool(
+  register(
     'delete_path',
     'Delete a note or folder. Set recursive to remove a non-empty folder.',
     { path: z.string(), recursive: z.boolean().optional() },
@@ -322,14 +395,134 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       return apiRequest(`/api/path?${params.toString()}`, { method: 'DELETE', actor: true });
     }),
   );
+
+  register(
+    'patch_note',
+    'Granular edits to a note: append text, prepend text (after frontmatter), ' +
+      'replace the body under a heading, replace the block carrying a ' +
+      '`^block-id` anchor, or ensure the note has a stable `id:` in frontmatter. ' +
+      'Address the note by `path` or by stable `id`. Pass `etag` (from read_note) ' +
+      'for safe optimistic-concurrency writes, an `idempotencyKey` to make a ' +
+      'retry a no-op, or `dryRun: true` to preview the result without writing.',
+    {
+      path: z.string().optional(),
+      id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
+      op: z.discriminatedUnion('type', [
+        z
+          .object({ type: z.literal('append'), text: z.string() })
+          .describe('Append `text` to the end of the note.'),
+        z
+          .object({ type: z.literal('prepend'), text: z.string() })
+          .describe('Insert `text` at the top; lands after frontmatter if present.'),
+        z
+          .object({
+            type: z.literal('replace_section'),
+            heading: z.string().describe('The full heading line, e.g. "## Tasks".'),
+            body: z.string().describe('New body to insert under the heading.'),
+          })
+          .describe('Replace the body under a heading; siblings are kept.'),
+        z
+          .object({
+            type: z.literal('replace_block'),
+            blockId: z.string().describe('Anchor id without the leading `^`.'),
+            body: z.string().describe('New body to substitute for the block.'),
+          })
+          .describe('Replace the paragraph/list-item/heading-section carrying `^blockId`.'),
+        z
+          .object({
+            type: z.literal('ensure_id'),
+            id: z
+              .string()
+              .optional()
+              .describe('Specific id to assign; a UUID is generated when omitted.'),
+          })
+          .describe('Add an `id:` to frontmatter if missing (idempotent).'),
+      ]),
+      etag: z.string().optional().describe('Etag from read_note; rejects the patch if stale.'),
+      idempotencyKey: z
+        .string()
+        .optional()
+        .describe('Replay protection — the same key returns the original result without writing.'),
+      dryRun: z.boolean().optional().describe('Compute the result without writing.'),
+    },
+    tool(
+      async (args: {
+        path?: string;
+        id?: string;
+        op:
+          | { type: 'append'; text: string }
+          | { type: 'prepend'; text: string }
+          | { type: 'replace_section'; heading: string; body: string }
+          | { type: 'replace_block'; blockId: string; body: string }
+          | { type: 'ensure_id'; id?: string };
+        etag?: string;
+        idempotencyKey?: string;
+        dryRun?: boolean;
+      }) => {
+        if (!args.path && !args.id) {
+          throw new Error('Either path or id is required');
+        }
+        return apiRequest('/api/file', {
+          method: 'PATCH',
+          body: JSON.stringify(args),
+          actor: true,
+        });
+      },
+    ),
+  );
+
+  register(
+    'propose_edit',
+    'Propose a create/update/delete for human review instead of writing directly. ' +
+      'Use this when changes should be approved by the human before they land.',
+    {
+      action: z.enum(['create', 'update', 'delete']),
+      path: z.string(),
+      content: z.string().optional().describe('Required for create/update.'),
+      baseEtag: z
+        .string()
+        .optional()
+        .describe('Etag from read_note, so a stale update is rejected on approval.'),
+      note: z.string().optional().describe('Why you are proposing this change.'),
+    },
+    tool(
+      async (args: {
+        action: 'create' | 'update' | 'delete';
+        path: string;
+        content?: string;
+        baseEtag?: string;
+        note?: string;
+      }) =>
+        apiRequest('/api/proposals', {
+          method: 'POST',
+          body: JSON.stringify(args),
+          actor: true,
+        }),
+    ),
+  );
+
+  register(
+    'list_proposals',
+    'List edit proposals and their review status (pending/approved/rejected). ' +
+      'Approval/rejection is a human action and is not available to agents.',
+    { status: z.enum(['pending', 'approved', 'rejected']).optional() },
+    tool(async ({ status }: { status?: 'pending' | 'approved' | 'rejected' }) => {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      const query = params.toString();
+      return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
+    }),
+  );
+
+  return count;
 }
 
 /** Build the MCP server + tool surface against the chosen API base URL. */
-export function buildServer(context: AppContext): McpServer {
+export function buildServer(context: AppContext): { server: McpServer; toolCount: number } {
   const apiRequest = createApiClient(context);
   const server = new McpServer({ name: 'fsbrain-vault', version: '0.1.0' });
-  registerTools(server, apiRequest);
-  return server;
+  const toolCount = registerTools(server, apiRequest);
+  return { server, toolCount };
 }
 
 /**
@@ -337,16 +530,21 @@ export function buildServer(context: AppContext): McpServer {
  * seed a welcome note in an empty vault, then return the wired-up MCP server.
  * Exported so tests can drive it without spawning the bin.
  */
-export async function bootstrap(): Promise<{ server: McpServer; context: AppContext }> {
+export async function bootstrap(): Promise<{
+  server: McpServer;
+  context: AppContext;
+  toolCount: number;
+}> {
   let context: AppContext;
   if (EXPLICIT_API_BASE_URL) {
     context = { apiBaseUrl: EXPLICIT_API_BASE_URL };
   } else {
-    const { baseUrl, server } = await startEmbeddedApi();
-    context = { apiBaseUrl: baseUrl, embeddedServer: server };
-    await maybeSeedWelcome(loadConfig().contentRoot);
+    const { baseUrl, server, config } = await startEmbeddedApi();
+    context = { apiBaseUrl: baseUrl, contentRoot: config.contentRoot, embeddedServer: server };
+    await maybeSeedWelcome(config.contentRoot);
   }
-  return { server: buildServer(context), context };
+  const { server, toolCount } = buildServer(context);
+  return { server, context, toolCount };
 }
 
 function installShutdownHandlers(context: AppContext): void {
@@ -361,15 +559,19 @@ function installShutdownHandlers(context: AppContext): void {
 }
 
 async function main() {
-  const { server, context } = await bootstrap();
+  const { server, context, toolCount } = await bootstrap();
   installShutdownHandlers(context);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  const apiLabel = context.embeddedServer ? `${context.apiBaseUrl} (embedded)` : context.apiBaseUrl;
+  const mode = context.embeddedServer ? 'embedded' : 'proxied';
+  const vault = context.contentRoot ?? '(external API)';
+  // Stdio reserves stdout for MCP frames; status goes to stderr.
   // eslint-disable-next-line no-console
-  console.error(`fsbrain MCP server connected (API: ${apiLabel}, actor: ${ACTOR})`);
+  console.error(
+    `fsbrain-mcp ready · mode=${mode} · vault=${vault} · tools=${toolCount} · actor=${ACTOR}`,
+  );
 }
 
 // Run as an entry point (CLI / bin / `tsx src/server.ts`) but stay quiet when

@@ -5,7 +5,27 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-02_
+_Last updated: 2026-06-02 (clone-and-run hardening)_
+
+> **Latest change.** The project is now **clone-and-run testable** for an
+> agent. `npm run start:agent` launches the self-contained `fsbrain-mcp` —
+> when `API_BASE_URL` is unset it starts the storage API in-process on
+> `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT` (default
+> `~/.fsbrain/vault`), seeds a `welcome.md` on an empty vault, prints a
+> one-line readiness banner to stderr, and bundles to a runnable
+> `dist/server.js` (npm bin `fsbrain-mcp`). Copy-paste host configs for
+> OpenClaw / Claude Desktop / Claude Code / Cursor live in
+> [`CONNECT.md`](CONNECT.md). The guarantee is enforced by an automated
+> fresh-clone e2e test (`apps/mcp/src/__tests__/freshClone.test.ts`) that
+> spawns the bin as a real stdio child against a temp vault, drives it via
+> the MCP SDK client, and asserts writes land both on disk and in the audit
+> log — runs in `npm test`.
+>
+> **Heads-up for existing local setups.** The default `CONTENT_ROOT` moved
+> from `<cwd>/content` to `~/.fsbrain/vault`. Existing `./content` notes
+> aren't deleted, but `npm run dev:api` / `dev:web` without `CONTENT_ROOT`
+> set will now read the new path. Set `CONTENT_ROOT=./content` (e.g. in
+> `apps/api/.env` or your shell) to keep the old location.
 
 > **Latest change.** The MCP server is now a **single-command launcher**: when
 > `API_BASE_URL` is unset it starts the storage API in-process on `127.0.0.1`
@@ -42,22 +62,29 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 ```
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
-  FileViewerTabs (Prev|Edit|       /api/file     read/create/update markdown.ts (links/tags)
-    Split|Activity)                /api/dir      create folder      search.ts  (text match)
-  MarkdownPreviewPane (react-      /api/path     move / delete      semantic.ts (TF-IDF)
-    markdown: GFM/math/highlight   /api/backlinks        link graph   markdown/remarkWikilinks.ts
-    + wikilinks)                   /api/search           full-text    Audit/Search types
-  BacklinksPanel / ActivityPanel   /api/semantic-search  ranked retrieval
-  SearchDialog (Text|Semantic)     /api/audit            provenance feed
-  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver, AuditLog)
-  openrouter/ (Fix Format)
+  FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags,
+    Activity|Review)               /api/file PATCH  granular edits    typed `rel:` aliases)
+  MarkdownPreviewPane (react-      /api/dir      create folder      patch.ts (append/prepend/
+    markdown: GFM/math/highlight   /api/path     move / delete       replace_section/_block,
+    + wikilinks + ^block-anchors)  /api/backlinks        link graph    ensure_id)
+  BacklinksPanel / ActivityPanel   /api/block            block read blocks.ts (^id helpers)
+  SearchDialog (Text|Semantic)     /api/block-anchors    list ^ids  noteId.ts (stable id)
+  ReviewPanel (proposals)          /api/search           full-text  search.ts  (text match)
+  api/files.ts (HTTP client)       /api/semantic-search  ranked     semantic.ts (TF-IDF)
+  openrouter/ (Fix Format)         /api/audit            provenance markdown/remarkWikilinks.ts
+                                   /api/proposals[/resolve]  review queue
+                                   storage/ (FileRepository, PathResolver,
+                                              AuditLog, ProposalStore, IdempotencyCache)
 
-apps/mcp (MCP stdio server) — exposes the vault as agent tools
-  (list/read/create/update/search/semantic_search/backlinks/
-  recent_activity/move/delete). When API_BASE_URL is unset it runs the storage
-  API in-process on 127.0.0.1, so OpenClaw / Claude Desktop can spawn it with
-  one `node dist/server.js` command. Writes carry X-Actor: agent:mcp (or
-  whatever MCP_ACTOR is set to), so they land in the human Activity feed.
+apps/mcp (MCP stdio server, 16 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/backlinks/recent_activity/move/delete
+  plus read_block, get_block_anchors, propose_edit + list_proposals. When
+  API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
+  port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
+  an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
+  one `node dist/server.js` (npm bin `fsbrain-mcp`). Writes carry X-Actor:
+  agent:mcp (override via MCP_ACTOR) and land in the human Activity feed;
+  proposals await human approval in the Review tab.
 ```
 
 Key facts an agent must know:
@@ -79,25 +106,31 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                   |
-| ------------------------------------------- | :----: | ------------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                       |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                    |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`              |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)        |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                          |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents       |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                        |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                        |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                      |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview          |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex        |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                           |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)          |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`    |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` — self-contained bin, attributes `agent:mcp` |
-| Turnkey **OpenClaw** entry (single command) |   ✅   | `mcp.servers.fsbrain-vault` → `node dist/server.js`     |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`               |
+| Capability                                  | Status | Notes                                                     |
+| ------------------------------------------- | :----: | --------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                         |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                      |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)          |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                            |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents         |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                          |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                          |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                        |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview            |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex          |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                             |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)            |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`      |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`          |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool      |
+| section + idempotency + dry-run)            |        |                                                           |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`          |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                            |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`             |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`               |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                 |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -129,20 +162,21 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | ---------------------------------------------------- | :------: | :----: |
 | Machine-facing API / **MCP server** over the vault   |    P0    |   ✅   |
 | **Provenance**: per-change attribution + audit feed  |    P0    |   ✅   |
-| agent-edit review/approval queue                     |    P1    |   ⬜   |
+| agent-edit review/approval queue                     |    P1    |   ✅   |
 | Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
-| Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
+| Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ✅   |
 | typed link graph)                                    |          |        |
-| Section/append/patch writes + idempotency + dry-run  |    P1    |   ⬜   |
+| Section/append/patch writes + idempotency + dry-run  |    P1    |   ✅   |
 | Live state (SSE/WebSocket + file watcher)            |    P2    |   ⬜   |
 | Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
 
 ‡ chunking + TF-IDF cosine ranking shipped (`semantic.ts`, no API key, runs
 offline); swapping in real vector embeddings via a provider is the follow-up.
-◑ = wikilink graph + tags exist; note IDs / block anchors still open. The
-audit feed records attribution; an explicit human review/approval queue for
-agent edits is the natural next provenance step.
+Structured knowledge: Obsidian-style block anchors (`^id`), a frontmatter
+`id:` for stable note identity (opt-in), and typed wikilinks
+`[[Target|rel:type]]` all shipped together; a visual link graph view is the
+remaining follow-up.
 
 ---
 
@@ -158,13 +192,19 @@ next.
    `GET /api/search` (text + tag), `search.ts` helper, Ctrl/Cmd-K `SearchDialog`
    (prefix `#` for tag search).
 3. **Slice 4 — MCP server.** ✅ Done.
-   `apps/mcp` stdio server with 11 tools that an agent (OpenClaw, Claude
-   Desktop, …) can call. Self-contained: starts the storage API in-process
-   on `127.0.0.1` when `API_BASE_URL` is unset, auto-creates `CONTENT_ROOT`
-   (`~/.fsbrain/vault` by default), seeds a `welcome.md` on first run, and
-   builds to a single-file bin (`fsbrain-mcp` → `dist/server.js`). Writes
-   carry `X-Actor: agent:mcp` (override via `MCP_ACTOR`) and flow through
-   the audit trail.
+   `apps/mcp` stdio server exposing the vault as 16 tools. Self-contained: when
+   `API_BASE_URL` is unset it starts the storage API in-process on
+   `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT`
+   (default `~/.fsbrain/vault`), and seeds a `welcome.md` on first run.
+   Bundled to a single-file bin via esbuild (`fsbrain-mcp` →
+   `apps/mcp/dist/server.js`) so an MCP host can spawn it with one
+   `node dist/server.js`. Writes carry `X-Actor: agent:mcp` (override via
+   `MCP_ACTOR`) and flow through the audit trail. Copy-paste host configs
+   for OpenClaw / Claude Desktop / Claude Code / Cursor:
+   [`CONNECT.md`](CONNECT.md). The clone-and-run guarantee is enforced by
+   `apps/mcp/src/__tests__/freshClone.test.ts`, which spawns the bin as a
+   real stdio child against a temp vault and asserts writes land on disk
+   and in the audit log — runs in `npm test`.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
@@ -180,22 +220,63 @@ next.
    `GET /api/semantic-search`, a Text|Semantic toggle in `SearchDialog`, and a
    `semantic_search` MCP tool. Runs offline, no API key. A real embedding
    provider can replace the ranking engine without changing callers.
+7. **Slice 6b — Agent-edit review queue.** ✅ Done.
+   Agents `propose_edit` (`POST /api/proposals`) create/update/delete edits;
+   `ProposalStore` keeps them in `.fsbrain/proposals/`. A human reviews the diff
+   in the **Review** tab and approves (applied + audited as the proposer) or
+   rejects. Resolution is human-only. Closes the provenance trust loop.
+8. **Slice 7 — Granular agent writes.** ✅ Done.
+   `PATCH /api/file` (and the `patch_note` MCP tool) apply `append`,
+   `prepend`, or `replace_section` ops without rewriting the whole note.
+   Pure transforms live in `@repo/shared` (`patch.ts`). The endpoint reuses
+   the `etag` optimistic-concurrency contract, accepts an `idempotencyKey`
+   so a retried patch is a no-op (in-memory LRU cache; resets on API
+   restart), supports `dryRun` to preview without writing or auditing, and
+   records audit attribution via `X-Actor`.
+9. **Slice 8 — Structured knowledge.** ✅ Done.
+   Obsidian-style **block anchors** (`^id`) give agents stable addresses
+   inside a note. Pure helpers live in `@repo/shared` (`blocks.ts`):
+   `extractBlockAnchors`, `findBlock` (paragraph / list-item /
+   heading-section), `upsertBlockAnchor`. `GET /api/block` returns a block
+   - surrounding context; `GET /api/block-anchors` lists every anchor.
+     `PATCH /api/file` gains a `replace_block` op (anchor re-attached so the
+     block stays addressable) and an `ensure_id` op (adds frontmatter `id:`
+     if missing — idempotent). `/api/file` and the patch endpoint accept
+     `id=` as an alternative to `path=`. Wikilink parsing recognizes
+     `[[Target|rel:supports]]` and `/api/backlinks` surfaces the relation
+     (`type`). The MCP server adds `read_block` and `get_block_anchors`, and
+     `patch_note` exposes `replace_block` / `ensure_id`. The preview
+     unobtrusively renders trailing `^id` markers; everything else stays the
+     same. Provenance is preserved — block writes audit under the requesting
+     actor like any other PATCH.
 
-### Next up (open)
+### Prioritization
 
-7. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
-   embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
-   context-bundle endpoint for RAG. Cache the chunk/IDF index instead of
-   re-reading + re-ranking the whole vault per query (invalidate on writes via
-   the existing mutation/audit paths). Add Mermaid diagrams to the renderer.
-8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
-   propose edits a human approves/rejects, with diffs. Closes the trust loop.
-9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
-   Activity feed) updates the moment an agent writes.
+This is a **local, single-user tool optimized for agent interaction on the
+owner's machine** — not a multi-user / externally-exposed service. So the
+priorities are **agent depth** plus a **visual graph** for the human. Multi-user
+concerns (authn/z, per-agent scopes, rate limiting), CI, attachments, editor
+polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
-Slices 1–4 + the renderer close most of the Obsidian-for-humans gap and build
-what Obsidian lacks: a vault that is natively an agent's brain _and_ auditable
-by the human.
+### Next up (open, in priority order)
+
+10. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
+    Activity feed / Review queue) updates the moment an agent writes.
+11. **Real embeddings + index cache + context bundles.** Swap the TF-IDF ranker
+    for vector embeddings (remote `/v1/embeddings` or on-device); cache the
+    chunk/IDF index (invalidate on writes); add a token-budgeted context-bundle
+    endpoint for RAG.
+12. **Visual graph view** (human) — render the wikilink graph (now with `rel:`
+    relations); Mermaid diagrams.
+
+Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
+CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
+notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
+follow-ups also deferred: settled-proposal retention/pruning, a computed
+line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
+
+The vault is now natively an agent's brain _and_ auditable by the human; the work
+above deepens agent interaction on the local machine.
 
 ---
 
@@ -215,10 +296,12 @@ by the human.
 ## 7. Commands
 
 ```bash
-npm install        # install workspaces
-npm run dev:api    # API   → http://localhost:3001
-npm run dev:web    # web   → http://localhost:5173
-npm test           # all workspace tests (vitest)
-npm run lint       # eslint
-npm run build      # tsc/vite build across workspaces
+npm install          # install workspaces
+npm run dev:api      # API   → http://localhost:3001
+npm run dev:web      # web   → http://localhost:5173
+npm run start:agent  # self-contained MCP server on stdio (fsbrain-mcp)
+npm run doctor       # preflight: Node version + vault writable
+npm test             # all workspace tests (vitest), incl. fresh-clone MCP e2e
+npm run lint         # eslint
+npm run build        # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 ```

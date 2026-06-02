@@ -1,13 +1,32 @@
 import { promises as fs } from 'node:fs';
 import type http from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
+import type {
+  ApiResponse,
+  AuditEntry,
+  Backlink,
+  BlockAnchor,
+  EditProposal,
+  FileNode,
+  PatchOp,
+  ProposalAction,
+  SearchMatch,
+} from '@repo/shared';
 import {
+  BlockNotFoundError,
+  PATCH_OP_TYPES,
+  SectionNotFoundError,
+  applyPatchOp,
+  ensureNoteId,
+  extractBlockAnchors,
   extractWikilinks,
+  findBlock,
+  findNoteId,
   findTextMatch,
+  parseFrontmatter,
   parseNote,
   resolveWikilink,
   semanticSearch,
@@ -15,8 +34,10 @@ import {
 
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
+import type { IdempotencyCache } from '../storage/idempotencyCache.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
+import type { ProposalStore } from '../storage/proposalStore.js';
 
 interface RouteResult {
   handled: boolean;
@@ -29,6 +50,8 @@ interface RequestContext {
   repository: FileRepository;
   pathResolver: PathResolver;
   auditLog: AuditLog;
+  proposalStore: ProposalStore;
+  patchIdempotency: IdempotencyCache<PatchFileResponse>;
   /** Who is making the request, from the `X-Actor` header (default `human`). */
   actor: string;
 }
@@ -40,6 +63,7 @@ type ErrorCode =
   | 'io_error'
   | 'conflict'
   | 'stale_write'
+  | 'forbidden'
   | 'bad_request';
 
 interface ErrorResponse {
@@ -53,12 +77,21 @@ interface FileResponse {
   encoding: 'utf-8';
   lastModified: string;
   etag: string;
+  /** Stable note id from frontmatter `id:`, when present. */
+  id?: string;
+}
+
+export interface PatchFileResponse extends FileResponse {
+  /** True when the request ran in dry-run mode and no write happened. */
+  dryRun: boolean;
 }
 
 export interface FileRouteDependencies {
   repository: FileRepository;
   pathResolver: PathResolver;
   auditLog: AuditLog;
+  proposalStore: ProposalStore;
+  patchIdempotency: IdempotencyCache<PatchFileResponse>;
 }
 
 const MAX_ACTOR_LENGTH = 64;
@@ -93,6 +126,13 @@ function toErrorResponse(error: unknown): { statusCode: number; error: ErrorResp
     return {
       statusCode: 400,
       error: { code: 'invalid_path', message: error.message },
+    };
+  }
+
+  if (error instanceof DuplicateNoteIdError) {
+    return {
+      statusCode: 409,
+      error: { code: 'conflict', message: error.message },
     };
   }
 
@@ -171,6 +211,7 @@ async function loadFileFromContext(
 
   const content = await fs.readFile(absolutePath, 'utf8');
   const lastModified = stat.mtime.toISOString();
+  const id = findNoteId(content);
 
   return {
     path: logicalPath,
@@ -178,7 +219,89 @@ async function loadFileFromContext(
     encoding: 'utf-8',
     lastModified,
     etag: toEtag(content, lastModified),
+    ...(id ? { id } : {}),
   };
+}
+
+/** Raised when two notes claim the same frontmatter `id:`. */
+class DuplicateNoteIdError extends Error {
+  constructor(
+    public id: string,
+    public paths: string[],
+  ) {
+    super(`Multiple notes share id "${id}": ${paths.join(', ')}`);
+    this.name = 'DuplicateNoteIdError';
+  }
+}
+
+/**
+ * Walk the vault to find the note whose frontmatter `id:` matches. Currently
+ * scans every note on each call — fine for a local single-user vault; an
+ * id→path index alongside the planned chunk/IDF cache is a known follow-up.
+ *
+ * Throws `DuplicateNoteIdError` when two notes share the same id, since the
+ * whole point of note ids is stable identity — silently resolving to one of
+ * the duplicates would hide the conflict.
+ */
+async function findPathByNoteId(
+  repository: FileRepository,
+  id: string,
+): Promise<string | undefined> {
+  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  const matches: string[] = [];
+  for (const filePath of allPaths) {
+    const content = await repository.readMarkdownFile(filePath);
+    if (findNoteId(content) === id) {
+      matches.push(filePath);
+    }
+  }
+  if (matches.length > 1) {
+    throw new DuplicateNoteIdError(id, matches);
+  }
+  return matches[0];
+}
+
+/**
+ * Resolve a file address (either `path=` or `id=`) into a logical path. The
+ * caller passes the URL search params; we prefer `path` when both are given.
+ */
+async function resolveLogicalPath(
+  repository: FileRepository,
+  params: URLSearchParams,
+): Promise<string> {
+  const pathParam = params.get('path');
+  if (pathParam && pathParam.trim()) {
+    return requireString(pathParam, 'path');
+  }
+  const idParam = params.get('id');
+  if (idParam && idParam.trim()) {
+    const resolved = await findPathByNoteId(repository, idParam.trim());
+    if (!resolved) {
+      throw new StoragePathError(`No note with id "${idParam.trim()}"`);
+    }
+    return resolved;
+  }
+  throw new Error('"path" is required');
+}
+
+/** Same resolver but reading from a JSON request body's `path` / `id` fields. */
+async function resolveBodyLogicalPath(
+  repository: FileRepository,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const pathValue = body.path;
+  if (typeof pathValue === 'string' && pathValue.trim()) {
+    return requireString(pathValue, 'path');
+  }
+  const idValue = body.id;
+  if (typeof idValue === 'string' && idValue.trim()) {
+    const resolved = await findPathByNoteId(repository, idValue.trim());
+    if (!resolved) {
+      throw new StoragePathError(`No note with id "${idValue.trim()}"`);
+    }
+    return resolved;
+  }
+  throw new Error('"path" is required');
 }
 
 function toFileNode(node: TreeNode): FileNode {
@@ -222,21 +345,99 @@ async function handleGetBacklinks({ res, url, repository }: RequestContext): Pro
     }
 
     const content = await repository.readMarkdownFile(sourcePath);
-    const linksToTarget = extractWikilinks(content).some(
+    const matchingLink = extractWikilinks(content).find(
       (link) => resolveWikilink(link.target, allPaths) === targetPath,
     );
 
-    if (linksToTarget) {
-      backlinks.push({ path: sourcePath, name: sourcePath.split('/').pop() ?? sourcePath });
+    if (matchingLink) {
+      backlinks.push({
+        path: sourcePath,
+        name: sourcePath.split('/').pop() ?? sourcePath,
+        ...(matchingLink.type ? { type: matchingLink.type } : {}),
+      });
     }
   }
 
   sendJson(res, 200, { success: true, data: backlinks });
 }
 
+interface BlockResponse {
+  path: string;
+  blockId: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  /** A few lines of surrounding context so the caller can place the block. */
+  context: string;
+  etag: string;
+  lastModified: string;
+  id?: string;
+}
+
+const BLOCK_CONTEXT_LINES = 2;
+
+async function handleGetBlock(context: RequestContext): Promise<void> {
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
+  const blockId = requireString(url.searchParams.get('block'), 'block');
+
+  const file = await loadFileFromContext(context, logicalPath);
+  const { body } = parseFrontmatter(file.content);
+  const block = findBlock(body, blockId);
+  if (!block) {
+    sendError(res, 404, { code: 'not_found', message: `Block anchor not found: ^${blockId}` });
+    return;
+  }
+
+  const bodyLines = body.split('\n');
+  const before = bodyLines
+    .slice(Math.max(0, block.startLine - 1 - BLOCK_CONTEXT_LINES), block.startLine - 1)
+    .join('\n');
+  const after = bodyLines
+    .slice(block.endLine, Math.min(bodyLines.length, block.endLine + BLOCK_CONTEXT_LINES))
+    .join('\n');
+  const contextStr = [before, block.text, after].filter((part) => part.length > 0).join('\n');
+
+  const data: BlockResponse = {
+    path: logicalPath,
+    blockId,
+    startLine: block.startLine,
+    endLine: block.endLine,
+    text: block.text,
+    context: contextStr,
+    etag: file.etag,
+    lastModified: file.lastModified,
+    ...(file.id ? { id: file.id } : {}),
+  };
+  sendJson(res, 200, { success: true, data });
+}
+
+interface BlockAnchorsResponse {
+  path: string;
+  id?: string;
+  etag: string;
+  lastModified: string;
+  anchors: BlockAnchor[];
+}
+
+async function handleGetBlockAnchors(context: RequestContext): Promise<void> {
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
+  const file = await loadFileFromContext(context, logicalPath);
+  const { body } = parseFrontmatter(file.content);
+  const data: BlockAnchorsResponse = {
+    path: logicalPath,
+    ...(file.id ? { id: file.id } : {}),
+    etag: file.etag,
+    lastModified: file.lastModified,
+    anchors: extractBlockAnchors(body),
+  };
+  sendJson(res, 200, { success: true, data });
+}
+
 async function handleGetFile(context: RequestContext): Promise<void> {
-  const { res, url } = context;
-  const logicalPath = requireString(url.searchParams.get('path'), 'path');
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
   const data = await loadFileFromContext(context, logicalPath);
   sendJson(res, 200, { success: true, data });
 }
@@ -271,6 +472,139 @@ async function handlePutFile(context: RequestContext): Promise<void> {
   const updated = await loadFileFromContext(context, logicalPath);
   await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
   sendJson(res, 200, { success: true, data: updated });
+}
+
+function requireBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error(`"${fieldName}" must be a boolean`);
+  }
+  return value;
+}
+
+type PatchOpInput = PatchOp | { type: 'ensure_id'; id?: string };
+type PatchOpInputType = PatchOpInput['type'];
+
+const PATCH_OP_INPUT_TYPES: PatchOpInputType[] = [...PATCH_OP_TYPES, 'ensure_id'];
+
+function parsePatchOp(raw: unknown): PatchOpInput {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('"op" must be an object');
+  }
+  const op = raw as Record<string, unknown>;
+  const type = requireString(op.type, 'op.type');
+  if (!(PATCH_OP_INPUT_TYPES as string[]).includes(type)) {
+    throw new Error(`"op.type" must be one of ${PATCH_OP_INPUT_TYPES.join(', ')}`);
+  }
+  if (type === 'append' || type === 'prepend') {
+    const text = requireOptionalString(op.text, 'op.text') ?? '';
+    return { type, text };
+  }
+  if (type === 'replace_section') {
+    const heading = requireString(op.heading, 'op.heading');
+    const body = requireOptionalString(op.body, 'op.body') ?? '';
+    return { type: 'replace_section', heading, body };
+  }
+  if (type === 'replace_block') {
+    const blockId = requireString(op.blockId, 'op.blockId');
+    const body = requireOptionalString(op.body, 'op.body') ?? '';
+    return { type: 'replace_block', blockId, body };
+  }
+  // ensure_id
+  const id = requireOptionalString(op.id, 'op.id')?.trim();
+  return { type: 'ensure_id', ...(id ? { id } : {}) };
+}
+
+async function handlePatchFile(context: RequestContext): Promise<void> {
+  const { req, res, repository, patchIdempotency } = context;
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const logicalPath = await resolveBodyLogicalPath(repository, body);
+  const op = parsePatchOp(body.op);
+  const expectedEtag = requireOptionalString(body.etag, 'etag');
+  const expectedLastModified = requireOptionalString(body.lastModified, 'lastModified');
+  const dryRun = requireBoolean(body.dryRun, 'dryRun') ?? false;
+  const idempotencyKey = requireOptionalString(body.idempotencyKey, 'idempotencyKey')?.trim();
+
+  if (idempotencyKey) {
+    const cached = patchIdempotency.get(idempotencyKey);
+    if (cached) {
+      sendJson(res, 200, { success: true, data: cached });
+      return;
+    }
+  }
+
+  const current = await loadFileFromContext(context, logicalPath);
+
+  if (expectedEtag && expectedEtag !== current.etag) {
+    sendError(res, 409, {
+      code: 'stale_write',
+      message: 'Update rejected because provided etag does not match current file.',
+    });
+    return;
+  }
+
+  if (expectedLastModified && expectedLastModified !== current.lastModified) {
+    sendError(res, 409, {
+      code: 'stale_write',
+      message: 'Update rejected because provided lastModified does not match current file.',
+    });
+    return;
+  }
+
+  let nextContent: string;
+  let unchanged = false;
+  try {
+    if (op.type === 'ensure_id') {
+      const result = ensureNoteId(current.content, op.id ?? randomUUID());
+      nextContent = result.content;
+      unchanged = !result.changed;
+    } else {
+      nextContent = applyPatchOp(current.content, op).content;
+    }
+  } catch (error: unknown) {
+    if (error instanceof SectionNotFoundError || error instanceof BlockNotFoundError) {
+      sendError(res, 404, { code: 'not_found', message: error.message });
+      return;
+    }
+    if (error instanceof Error) {
+      sendError(res, 422, { code: 'validation_error', message: error.message });
+      return;
+    }
+    throw error;
+  }
+
+  if (dryRun) {
+    const response: PatchFileResponse = {
+      path: logicalPath,
+      content: nextContent,
+      encoding: 'utf-8',
+      lastModified: current.lastModified,
+      etag: current.etag,
+      ...(findNoteId(nextContent) ? { id: findNoteId(nextContent) as string } : {}),
+      dryRun: true,
+    };
+    if (idempotencyKey) {
+      patchIdempotency.set(idempotencyKey, response);
+    }
+    sendJson(res, 200, { success: true, data: response });
+    return;
+  }
+
+  if (!unchanged) {
+    await repository.updateMarkdownFile(logicalPath, nextContent);
+  }
+  const updated = await loadFileFromContext(context, logicalPath);
+  if (!unchanged) {
+    await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+  }
+
+  const response: PatchFileResponse = { ...updated, dryRun: false };
+  if (idempotencyKey) {
+    patchIdempotency.set(idempotencyKey, response);
+  }
+  sendJson(res, 200, { success: true, data: response });
 }
 
 async function handlePostFile(context: RequestContext): Promise<void> {
@@ -447,6 +781,167 @@ async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: entries });
 }
 
+const PROPOSAL_ACTIONS: ProposalAction[] = ['create', 'update', 'delete'];
+
+async function handleCreateProposal(context: RequestContext): Promise<void> {
+  const { req, res, proposalStore, actor } = context;
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const action = requireString(body.action, 'action') as ProposalAction;
+  if (!PROPOSAL_ACTIONS.includes(action)) {
+    throw new Error('"action" must be create, update, or delete');
+  }
+  const logicalPath = requireString(body.path, 'path');
+  const content = requireOptionalString(body.content, 'content');
+  const baseEtag = requireOptionalString(body.baseEtag, 'baseEtag');
+  const note = requireOptionalString(body.note, 'note');
+
+  if ((action === 'create' || action === 'update') && content === undefined) {
+    throw new Error('"content" is required for create and update proposals');
+  }
+
+  const proposal = await proposalStore.create({
+    actor,
+    action,
+    path: logicalPath,
+    content,
+    baseEtag,
+    note,
+  });
+  sendJson(res, 201, { success: true, data: proposal });
+}
+
+async function handleListProposals({ res, url, proposalStore }: RequestContext): Promise<void> {
+  const statusParam = url.searchParams.get('status')?.trim();
+  const status =
+    statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected'
+      ? statusParam
+      : undefined;
+  const proposals = await proposalStore.list({ status });
+  sendJson(res, 200, { success: true, data: proposals });
+}
+
+/** Apply an approved proposal to the vault, recording it as the proposer's edit. */
+async function applyProposal(context: RequestContext, proposal: EditProposal): Promise<void> {
+  const { repository, res } = context;
+
+  if (proposal.action === 'delete') {
+    // Share the stale-write contract with `update`: don't delete a file that
+    // materially changed since the proposal was made.
+    if (proposal.baseEtag) {
+      const current = await loadFileFromContext(context, proposal.path);
+      if (proposal.baseEtag !== current.etag) {
+        sendError(res, 409, {
+          code: 'stale_write',
+          message:
+            'The file changed since this proposal was created; re-propose against the latest.',
+        });
+        throw new ProposalAborted();
+      }
+    }
+    await repository.deletePath(proposal.path, { recursive: false });
+    await recordAuditAs(context, proposal.actor, { action: 'delete', path: proposal.path });
+    return;
+  }
+
+  const content = proposal.content ?? '';
+
+  if (proposal.action === 'create') {
+    try {
+      await repository.createMarkdownFile(proposal.path, content);
+    } catch (error: unknown) {
+      if (error instanceof StoragePathError && error.message === 'File already exists') {
+        sendError(res, 409, { code: 'conflict', message: error.message });
+        throw new ProposalAborted();
+      }
+      throw error;
+    }
+  } else {
+    // update — reject if the file changed since the proposal was based on it.
+    const current = await loadFileFromContext(context, proposal.path);
+    if (proposal.baseEtag && proposal.baseEtag !== current.etag) {
+      sendError(res, 409, {
+        code: 'stale_write',
+        message: 'The file changed since this proposal was created; re-propose against the latest.',
+      });
+      throw new ProposalAborted();
+    }
+    await repository.updateMarkdownFile(proposal.path, content);
+  }
+
+  const updated = await loadFileFromContext(context, proposal.path);
+  await recordAuditAs(context, proposal.actor, {
+    action: proposal.action,
+    path: proposal.path,
+    etag: updated.etag,
+  });
+}
+
+/** Signals that a response was already sent while aborting a proposal apply. */
+class ProposalAborted extends Error {}
+
+/** Best-effort audit write attributed to a specific actor (the proposer). */
+async function recordAuditAs(
+  context: RequestContext,
+  actor: string,
+  entry: Omit<AuditEntry, 'ts' | 'actor'>,
+) {
+  try {
+    await context.auditLog.record({ actor, ...entry });
+  } catch {
+    // Provenance is best-effort; the file operation already succeeded.
+  }
+}
+
+async function handleResolveProposal(context: RequestContext): Promise<void> {
+  const { req, res, proposalStore, actor } = context;
+
+  // Resolution is a human action. This guard rejects the obvious case (an
+  // `agent:` actor approving its own work); it is convention-level, not
+  // airtight, because `X-Actor` is unauthenticated — true enforcement needs
+  // authn/z (intentionally out of scope for this local, single-user tool).
+  if (/^agent:/i.test(actor)) {
+    sendError(res, 403, { code: 'forbidden', message: 'Only a human can resolve proposals.' });
+    return;
+  }
+
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const id = requireString(body.id, 'id');
+  const decision = requireString(body.decision, 'decision');
+  if (decision !== 'approve' && decision !== 'reject') {
+    throw new Error('"decision" must be approve or reject');
+  }
+
+  const proposal = await proposalStore.get(id);
+  if (!proposal) {
+    sendError(res, 404, { code: 'not_found', message: 'Proposal not found.' });
+    return;
+  }
+  if (proposal.status !== 'pending') {
+    sendError(res, 409, {
+      code: 'conflict',
+      message: `Proposal already ${proposal.status}.`,
+    });
+    return;
+  }
+
+  if (decision === 'approve') {
+    try {
+      await applyProposal(context, proposal);
+    } catch (error: unknown) {
+      if (error instanceof ProposalAborted) {
+        return; // response already sent
+      }
+      throw error;
+    }
+  }
+
+  const resolved = await proposalStore.resolve(id, {
+    status: decision === 'approve' ? 'approved' : 'rejected',
+    resolvedBy: actor,
+  });
+  sendJson(res, 200, { success: true, data: resolved });
+}
+
 async function executeHandler(
   context: RequestContext,
   handler: (ctx: RequestContext) => Promise<void>,
@@ -496,6 +991,16 @@ export async function handleFileRoutes(
     return { handled: true };
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/block') {
+    await executeHandler(context, handleGetBlock);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/block-anchors') {
+    await executeHandler(context, handleGetBlockAnchors);
+    return { handled: true };
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/search') {
     await executeHandler(context, handleSearch);
     return { handled: true };
@@ -511,8 +1016,28 @@ export async function handleFileRoutes(
     return { handled: true };
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/proposals') {
+    await executeHandler(context, handleListProposals);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/proposals') {
+    await executeHandler(context, handleCreateProposal);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/proposals/resolve') {
+    await executeHandler(context, handleResolveProposal);
+    return { handled: true };
+  }
+
   if (req.method === 'PUT' && url.pathname === '/api/file') {
     await executeHandler(context, handlePutFile);
+    return { handled: true };
+  }
+
+  if (req.method === 'PATCH' && url.pathname === '/api/file') {
+    await executeHandler(context, handlePatchFile);
     return { handled: true };
   }
 

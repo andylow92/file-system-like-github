@@ -119,6 +119,37 @@ npm run dev:web
 
 ---
 
+## Use it as an agent's brain (clone & run)
+
+Skip the web UI and hand the vault to an MCP-aware agent (OpenClaw, Claude
+Desktop, Claude Code, Cursor, …):
+
+```bash
+git clone https://github.com/andylow92/file-system-like-github.git
+cd file-system-like-github
+npm install
+npm run build            # produces apps/mcp/dist/server.js
+npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
+```
+
+`fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 16
+vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
+`semantic_search`, `propose_edit`, …) and records every agent write to
+`<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
+
+**Copy-paste config snippets** for OpenClaw / Claude Desktop / Claude Code
+/ Cursor are in **[`docs/CONNECT.md`](docs/CONNECT.md)**.
+
+> **Heads-up if you have an older clone.** The default `CONTENT_ROOT` is now
+> `~/.fsbrain/vault` (previously `<cwd>/content`). Existing `./content`
+> notes aren't deleted, but `npm run dev:api` / `npm run dev:web` /
+> `npm run start:agent` without `CONTENT_ROOT` set will now read the new
+> path. Set `CONTENT_ROOT=./content` (in `apps/api/.env` or your shell) to
+> keep the old location.
+
+---
+
 ## Environment variables
 
 For `apps/api`:

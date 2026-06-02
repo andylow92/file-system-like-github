@@ -22,6 +22,22 @@ describe('parseWikilinkToken', () => {
       alias: 'Display',
     });
   });
+
+  it('treats a `rel:` alias as a typed relation, not a display alias', () => {
+    expect(parseWikilinkToken('Target|rel:supports')).toEqual({
+      raw: 'Target|rel:supports',
+      target: 'Target',
+      type: 'supports',
+    });
+  });
+
+  it('still treats non-`rel:` aliases as display names', () => {
+    expect(parseWikilinkToken('Target|My display')).toEqual({
+      raw: 'Target|My display',
+      target: 'Target',
+      alias: 'My display',
+    });
+  });
 });
 
 describe('parseFrontmatter', () => {

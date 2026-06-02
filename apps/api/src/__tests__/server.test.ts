@@ -1,12 +1,12 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FileNode } from '@repo/shared';
 
-import { defaultContentRoot, loadConfig } from '../config.js';
+import { loadConfig } from '../config.js';
 import { createServer } from '../server.js';
 
 interface HttpResponse<T = unknown> {
@@ -55,19 +55,17 @@ function requestJson<T>(
 
 describe('server bootstrap', () => {
   let workspaceRoot = '';
+  let contentRoot = '';
   let originalContentRoot: string | undefined;
-  let originalCwd = '';
 
   beforeEach(async () => {
     workspaceRoot = await mkdtemp(path.join(os.tmpdir(), 'api-server-root-'));
+    contentRoot = path.join(workspaceRoot, 'content');
     originalContentRoot = process.env.CONTENT_ROOT;
-    originalCwd = process.cwd();
-    process.env.CONTENT_ROOT = workspaceRoot;
-    process.chdir(workspaceRoot);
+    process.env.CONTENT_ROOT = contentRoot;
   });
 
   afterEach(async () => {
-    process.chdir(originalCwd);
     if (originalContentRoot === undefined) {
       delete process.env.CONTENT_ROOT;
     } else {
@@ -76,19 +74,7 @@ describe('server bootstrap', () => {
     await rm(workspaceRoot, { recursive: true, force: true });
   });
 
-  it('defaults CONTENT_ROOT to ~/.fsbrain/vault when unset', () => {
-    delete process.env.CONTENT_ROOT;
-    expect(loadConfig().contentRoot).toBe(defaultContentRoot());
-  });
-
-  it('creates CONTENT_ROOT on startup if it does not exist', () => {
-    const target = path.join(workspaceRoot, 'auto', 'nested', 'vault');
-    process.env.CONTENT_ROOT = target;
-    createServer(loadConfig());
-    return expect(stat(target).then((s) => s.isDirectory())).resolves.toBe(true);
-  });
-
-  it('starts and serves file routes against the configured CONTENT_ROOT', async () => {
+  it('starts and serves file routes, auto-creating CONTENT_ROOT', async () => {
     const config = loadConfig();
     const server = createServer(config);
 
@@ -108,7 +94,7 @@ describe('server bootstrap', () => {
     );
     expect(health.statusCode).toBe(200);
     expect(health.body.success).toBe(true);
-    expect(health.body.data.contentRoot).toBe(workspaceRoot);
+    expect(health.body.data.contentRoot).toBe(contentRoot);
 
     const createDir = await requestJson<{ success: boolean }>(port, 'POST', '/api/dir', {
       path: 'docs',
