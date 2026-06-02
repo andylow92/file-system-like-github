@@ -1,5 +1,11 @@
-import { useState, type MouseEvent } from 'react';
-import { resolveWikilink } from '@repo/shared';
+import { isValidElement, useMemo, useState, type ReactNode } from 'react';
+import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import hljs from 'highlight.js/lib/common';
+import { parseNote, resolveWikilink } from '@repo/shared';
+import { remarkWikilinks } from '../markdown/remarkWikilinks';
 
 interface MarkdownPreviewPaneProps {
   filePath: string | null;
@@ -10,170 +16,51 @@ interface MarkdownPreviewPaneProps {
   onNavigate?: (path: string) => void;
 }
 
-type LinkResolver = (target: string) => string | null;
+const WIKILINK_PREFIX = 'wikilink:';
 
-function escapeAttr(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
-}
-
-function renderWikilinks(escaped: string, resolveLink?: LinkResolver): string {
-  return escaped.replace(/\[\[([^\]\n]+)\]\]/g, (_full, inner: string) => {
-    const trimmed = String(inner).trim();
-    const beforeAlias = trimmed.split('|')[0];
-    const alias = trimmed.includes('|') ? trimmed.slice(trimmed.indexOf('|') + 1).trim() : '';
-    const target = beforeAlias.split('#')[0].trim();
-    const display = alias || beforeAlias.trim();
-    const resolved = resolveLink ? resolveLink(target) : null;
-
-    if (resolved) {
-      return `<a class="wikilink" data-wikilink-path="${escapeAttr(resolved)}" href="#">${display}</a>`;
-    }
-
-    return `<a class="wikilink wikilink--unresolved" href="#">${display}</a>`;
-  });
-}
-
-type MarkdownNode =
-  | { type: 'h1' | 'h2' | 'paragraph' | 'blockquote'; content: string }
-  | { type: 'list'; items: string[] }
-  | { type: 'code'; content: string }
-  | { type: 'hr' };
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function renderInlineFromEscaped(escaped: string, resolveLink?: LinkResolver): string {
-  const withInline = escaped
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
-
-  return renderWikilinks(withInline, resolveLink);
-}
-
-function tokenizeMarkdown(markdown: string): string[] {
-  return markdown.split('\n');
-}
-
-function parseMarkdown(lines: string[]): MarkdownNode[] {
-  const nodes: MarkdownNode[] = [];
-  let inCodeBlock = false;
-  let codeBuffer: string[] = [];
-  let listBuffer: string[] = [];
-
-  const flushList = () => {
-    if (listBuffer.length > 0) {
-      nodes.push({ type: 'list', items: listBuffer });
-      listBuffer = [];
-    }
-  };
-
-  const flushCode = () => {
-    if (codeBuffer.length > 0 || inCodeBlock) {
-      nodes.push({ type: 'code', content: codeBuffer.join('\n') });
-      codeBuffer = [];
-    }
-  };
-
-  for (const line of lines) {
-    if (line.trimStart().startsWith('```')) {
-      flushList();
-      if (inCodeBlock) {
-        flushCode();
-      }
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      continue;
-    }
-
-    if (!line.trim()) {
-      flushList();
-      continue;
-    }
-
-    if (line.startsWith('- ')) {
-      listBuffer.push(line.slice(2));
-      continue;
-    }
-
-    flushList();
-
-    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim())) {
-      nodes.push({ type: 'hr' });
-    } else if (line.startsWith('# ')) {
-      nodes.push({ type: 'h1', content: line.slice(2) });
-    } else if (line.startsWith('## ')) {
-      nodes.push({ type: 'h2', content: line.slice(3) });
-    } else if (line.startsWith('> ')) {
-      nodes.push({ type: 'blockquote', content: line.slice(2) });
-    } else {
-      nodes.push({ type: 'paragraph', content: line });
-    }
+function nodeToText(children: ReactNode): string {
+  if (typeof children === 'string') {
+    return children;
   }
-
-  flushList();
-
-  if (inCodeBlock || codeBuffer.length > 0) {
-    flushCode();
+  if (Array.isArray(children)) {
+    return children.map(nodeToText).join('');
   }
-
-  return nodes;
-}
-
-function sanitizeMarkdownAst(nodes: MarkdownNode[]): MarkdownNode[] {
-  return nodes.map((node) => {
-    if (node.type === 'list') {
-      return {
-        ...node,
-        items: node.items.map((item) => escapeHtml(item)),
-      };
-    }
-
-    if (node.type === 'hr') {
-      return node;
-    }
-
-    // Code blocks render via a React text node, which encodes for display
-    // automatically. Escaping here would surface visible &lt; / &gt; entities
-    // in the preview AND in the copied clipboard text.
-    if (node.type === 'code') {
-      return node;
-    }
-
-    return {
-      ...node,
-      content: escapeHtml(node.content),
-    };
-  });
+  if (isValidElement(children)) {
+    return nodeToText((children.props as { children?: ReactNode }).children);
+  }
+  return '';
 }
 
 interface CodeBlockProps {
-  // The raw, un-escaped code content. Rendered as plain text (React handles
-  // the encoding) and copied verbatim to the clipboard.
-  content: string;
+  value: string;
+  language?: string;
 }
 
-function CodeBlock({ content }: CodeBlockProps) {
+/**
+ * Fenced code block: syntax-highlighted via highlight.js, with a copy button
+ * that copies the raw (un-highlighted, un-escaped) source.
+ */
+function CodeBlock({ value, language }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+
+  const highlighted = useMemo(() => {
+    try {
+      if (language && hljs.getLanguage(language)) {
+        return hljs.highlight(value, { language }).value;
+      }
+      return hljs.highlightAuto(value).value;
+    } catch {
+      return null;
+    }
+  }, [value, language]);
 
   async function handleCopy() {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(content);
+        await navigator.clipboard.writeText(value);
       } else {
-        // Fallback for older browsers / non-secure contexts.
         const textarea = document.createElement('textarea');
-        textarea.value = content;
+        textarea.value = value;
         textarea.setAttribute('readonly', '');
         textarea.style.position = 'absolute';
         textarea.style.left = '-9999px';
@@ -185,9 +72,11 @@ function CodeBlock({ content }: CodeBlockProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Swallow — the user can still select-and-copy manually.
+      // The user can still select-and-copy manually.
     }
   }
+
+  const codeClassName = `hljs${language ? ` language-${language}` : ''}`;
 
   return (
     <div className="code-block">
@@ -234,63 +123,14 @@ function CodeBlock({ content }: CodeBlockProps) {
         <span className="code-copy-label">{copied ? 'Copied' : 'Copy'}</span>
       </button>
       <pre>
-        <code>{content}</code>
+        {highlighted !== null ? (
+          <code className={codeClassName} dangerouslySetInnerHTML={{ __html: highlighted }} />
+        ) : (
+          <code className={codeClassName}>{value}</code>
+        )}
       </pre>
     </div>
   );
-}
-
-function renderNodes(nodes: MarkdownNode[], resolveLink?: LinkResolver) {
-  return nodes.map((node, index) => {
-    switch (node.type) {
-      case 'h1':
-        return (
-          <h1
-            key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
-          />
-        );
-      case 'h2':
-        return (
-          <h2
-            key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
-          />
-        );
-      case 'blockquote':
-        return (
-          <blockquote
-            key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
-          />
-        );
-      case 'paragraph':
-        return (
-          <p
-            key={index}
-            dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(node.content, resolveLink) }}
-          />
-        );
-      case 'list':
-        return (
-          <ul key={index}>
-            {node.items.map((item, itemIndex) => (
-              <li
-                key={itemIndex}
-                dangerouslySetInnerHTML={{ __html: renderInlineFromEscaped(item, resolveLink) }}
-              />
-            ))}
-          </ul>
-        );
-      case 'code':
-        // The code content is intentionally NOT escaped here: React's child
-        // text rendering handles the encoding, and the copy button needs the
-        // raw string verbatim.
-        return <CodeBlock key={index} content={node.content} />;
-      case 'hr':
-        return <hr key={index} />;
-    }
-  });
 }
 
 export function MarkdownPreviewPane({
@@ -299,6 +139,50 @@ export function MarkdownPreviewPane({
   allPaths,
   onNavigate,
 }: MarkdownPreviewPaneProps) {
+  const { body, tags } = useMemo(() => parseNote(markdown), [markdown]);
+
+  const components = useMemo<Components>(
+    () => ({
+      a({ href, children, ...props }) {
+        if (href && href.startsWith(WIKILINK_PREFIX)) {
+          const target = decodeURIComponent(href.slice(WIKILINK_PREFIX.length));
+          const resolved = allPaths ? resolveWikilink(target, allPaths) : null;
+          return (
+            <a
+              className={resolved ? 'wikilink' : 'wikilink wikilink--unresolved'}
+              href="#"
+              onClick={(event) => {
+                event.preventDefault();
+                if (resolved && onNavigate) {
+                  onNavigate(resolved);
+                }
+              }}
+            >
+              {children}
+            </a>
+          );
+        }
+
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+            {children}
+          </a>
+        );
+      },
+      pre({ children }) {
+        const codeElement = isValidElement(children) ? children : null;
+        const codeProps = (codeElement?.props ?? {}) as {
+          className?: string;
+          children?: ReactNode;
+        };
+        const language = /language-(\w+)/.exec(codeProps.className ?? '')?.[1];
+        const value = nodeToText(codeProps.children).replace(/\n$/, '');
+        return <CodeBlock value={value} language={language} />;
+      },
+    }),
+    [allPaths, onNavigate],
+  );
+
   if (!filePath) {
     return <p className="empty-state">Select a markdown file to preview.</p>;
   }
@@ -307,30 +191,25 @@ export function MarkdownPreviewPane({
     return <p className="empty-state">This file has no content yet.</p>;
   }
 
-  const resolveLink: LinkResolver | undefined = allPaths
-    ? (target) => resolveWikilink(target, allPaths)
-    : undefined;
-
-  function handleClick(event: MouseEvent<HTMLElement>) {
-    const anchor = (event.target as HTMLElement).closest('a.wikilink');
-    if (!anchor) {
-      return;
-    }
-
-    event.preventDefault();
-    const path = anchor.getAttribute('data-wikilink-path');
-    if (path && onNavigate) {
-      onNavigate(path);
-    }
-  }
-
-  const tokens = tokenizeMarkdown(markdown);
-  const ast = parseMarkdown(tokens);
-  const sanitizedAst = sanitizeMarkdownAst(ast);
-
   return (
-    <article className="markdown-preview github-markdown" onClick={handleClick}>
-      {renderNodes(sanitizedAst, resolveLink)}
+    <article className="markdown-preview github-markdown">
+      {tags.length > 0 ? (
+        <div className="markdown-preview__tags">
+          {tags.map((tag) => (
+            <span key={tag} className="tag-chip">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath, remarkWikilinks]}
+        rehypePlugins={[rehypeKatex]}
+        components={components}
+        urlTransform={(url) => (url.startsWith(WIKILINK_PREFIX) ? url : defaultUrlTransform(url))}
+      >
+        {body}
+      </ReactMarkdown>
     </article>
   );
 }
