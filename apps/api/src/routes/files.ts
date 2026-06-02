@@ -4,7 +4,15 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
-import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
+import type {
+  ApiResponse,
+  AuditEntry,
+  Backlink,
+  EditProposal,
+  FileNode,
+  ProposalAction,
+  SearchMatch,
+} from '@repo/shared';
 import {
   extractWikilinks,
   findTextMatch,
@@ -17,6 +25,7 @@ import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
+import type { ProposalStore } from '../storage/proposalStore.js';
 
 interface RouteResult {
   handled: boolean;
@@ -29,6 +38,7 @@ interface RequestContext {
   repository: FileRepository;
   pathResolver: PathResolver;
   auditLog: AuditLog;
+  proposalStore: ProposalStore;
   /** Who is making the request, from the `X-Actor` header (default `human`). */
   actor: string;
 }
@@ -59,6 +69,7 @@ export interface FileRouteDependencies {
   repository: FileRepository;
   pathResolver: PathResolver;
   auditLog: AuditLog;
+  proposalStore: ProposalStore;
 }
 
 const MAX_ACTOR_LENGTH = 64;
@@ -447,6 +458,144 @@ async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: entries });
 }
 
+const PROPOSAL_ACTIONS: ProposalAction[] = ['create', 'update', 'delete'];
+
+async function handleCreateProposal(context: RequestContext): Promise<void> {
+  const { req, res, proposalStore, actor } = context;
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const action = requireString(body.action, 'action') as ProposalAction;
+  if (!PROPOSAL_ACTIONS.includes(action)) {
+    throw new Error('"action" must be create, update, or delete');
+  }
+  const logicalPath = requireString(body.path, 'path');
+  const content = requireOptionalString(body.content, 'content');
+  const baseEtag = requireOptionalString(body.baseEtag, 'baseEtag');
+  const note = requireOptionalString(body.note, 'note');
+
+  if ((action === 'create' || action === 'update') && content === undefined) {
+    throw new Error('"content" is required for create and update proposals');
+  }
+
+  const proposal = await proposalStore.create({
+    actor,
+    action,
+    path: logicalPath,
+    content,
+    baseEtag,
+    note,
+  });
+  sendJson(res, 201, { success: true, data: proposal });
+}
+
+async function handleListProposals({ res, url, proposalStore }: RequestContext): Promise<void> {
+  const statusParam = url.searchParams.get('status')?.trim();
+  const status =
+    statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected'
+      ? statusParam
+      : undefined;
+  const proposals = await proposalStore.list({ status });
+  sendJson(res, 200, { success: true, data: proposals });
+}
+
+/** Apply an approved proposal to the vault, recording it as the proposer's edit. */
+async function applyProposal(context: RequestContext, proposal: EditProposal): Promise<void> {
+  const { repository, res } = context;
+
+  if (proposal.action === 'delete') {
+    await repository.deletePath(proposal.path, { recursive: false });
+    await recordAuditAs(context, proposal.actor, { action: 'delete', path: proposal.path });
+    return;
+  }
+
+  const content = proposal.content ?? '';
+
+  if (proposal.action === 'create') {
+    try {
+      await repository.createMarkdownFile(proposal.path, content);
+    } catch (error: unknown) {
+      if (error instanceof StoragePathError && error.message === 'File already exists') {
+        sendError(res, 409, { code: 'conflict', message: error.message });
+        throw new ProposalAborted();
+      }
+      throw error;
+    }
+  } else {
+    // update — reject if the file changed since the proposal was based on it.
+    const current = await loadFileFromContext(context, proposal.path);
+    if (proposal.baseEtag && proposal.baseEtag !== current.etag) {
+      sendError(res, 409, {
+        code: 'stale_write',
+        message: 'The file changed since this proposal was created; re-propose against the latest.',
+      });
+      throw new ProposalAborted();
+    }
+    await repository.updateMarkdownFile(proposal.path, content);
+  }
+
+  const updated = await loadFileFromContext(context, proposal.path);
+  await recordAuditAs(context, proposal.actor, {
+    action: proposal.action,
+    path: proposal.path,
+    etag: updated.etag,
+  });
+}
+
+/** Signals that a response was already sent while aborting a proposal apply. */
+class ProposalAborted extends Error {}
+
+/** Best-effort audit write attributed to a specific actor (the proposer). */
+async function recordAuditAs(
+  context: RequestContext,
+  actor: string,
+  entry: Omit<AuditEntry, 'ts' | 'actor'>,
+) {
+  try {
+    await context.auditLog.record({ actor, ...entry });
+  } catch {
+    // Provenance is best-effort; the file operation already succeeded.
+  }
+}
+
+async function handleResolveProposal(context: RequestContext): Promise<void> {
+  const { req, res, proposalStore, actor } = context;
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const id = requireString(body.id, 'id');
+  const decision = requireString(body.decision, 'decision');
+  if (decision !== 'approve' && decision !== 'reject') {
+    throw new Error('"decision" must be approve or reject');
+  }
+
+  const proposal = await proposalStore.get(id);
+  if (!proposal) {
+    sendError(res, 404, { code: 'not_found', message: 'Proposal not found.' });
+    return;
+  }
+  if (proposal.status !== 'pending') {
+    sendError(res, 409, {
+      code: 'conflict',
+      message: `Proposal already ${proposal.status}.`,
+    });
+    return;
+  }
+
+  if (decision === 'approve') {
+    try {
+      await applyProposal(context, proposal);
+    } catch (error: unknown) {
+      if (error instanceof ProposalAborted) {
+        return; // response already sent
+      }
+      throw error;
+    }
+  }
+
+  const resolved = await proposalStore.resolve(id, {
+    status: decision === 'approve' ? 'approved' : 'rejected',
+    resolvedBy: actor,
+  });
+  sendJson(res, 200, { success: true, data: resolved });
+}
+
 async function executeHandler(
   context: RequestContext,
   handler: (ctx: RequestContext) => Promise<void>,
@@ -508,6 +657,21 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/audit') {
     await executeHandler(context, handleGetAudit);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/proposals') {
+    await executeHandler(context, handleListProposals);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/proposals') {
+    await executeHandler(context, handleCreateProposal);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/proposals/resolve') {
+    await executeHandler(context, handleResolveProposal);
     return { handled: true };
   }
 

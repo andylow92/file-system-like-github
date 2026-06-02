@@ -57,16 +57,23 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
   appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 11 vault tools
+- **Edit review queue** — instead of writing directly, an agent can submit a
+  **proposal** (`POST /api/proposals`, or the `propose_edit` MCP tool) for a
+  create/update/delete. A human reviews the diff in the web **Review** tab and
+  approves (the edit is applied and audited as the proposing agent) or rejects.
+  Proposals live in `CONTENT_ROOT/.fsbrain/proposals/`. Approval/rejection is a
+  human-only action — agents can `propose_edit` and `list_proposals`, not
+  resolve.
+- **MCP server** (`apps/mcp`) — a stdio server exposing 13 vault tools
   (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
   `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`). It proxies the HTTP API, so agent writes flow
-  through the same validation, concurrency, and audit trail, attributed as
-  `agent:mcp`.
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It proxies the
+  HTTP API, so agent writes flow through the same validation, concurrency, and
+  audit trail, attributed as `agent:mcp`.
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
-semantic search, an agent-edit review/approval queue, and a live
-SSE/file-watcher layer. See the roadmap in `docs/implementation.md`.
+semantic search, and a live SSE/file-watcher layer. See the roadmap in
+`docs/implementation.md`.
 
 ---
 
@@ -78,7 +85,7 @@ apps/
   web/   # React + Vite UI: file tree, editor/preview/activity tabs, Ctrl/Cmd-K search.
   mcp/   # MCP stdio server exposing the vault as agent tools (proxies the API).
 packages/
-  shared/  # Shared TS contracts + pure utilities: markdown.ts (links/tags), search.ts.
+  shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts.
 docs/      # Agent + human knowledge base. Start at implementation.md.
 ```
 
@@ -88,6 +95,9 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
   rejects traversal and absolute paths. Keep those guarantees intact.
 - **Provenance is a guarantee, not an option:** any new mutating path must read
   `X-Actor` and record an `AuditEntry`. Don't add writes that bypass the log.
+- **When the human should sign off on a change, propose it** (`propose_edit` /
+  `POST /api/proposals`) rather than writing directly. Resolving proposals is
+  human-only; don't add an agent path that approves them.
 - Relative imports under the API/MCP packages (NodeNext) use explicit `.js`
   extensions. `npm run build` is green across all workspaces — keep it green.
 

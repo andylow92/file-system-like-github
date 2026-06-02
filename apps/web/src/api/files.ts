@@ -2,7 +2,9 @@ import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  EditProposal,
   FileNode,
+  ProposalStatus,
   SearchMatch,
   SemanticHit,
 } from '@repo/shared';
@@ -136,6 +138,21 @@ export async function fetchAudit(
   return requestJson<AuditEntry[]>(`/api/audit${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: {},
+  });
+}
+
+export async function fetchProposals(status?: ProposalStatus): Promise<EditProposal[]> {
+  const query = status ? `?status=${status}` : '';
+  return requestJson<EditProposal[]>(`/api/proposals${query}`, { method: 'GET', headers: {} });
+}
+
+export async function resolveProposal(
+  id: string,
+  decision: 'approve' | 'reject',
+): Promise<EditProposal> {
+  return requestJson<EditProposal>('/api/proposals/resolve', {
+    method: 'POST',
+    body: JSON.stringify({ id, decision }),
   });
 }
 

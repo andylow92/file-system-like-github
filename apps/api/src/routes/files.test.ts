@@ -25,10 +25,12 @@ describe('PATCH /api/path', () => {
     const { createPathResolver } = await import('../storage/pathResolver.js');
     const { createFileRepository } = await import('../storage/fileRepository.js');
     const { createAuditLog } = await import('../storage/auditLog.js');
+    const { createProposalStore } = await import('../storage/proposalStore.js');
     const pathResolver = createPathResolver(rootPath);
     const repository = createFileRepository(pathResolver);
     const auditLog = createAuditLog(rootPath);
-    return { repository, pathResolver, auditLog };
+    const proposalStore = createProposalStore(rootPath);
+    return { repository, pathResolver, auditLog, proposalStore };
   }
 
   beforeEach(async () => {

@@ -18,6 +18,7 @@ import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  EditProposal,
   FileNode,
   SearchMatch,
   SemanticHit,
@@ -225,6 +226,44 @@ server.tool(
   tool(async ({ path, recursive }: { path: string; recursive?: boolean }) => {
     const params = new URLSearchParams({ path, recursive: String(Boolean(recursive)) });
     return apiRequest(`/api/path?${params.toString()}`, { method: 'DELETE', actor: true });
+  }),
+);
+
+server.tool(
+  'propose_edit',
+  'Propose a create/update/delete for human review instead of writing directly. ' +
+    'Use this when changes should be approved by the human before they land.',
+  {
+    action: z.enum(['create', 'update', 'delete']),
+    path: z.string(),
+    content: z.string().optional().describe('Required for create/update.'),
+    baseEtag: z
+      .string()
+      .optional()
+      .describe('Etag from read_note, so a stale update is rejected on approval.'),
+    note: z.string().optional().describe('Why you are proposing this change.'),
+  },
+  tool(
+    async (args: {
+      action: 'create' | 'update' | 'delete';
+      path: string;
+      content?: string;
+      baseEtag?: string;
+      note?: string;
+    }) => apiRequest('/api/proposals', { method: 'POST', body: JSON.stringify(args), actor: true }),
+  ),
+);
+
+server.tool(
+  'list_proposals',
+  'List edit proposals and their review status (pending/approved/rejected). ' +
+    'Approval/rejection is a human action and is not available to agents.',
+  { status: z.enum(['pending', 'approved', 'rejected']).optional() },
+  tool(async ({ status }: { status?: 'pending' | 'approved' | 'rejected' }) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    const query = params.toString();
+    return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
   }),
 );
 

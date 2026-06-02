@@ -4,6 +4,7 @@ import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
+import { ReviewPanel } from './components/ReviewPanel';
 import { SearchDialog } from './components/SearchDialog';
 import { ModalDialog } from './components/ModalDialog';
 
@@ -20,6 +21,7 @@ import {
   createFile,
   deletePath,
   fetchFile,
+  fetchProposals,
   fetchTree,
   getErrorMessage,
   renamePath,
@@ -47,9 +49,28 @@ export function App() {
   const [modalState, setModalState] = useState<AppModalState | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [activityKey, setActivityKey] = useState(0);
+  const [pendingProposals, setPendingProposals] = useState(0);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   const bumpActivity = () => setActivityKey((value) => value + 1);
+
+  // Keep the Review tab's pending-proposal badge fresh (on load + after any
+  // vault change or proposal resolution, which bump `activityKey`).
+  useEffect(() => {
+    let cancelled = false;
+    fetchProposals('pending')
+      .then((proposals) => {
+        if (!cancelled) {
+          setPendingProposals(proposals.length);
+        }
+      })
+      .catch(() => {
+        /* badge is best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activityKey]);
 
   const currentSavedFile = selectedFilePath ? savedFiles[selectedFilePath] : undefined;
   const currentSavedMarkdown = currentSavedFile?.content ?? '';
@@ -400,6 +421,19 @@ export function App() {
               }}
             />
           }
+          review={
+            <ReviewPanel
+              refreshKey={activityKey}
+              onResolved={() => {
+                void refreshTreeAndCurrentFile();
+                bumpActivity();
+              }}
+              onSelectFile={(path) => {
+                void navigateToFile(path);
+              }}
+            />
+          }
+          reviewCount={pendingProposals}
         />
       </GlobalLayout>
 

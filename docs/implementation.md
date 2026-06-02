@@ -28,20 +28,21 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 ```
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
-  FileViewerTabs (Prev|Edit|       /api/file     read/create/update markdown.ts (links/tags)
-    Split|Activity)                /api/dir      create folder      search.ts  (text match)
+  FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags)
+    Activity|Review)               /api/dir      create folder      search.ts  (text match)
   MarkdownPreviewPane (react-      /api/path     move / delete      semantic.ts (TF-IDF)
     markdown: GFM/math/highlight   /api/backlinks        link graph   markdown/remarkWikilinks.ts
-    + wikilinks)                   /api/search           full-text    Audit/Search types
+    + wikilinks)                   /api/search           full-text    Audit/Search/Proposal types
   BacklinksPanel / ActivityPanel   /api/semantic-search  ranked retrieval
   SearchDialog (Text|Semantic)     /api/audit            provenance feed
-  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver, AuditLog)
-  openrouter/ (Fix Format)
+  ReviewPanel (proposals)          /api/proposals[/resolve]  edit review queue
+  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver,
+  openrouter/ (Fix Format)                   AuditLog, ProposalStore)
 
-apps/mcp (MCP stdio server) — proxies the HTTP API, exposing the vault as agent
-  tools (list/read/create/update/search/semantic_search/backlinks/
-  recent_activity/move/delete). Writes carry X-Actor: agent:mcp, so they land
-  in the human Activity feed.
+apps/mcp (MCP stdio server, 13 tools) — proxies the HTTP API: list/read/create/
+  update/search/semantic_search/backlinks/recent_activity/move/delete plus
+  propose_edit + list_proposals. Writes carry X-Actor: agent:mcp, so they land
+  in the human Activity feed; proposals await human approval in the Review tab.
 ```
 
 Key facts an agent must know:
@@ -79,7 +80,8 @@ Key facts an agent must know:
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` — proxies API, attributes `agent:mcp`     |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`     |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (13 tools) — proxies API as `agent:mcp`   |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
@@ -112,7 +114,7 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | ---------------------------------------------------- | :------: | :----: |
 | Machine-facing API / **MCP server** over the vault   |    P0    |   ✅   |
 | **Provenance**: per-change attribution + audit feed  |    P0    |   ✅   |
-| agent-edit review/approval queue                     |    P1    |   ⬜   |
+| agent-edit review/approval queue                     |    P1    |   ✅   |
 | Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
 | Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
 | typed link graph)                                    |          |        |
@@ -141,7 +143,7 @@ next.
    `GET /api/search` (text + tag), `search.ts` helper, Ctrl/Cmd-K `SearchDialog`
    (prefix `#` for tag search).
 3. **Slice 4 — MCP server.** ✅ Done.
-   `apps/mcp` stdio server proxying the HTTP API with 10 tools; writes carry
+   `apps/mcp` stdio server proxying the HTTP API (now 13 tools); writes carry
    `X-Actor: agent:mcp` and flow through the audit trail.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
@@ -158,16 +160,19 @@ next.
    `GET /api/semantic-search`, a Text|Semantic toggle in `SearchDialog`, and a
    `semantic_search` MCP tool. Runs offline, no API key. A real embedding
    provider can replace the ranking engine without changing callers.
+7. **Slice 6b — Agent-edit review queue.** ✅ Done.
+   Agents `propose_edit` (`POST /api/proposals`) create/update/delete edits;
+   `ProposalStore` keeps them in `.fsbrain/proposals/`. A human reviews the diff
+   in the **Review** tab and approves (applied + audited as the proposer) or
+   rejects. Resolution is human-only. Closes the provenance trust loop.
 
 ### Next up (open)
 
-7. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
+8. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
    embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
    context-bundle endpoint for RAG. Cache the chunk/IDF index instead of
    re-reading + re-ranking the whole vault per query (invalidate on writes via
    the existing mutation/audit paths). Add Mermaid diagrams to the renderer.
-8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
-   propose edits a human approves/rejects, with diffs. Closes the trust loop.
 9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
    Activity feed) updates the moment an agent writes.
 
