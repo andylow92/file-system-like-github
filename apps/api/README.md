@@ -20,18 +20,19 @@ Example:
 curl "http://localhost:3001/api/tree?path=notes"
 ```
 
-### `GET /api/file?path=...`
+### `GET /api/file?path=...` (or `?id=...`)
 
 Reads a markdown file.
 
-- Requires query param `path`.
+- Address the note by `path` (logical path under `CONTENT_ROOT`) or by `id`
+  (frontmatter `id:`, when present). Only `.md` files are supported.
 - Path must resolve under `CONTENT_ROOT`.
-- Only `.md` files are supported.
 
 Example:
 
 ```bash
 curl "http://localhost:3001/api/file?path=notes/todo.md"
+curl "http://localhost:3001/api/file?id=2f3a-stable"   # alternative
 ```
 
 Response includes:
@@ -39,6 +40,7 @@ Response includes:
 - `content`
 - `lastModified`
 - `etag` (for optimistic concurrency)
+- `id` — the note's stable id from frontmatter, when one is present
 
 ### `PUT /api/file`
 
@@ -87,7 +89,8 @@ Request body schema:
 }
 ```
 
-Supported `op` shapes:
+Address the note by `path` OR by `id` (frontmatter `id:`). Supported `op`
+shapes:
 
 - `{ "type": "append", "text": "..." }` — append `text` to the end of the note.
 - `{ "type": "prepend", "text": "..." }` — insert `text` at the top, AFTER any
@@ -96,6 +99,15 @@ Supported `op` shapes:
   replace the body under the first heading matching `heading` exactly, up to
   the next sibling-or-higher heading (or EOF). The heading line itself is
   preserved. Returns `404 not_found` when the heading is not present.
+- `{ "type": "replace_block", "blockId": "claim-1", "body": "..." }` —
+  replace the block (paragraph / list-item / heading section) carrying the
+  `^block-id` anchor. The anchor is re-attached to the replacement so future
+  reads can still address the block. Returns `404 not_found` when no anchor
+  with that id exists.
+- `{ "type": "ensure_id", "id": "optional-uuid" }` — ensure the note has a
+  stable `id:` in its frontmatter. If `id` is omitted, a fresh UUID is
+  generated. Idempotent: a second call returns the existing id without
+  rewriting the file or recording a new audit entry.
 
 Optimistic concurrency mirrors `PUT /api/file`: pass `etag` (or
 `lastModified`) to refuse the patch if the file changed under you (`409
@@ -200,7 +212,33 @@ curl -X DELETE "http://localhost:3001/api/path?path=notes/archive&recursive=true
 ### `GET /api/backlinks?path=...`
 
 Lists notes that link to `path` via `[[wikilinks]]`. Returns `Backlink[]`
-(`{ path, name }`).
+(`{ path, name, type? }`). When the link carried a typed relation
+(`[[Target|rel:supports]]`), the backlink includes `type: "supports"`.
+
+### `GET /api/block?path=...&block=<id>` (or `?id=<note-id>&block=<id>`)
+
+Reads a single block (paragraph / list-item / heading section) carrying the
+`^block-id` anchor, plus a few lines of surrounding context. Address the note
+by `path` or by stable `id`. Returns `404 not_found` when the anchor is not
+present.
+
+```json
+{
+  "path": "notes/idea.md",
+  "blockId": "claim-1",
+  "startLine": 5,
+  "endLine": 5,
+  "text": "A claim worth citing.",
+  "context": "Intro paragraph.\nA claim worth citing.\nClosing note.",
+  "etag": "abc123",
+  "lastModified": "2026-06-02T..."
+}
+```
+
+### `GET /api/block-anchors?path=...` (or `?id=<note-id>`)
+
+Lists every `^block-id` anchor in a note (id, 1-based line, line text). Useful
+for an agent to discover stable addresses before patching by block.
 
 ### `GET /api/search?q=...&tag=...&limit=...`
 

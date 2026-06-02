@@ -69,19 +69,29 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   airtight enforcement would need authn/z, intentionally out of scope for this
   local, single-user tool.
 - **Granular agent writes** — `PATCH /api/file` (or the `patch_note` MCP
-  tool) applies `append`, `prepend`, or `replace_section` ops without
-  rewriting the whole note. It reuses the `etag` optimistic-concurrency
-  contract, accepts an `idempotencyKey` so a retried patch is a no-op (keys
-  cached in memory for the API process lifetime), and supports `dryRun` to
-  preview the result without writing or auditing. The pure text-transform
-  helpers live in `@repo/shared` (`patch.ts`).
-- **MCP server** (`apps/mcp`) — a stdio server exposing 14 vault tools
-  (`list_notes`, `read_note`, `create_note`, `update_note`, `patch_note`,
-  `search_notes`, `semantic_search`, `get_backlinks`, `recent_activity`,
-  `create_folder`, `move_path`, `delete_path`, `propose_edit`,
-  `list_proposals`). It proxies the HTTP API, so agent writes flow through
-  the same validation, concurrency, and audit trail, attributed as
-  `agent:mcp`.
+  tool) applies `append`, `prepend`, `replace_section`, `replace_block`, or
+  `ensure_id` ops without rewriting the whole note. It reuses the `etag`
+  optimistic-concurrency contract, accepts an `idempotencyKey` so a retried
+  patch is a no-op (keys cached in memory for the API process lifetime), and
+  supports `dryRun` to preview the result without writing or auditing. The
+  pure text-transform helpers live in `@repo/shared` (`patch.ts`).
+- **Structured knowledge** — Obsidian-style **block anchors** (`^id`) give
+  agents stable, citable addresses inside a note: `GET /api/block` /
+  `GET /api/block-anchors` (and the `read_block` / `get_block_anchors` MCP
+  tools) read by block; the `replace_block` patch op overwrites a block,
+  reattaching the anchor so future reads still resolve. A frontmatter
+  **`id:`** is the note's stable identity (opt-in via the `ensure_id` patch
+  op), accepted as `?id=` on `/api/file` / `/api/block` reads and on the
+  patch endpoint. **Typed wikilinks** `[[Target|rel:supports]]` surface a
+  relation on `/api/backlinks` (plain aliases still work). Pure helpers live
+  in `@repo/shared` (`blocks.ts`, `noteId.ts`).
+- **MCP server** (`apps/mcp`) — a stdio server exposing 16 vault tools
+  (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
+  `create_note`, `update_note`, `patch_note`, `search_notes`,
+  `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It proxies
+  the HTTP API, so agent writes flow through the same validation,
+  concurrency, and audit trail, attributed as `agent:mcp`.
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
 semantic search, and a live SSE/file-watcher layer. See the roadmap in

@@ -7,15 +7,22 @@
  * testable, so the API and MCP can layer concurrency, audit, and dry-run on top.
  */
 
+import { findBlock, stripAnchor } from './blocks.js';
 import { parseFrontmatter } from './markdown.js';
 
 export type AppendOp = { type: 'append'; text: string };
 export type PrependOp = { type: 'prepend'; text: string };
 export type ReplaceSectionOp = { type: 'replace_section'; heading: string; body: string };
-export type PatchOp = AppendOp | PrependOp | ReplaceSectionOp;
+export type ReplaceBlockOp = { type: 'replace_block'; blockId: string; body: string };
+export type PatchOp = AppendOp | PrependOp | ReplaceSectionOp | ReplaceBlockOp;
 export type PatchOpType = PatchOp['type'];
 
-export const PATCH_OP_TYPES: PatchOpType[] = ['append', 'prepend', 'replace_section'];
+export const PATCH_OP_TYPES: PatchOpType[] = [
+  'append',
+  'prepend',
+  'replace_section',
+  'replace_block',
+];
 
 export interface PatchResult {
   content: string;
@@ -31,6 +38,17 @@ export class SectionNotFoundError extends Error {
   constructor(public heading: string) {
     super(`Section heading not found: ${heading}`);
     this.name = 'SectionNotFoundError';
+  }
+}
+
+/**
+ * Thrown when `replace_block` cannot find an anchor for the requested block id.
+ * Surfaced as a 404 by the API.
+ */
+export class BlockNotFoundError extends Error {
+  constructor(public blockId: string) {
+    super(`Block anchor not found: ^${blockId}`);
+    this.name = 'BlockNotFoundError';
   }
 }
 
@@ -127,6 +145,81 @@ export function replaceSection(content: string, heading: string, body: string): 
   return { content: next, changed: next !== content };
 }
 
+/**
+ * Replace the block carrying `^blockId` with `body`. The block boundaries are
+ * those returned by `findBlock` (paragraph / list-item / heading section). The
+ * anchor is preserved at the end of the replacement's first line so future
+ * reads can still address the block.
+ *
+ * Throws `BlockNotFoundError` when no such anchor exists. Operates on the body
+ * (frontmatter is untouched).
+ */
+export function replaceBlock(content: string, blockId: string, body: string): PatchResult {
+  if (!blockId.trim()) {
+    throw new Error('Block id is required');
+  }
+
+  const parsed = parseFrontmatter(content);
+  const found = findBlock(parsed.body, blockId);
+  if (!found) {
+    throw new BlockNotFoundError(blockId);
+  }
+
+  const bodyLines = parsed.body.split('\n');
+  const replacementLines = body === '' ? [''] : body.split('\n');
+
+  // Re-attach the anchor so the block stays addressable. If the caller already
+  // included a trailing ` ^id`, leave it alone.
+  const firstLine = replacementLines[0];
+  if (!new RegExp(`[ \\t]+\\^${blockId}[ \\t]*$`).test(firstLine)) {
+    const stripped = stripAnchor(firstLine).replace(/[ \t]+$/, '');
+    replacementLines[0] = stripped.length > 0 ? `${stripped} ^${blockId}` : `^${blockId}`;
+  }
+
+  const startIdx = found.startLine - 1;
+  const endIdx = found.endLine - 1;
+  const nextBodyLines = [
+    ...bodyLines.slice(0, startIdx),
+    ...replacementLines,
+    ...bodyLines.slice(endIdx + 1),
+  ];
+
+  const nextBody = nextBodyLines.join('\n');
+
+  if (!parsed.hasFrontmatter) {
+    return { content: nextBody, changed: nextBody !== content };
+  }
+
+  // Reattach the frontmatter block. We reconstruct from the original lines so
+  // the exact frontmatter formatting is preserved.
+  const originalLines = content.split('\n');
+  let closingIndex = -1;
+  for (let i = 1; i < originalLines.length; i += 1) {
+    if (/^---[ \t]*$/.test(originalLines[i])) {
+      closingIndex = i;
+      break;
+    }
+  }
+  if (closingIndex === -1) {
+    return { content: nextBody, changed: nextBody !== content };
+  }
+  // parseFrontmatter strips leading blank lines from the body; preserve that
+  // separator by counting how many blanks sat between the closing fence and
+  // the start of the recorded body.
+  const head = originalLines.slice(0, closingIndex + 1).join('\n');
+  let blanks = 0;
+  for (let i = closingIndex + 1; i < originalLines.length; i += 1) {
+    if (originalLines[i] === '') {
+      blanks += 1;
+    } else {
+      break;
+    }
+  }
+  const separator = `\n${'\n'.repeat(blanks)}`;
+  const next = `${head}${separator}${nextBody}`;
+  return { content: next, changed: next !== content };
+}
+
 /** Dispatch on a `PatchOp` discriminator to the matching transform. */
 export function applyPatchOp(content: string, op: PatchOp): PatchResult {
   switch (op.type) {
@@ -136,6 +229,8 @@ export function applyPatchOp(content: string, op: PatchOp): PatchResult {
       return applyPrepend(content, op.text);
     case 'replace_section':
       return replaceSection(content, op.heading, op.body);
+    case 'replace_block':
+      return replaceBlock(content, op.blockId, op.body);
     default: {
       const exhaustive: never = op;
       throw new Error(`Unknown patch op: ${JSON.stringify(exhaustive)}`);

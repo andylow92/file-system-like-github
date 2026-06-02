@@ -2152,6 +2152,32 @@ textarea:focus-visible {
   cursor: help;
 }
 
+/* Block anchors (^id) rendered inline next to the block they mark. Kept low-key
+   so they read as metadata, not body content — visible enough for agents to
+   spot them, quiet enough not to compete with prose. */
+.markdown-preview .block-anchor {
+  display: inline-block;
+  margin-left: 0.4em;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.75em;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.12));
+  border-radius: 4px;
+  padding: 0 0.35em;
+  opacity: 0.6;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.markdown-preview .block-anchor:hover,
+.markdown-preview .block-anchor:focus {
+  opacity: 1;
+  color: var(--color-accent);
+  border-color: var(--color-accent-ring);
+  background: var(--color-accent-soft);
+}
+
 /* Backlinks panel shown beneath the markdown preview. */
 .backlinks-panel {
   margin-top: var(--space-5, 1.5rem);

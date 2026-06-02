@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import type http from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { URL } from 'node:url';
 
@@ -8,6 +8,7 @@ import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  BlockAnchor,
   EditProposal,
   FileNode,
   PatchOp,
@@ -15,11 +16,17 @@ import type {
   SearchMatch,
 } from '@repo/shared';
 import {
+  BlockNotFoundError,
   PATCH_OP_TYPES,
   SectionNotFoundError,
   applyPatchOp,
+  ensureNoteId,
+  extractBlockAnchors,
   extractWikilinks,
+  findBlock,
+  findNoteId,
   findTextMatch,
+  parseFrontmatter,
   parseNote,
   resolveWikilink,
   semanticSearch,
@@ -70,9 +77,11 @@ interface FileResponse {
   encoding: 'utf-8';
   lastModified: string;
   etag: string;
+  /** Stable note id from frontmatter `id:`, when present. */
+  id?: string;
 }
 
-interface PatchFileResponse extends FileResponse {
+export interface PatchFileResponse extends FileResponse {
   /** True when the request ran in dry-run mode and no write happened. */
   dryRun: boolean;
 }
@@ -195,6 +204,7 @@ async function loadFileFromContext(
 
   const content = await fs.readFile(absolutePath, 'utf8');
   const lastModified = stat.mtime.toISOString();
+  const id = findNoteId(content);
 
   return {
     path: logicalPath,
@@ -202,7 +212,66 @@ async function loadFileFromContext(
     encoding: 'utf-8',
     lastModified,
     etag: toEtag(content, lastModified),
+    ...(id ? { id } : {}),
   };
+}
+
+/** Walk the vault to find the note whose frontmatter `id:` matches. */
+async function findPathByNoteId(
+  repository: FileRepository,
+  id: string,
+): Promise<string | undefined> {
+  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  for (const filePath of allPaths) {
+    const content = await repository.readMarkdownFile(filePath);
+    if (findNoteId(content) === id) {
+      return filePath;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a file address (either `path=` or `id=`) into a logical path. The
+ * caller passes the URL search params; we prefer `path` when both are given.
+ */
+async function resolveLogicalPath(
+  repository: FileRepository,
+  params: URLSearchParams,
+): Promise<string> {
+  const pathParam = params.get('path');
+  if (pathParam && pathParam.trim()) {
+    return requireString(pathParam, 'path');
+  }
+  const idParam = params.get('id');
+  if (idParam && idParam.trim()) {
+    const resolved = await findPathByNoteId(repository, idParam.trim());
+    if (!resolved) {
+      throw new StoragePathError(`No note with id "${idParam.trim()}"`);
+    }
+    return resolved;
+  }
+  throw new Error('"path" is required');
+}
+
+/** Same resolver but reading from a JSON request body's `path` / `id` fields. */
+async function resolveBodyLogicalPath(
+  repository: FileRepository,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const pathValue = body.path;
+  if (typeof pathValue === 'string' && pathValue.trim()) {
+    return requireString(pathValue, 'path');
+  }
+  const idValue = body.id;
+  if (typeof idValue === 'string' && idValue.trim()) {
+    const resolved = await findPathByNoteId(repository, idValue.trim());
+    if (!resolved) {
+      throw new StoragePathError(`No note with id "${idValue.trim()}"`);
+    }
+    return resolved;
+  }
+  throw new Error('"path" is required');
 }
 
 function toFileNode(node: TreeNode): FileNode {
@@ -246,21 +315,99 @@ async function handleGetBacklinks({ res, url, repository }: RequestContext): Pro
     }
 
     const content = await repository.readMarkdownFile(sourcePath);
-    const linksToTarget = extractWikilinks(content).some(
+    const matchingLink = extractWikilinks(content).find(
       (link) => resolveWikilink(link.target, allPaths) === targetPath,
     );
 
-    if (linksToTarget) {
-      backlinks.push({ path: sourcePath, name: sourcePath.split('/').pop() ?? sourcePath });
+    if (matchingLink) {
+      backlinks.push({
+        path: sourcePath,
+        name: sourcePath.split('/').pop() ?? sourcePath,
+        ...(matchingLink.type ? { type: matchingLink.type } : {}),
+      });
     }
   }
 
   sendJson(res, 200, { success: true, data: backlinks });
 }
 
+interface BlockResponse {
+  path: string;
+  blockId: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  /** A few lines of surrounding context so the caller can place the block. */
+  context: string;
+  etag: string;
+  lastModified: string;
+  id?: string;
+}
+
+const BLOCK_CONTEXT_LINES = 2;
+
+async function handleGetBlock(context: RequestContext): Promise<void> {
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
+  const blockId = requireString(url.searchParams.get('block'), 'block');
+
+  const file = await loadFileFromContext(context, logicalPath);
+  const { body } = parseFrontmatter(file.content);
+  const block = findBlock(body, blockId);
+  if (!block) {
+    sendError(res, 404, { code: 'not_found', message: `Block anchor not found: ^${blockId}` });
+    return;
+  }
+
+  const bodyLines = body.split('\n');
+  const before = bodyLines
+    .slice(Math.max(0, block.startLine - 1 - BLOCK_CONTEXT_LINES), block.startLine - 1)
+    .join('\n');
+  const after = bodyLines
+    .slice(block.endLine, Math.min(bodyLines.length, block.endLine + BLOCK_CONTEXT_LINES))
+    .join('\n');
+  const contextStr = [before, block.text, after].filter((part) => part.length > 0).join('\n');
+
+  const data: BlockResponse = {
+    path: logicalPath,
+    blockId,
+    startLine: block.startLine,
+    endLine: block.endLine,
+    text: block.text,
+    context: contextStr,
+    etag: file.etag,
+    lastModified: file.lastModified,
+    ...(file.id ? { id: file.id } : {}),
+  };
+  sendJson(res, 200, { success: true, data });
+}
+
+interface BlockAnchorsResponse {
+  path: string;
+  id?: string;
+  etag: string;
+  lastModified: string;
+  anchors: BlockAnchor[];
+}
+
+async function handleGetBlockAnchors(context: RequestContext): Promise<void> {
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
+  const file = await loadFileFromContext(context, logicalPath);
+  const { body } = parseFrontmatter(file.content);
+  const data: BlockAnchorsResponse = {
+    path: logicalPath,
+    ...(file.id ? { id: file.id } : {}),
+    etag: file.etag,
+    lastModified: file.lastModified,
+    anchors: extractBlockAnchors(body),
+  };
+  sendJson(res, 200, { success: true, data });
+}
+
 async function handleGetFile(context: RequestContext): Promise<void> {
-  const { res, url } = context;
-  const logicalPath = requireString(url.searchParams.get('path'), 'path');
+  const { res, url, repository } = context;
+  const logicalPath = await resolveLogicalPath(repository, url.searchParams);
   const data = await loadFileFromContext(context, logicalPath);
   sendJson(res, 200, { success: true, data });
 }
@@ -307,29 +454,43 @@ function requireBoolean(value: unknown, fieldName: string): boolean | undefined 
   return value;
 }
 
-function parsePatchOp(raw: unknown): PatchOp {
+type PatchOpInput = PatchOp | { type: 'ensure_id'; id?: string };
+type PatchOpInputType = PatchOpInput['type'];
+
+const PATCH_OP_INPUT_TYPES: PatchOpInputType[] = [...PATCH_OP_TYPES, 'ensure_id'];
+
+function parsePatchOp(raw: unknown): PatchOpInput {
   if (!raw || typeof raw !== 'object') {
     throw new Error('"op" must be an object');
   }
   const op = raw as Record<string, unknown>;
   const type = requireString(op.type, 'op.type');
-  if (!(PATCH_OP_TYPES as string[]).includes(type)) {
-    throw new Error(`"op.type" must be one of ${PATCH_OP_TYPES.join(', ')}`);
+  if (!(PATCH_OP_INPUT_TYPES as string[]).includes(type)) {
+    throw new Error(`"op.type" must be one of ${PATCH_OP_INPUT_TYPES.join(', ')}`);
   }
   if (type === 'append' || type === 'prepend') {
     const text = requireOptionalString(op.text, 'op.text') ?? '';
     return { type, text };
   }
-  // replace_section
-  const heading = requireString(op.heading, 'op.heading');
-  const body = requireOptionalString(op.body, 'op.body') ?? '';
-  return { type: 'replace_section', heading, body };
+  if (type === 'replace_section') {
+    const heading = requireString(op.heading, 'op.heading');
+    const body = requireOptionalString(op.body, 'op.body') ?? '';
+    return { type: 'replace_section', heading, body };
+  }
+  if (type === 'replace_block') {
+    const blockId = requireString(op.blockId, 'op.blockId');
+    const body = requireOptionalString(op.body, 'op.body') ?? '';
+    return { type: 'replace_block', blockId, body };
+  }
+  // ensure_id
+  const id = requireOptionalString(op.id, 'op.id')?.trim();
+  return { type: 'ensure_id', ...(id ? { id } : {}) };
 }
 
 async function handlePatchFile(context: RequestContext): Promise<void> {
   const { req, res, repository, patchIdempotency } = context;
   const body = await readJsonBody<Record<string, unknown>>(req);
-  const logicalPath = requireString(body.path, 'path');
+  const logicalPath = await resolveBodyLogicalPath(repository, body);
   const op = parsePatchOp(body.op);
   const expectedEtag = requireOptionalString(body.etag, 'etag');
   const expectedLastModified = requireOptionalString(body.lastModified, 'lastModified');
@@ -363,10 +524,17 @@ async function handlePatchFile(context: RequestContext): Promise<void> {
   }
 
   let nextContent: string;
+  let unchanged = false;
   try {
-    nextContent = applyPatchOp(current.content, op).content;
+    if (op.type === 'ensure_id') {
+      const result = ensureNoteId(current.content, op.id ?? randomUUID());
+      nextContent = result.content;
+      unchanged = !result.changed;
+    } else {
+      nextContent = applyPatchOp(current.content, op).content;
+    }
   } catch (error: unknown) {
-    if (error instanceof SectionNotFoundError) {
+    if (error instanceof SectionNotFoundError || error instanceof BlockNotFoundError) {
       sendError(res, 404, { code: 'not_found', message: error.message });
       return;
     }
@@ -384,6 +552,7 @@ async function handlePatchFile(context: RequestContext): Promise<void> {
       encoding: 'utf-8',
       lastModified: current.lastModified,
       etag: current.etag,
+      ...(findNoteId(nextContent) ? { id: findNoteId(nextContent) as string } : {}),
       dryRun: true,
     };
     if (idempotencyKey) {
@@ -393,9 +562,13 @@ async function handlePatchFile(context: RequestContext): Promise<void> {
     return;
   }
 
-  await repository.updateMarkdownFile(logicalPath, nextContent);
+  if (!unchanged) {
+    await repository.updateMarkdownFile(logicalPath, nextContent);
+  }
   const updated = await loadFileFromContext(context, logicalPath);
-  await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+  if (!unchanged) {
+    await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+  }
 
   const response: PatchFileResponse = { ...updated, dryRun: false };
   if (idempotencyKey) {
@@ -785,6 +958,16 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/backlinks') {
     await executeHandler(context, handleGetBacklinks);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/block') {
+    await executeHandler(context, handleGetBlock);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/block-anchors') {
+    await executeHandler(context, handleGetBlockAnchors);
     return { handled: true };
   }
 

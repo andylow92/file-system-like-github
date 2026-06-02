@@ -3,7 +3,7 @@ import http from 'node:http';
 import type { ApiResponse, HealthResponse } from '@repo/shared';
 
 import { loadConfig } from './config.js';
-import { handleFileRoutes } from './routes/files.js';
+import { handleFileRoutes, type PatchFileResponse } from './routes/files.js';
 import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
@@ -15,7 +15,7 @@ export function createServer(config = loadConfig()): http.Server {
   const repository = createFileRepository(pathResolver);
   const auditLog = createAuditLog(config.contentRoot);
   const proposalStore = createProposalStore(config.contentRoot);
-  const patchIdempotency = createIdempotencyCache();
+  const patchIdempotency = createIdempotencyCache<PatchFileResponse>();
 
   function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });

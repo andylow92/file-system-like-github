@@ -18,6 +18,7 @@ import type {
   ApiResponse,
   AuditEntry,
   Backlink,
+  BlockAnchor,
   EditProposal,
   FileNode,
   SearchMatch,
@@ -96,10 +97,61 @@ server.tool(
 
 server.tool(
   'read_note',
-  'Read the markdown content of a note by its logical path.',
-  { path: z.string().describe('Logical path, e.g. "notes/idea.md".') },
-  tool(async ({ path }: { path: string }) => {
-    return apiRequest(`/api/file?path=${encodeURIComponent(path)}`);
+  'Read the markdown content of a note by its logical path or its stable id.',
+  {
+    path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+    id: z.string().optional().describe('Stable note id from frontmatter `id:`.'),
+  },
+  tool(async ({ path, id }: { path?: string; id?: string }) => {
+    if (!path && !id) {
+      throw new Error('Either path or id is required');
+    }
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    else if (id) params.set('id', id);
+    return apiRequest(`/api/file?${params.toString()}`);
+  }),
+);
+
+server.tool(
+  'read_block',
+  'Read a single block (paragraph / list-item / heading section) carrying a ' +
+    '`^block-id` anchor, plus a short surrounding context. Address the note by ' +
+    'path or by stable id.',
+  {
+    path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+    id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
+    block: z.string().describe('Anchor id without the leading `^`, e.g. "claim-1".'),
+  },
+  tool(async ({ path, id, block }: { path?: string; id?: string; block: string }) => {
+    if (!path && !id) {
+      throw new Error('Either path or id is required');
+    }
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    else if (id) params.set('id', id);
+    params.set('block', block);
+    return apiRequest(`/api/block?${params.toString()}`);
+  }),
+);
+
+server.tool(
+  'get_block_anchors',
+  'List every `^block-id` anchor in a note. Useful before patching by block.',
+  {
+    path: z.string().optional().describe('Logical path, e.g. "notes/idea.md".'),
+    id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
+  },
+  tool(async ({ path, id }: { path?: string; id?: string }) => {
+    if (!path && !id) {
+      throw new Error('Either path or id is required');
+    }
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    else if (id) params.set('id', id);
+    return apiRequest<{ path: string; anchors: BlockAnchor[] }>(
+      `/api/block-anchors?${params.toString()}`,
+    );
   }),
 );
 
@@ -232,11 +284,14 @@ server.tool(
 server.tool(
   'patch_note',
   'Granular edits to a note: append text, prepend text (after frontmatter), ' +
-    'or replace the body under a heading. Pass `etag` (from read_note) for ' +
-    'safe optimistic-concurrency writes, an `idempotencyKey` to make a retry ' +
-    'a no-op, or `dryRun: true` to preview the result without writing.',
+    'replace the body under a heading, replace the block carrying a ' +
+    '`^block-id` anchor, or ensure the note has a stable `id:` in frontmatter. ' +
+    'Address the note by `path` or by stable `id`. Pass `etag` (from read_note) ' +
+    'for safe optimistic-concurrency writes, an `idempotencyKey` to make a ' +
+    'retry a no-op, or `dryRun: true` to preview the result without writing.',
   {
-    path: z.string(),
+    path: z.string().optional(),
+    id: z.string().optional().describe('Stable note id (frontmatter `id:`).'),
     op: z.discriminatedUnion('type', [
       z
         .object({ type: z.literal('append'), text: z.string() })
@@ -251,6 +306,22 @@ server.tool(
           body: z.string().describe('New body to insert under the heading.'),
         })
         .describe('Replace the body under a heading; siblings are kept.'),
+      z
+        .object({
+          type: z.literal('replace_block'),
+          blockId: z.string().describe('Anchor id without the leading `^`.'),
+          body: z.string().describe('New body to substitute for the block.'),
+        })
+        .describe('Replace the paragraph/list-item/heading-section carrying `^blockId`.'),
+      z
+        .object({
+          type: z.literal('ensure_id'),
+          id: z
+            .string()
+            .optional()
+            .describe('Specific id to assign; a UUID is generated when omitted.'),
+        })
+        .describe('Add an `id:` to frontmatter if missing (idempotent).'),
     ]),
     etag: z.string().optional().describe('Etag from read_note; rejects the patch if stale.'),
     idempotencyKey: z
@@ -261,15 +332,21 @@ server.tool(
   },
   tool(
     async (args: {
-      path: string;
+      path?: string;
+      id?: string;
       op:
         | { type: 'append'; text: string }
         | { type: 'prepend'; text: string }
-        | { type: 'replace_section'; heading: string; body: string };
+        | { type: 'replace_section'; heading: string; body: string }
+        | { type: 'replace_block'; blockId: string; body: string }
+        | { type: 'ensure_id'; id?: string };
       etag?: string;
       idempotencyKey?: string;
       dryRun?: boolean;
     }) => {
+      if (!args.path && !args.id) {
+        throw new Error('Either path or id is required');
+      }
       return apiRequest('/api/file', {
         method: 'PATCH',
         body: JSON.stringify(args),
