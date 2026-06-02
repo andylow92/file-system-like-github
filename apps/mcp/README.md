@@ -1,49 +1,64 @@
 # @repo/mcp — Vault MCP server
 
 An [MCP](https://modelcontextprotocol.io) server that exposes the markdown vault
-as tools an AI agent can call. The storage API runs **in-process** by default,
-so the server is a single self-contained `node`-launchable command — perfect
-for MCP hosts like **OpenClaw** or Claude Desktop that spawn one process per
-server. Point at an already-running API instead by setting `API_BASE_URL`.
+as tools an AI agent can call. It is a **single-command launcher**: the storage
+API (`apps/api`) runs in-process on `127.0.0.1` by default, so an MCP host
+(OpenClaw, Claude Desktop, Claude Code, Cursor) only needs to spawn one stdio
+process.
 
 Agent writes are attributed via the `X-Actor` header (default `agent:mcp`,
-override with `MCP_ACTOR`), so they appear in the human-facing **Activity**
-feed — the human always sees what the agent did.
+override via `MCP_ACTOR`), so they appear in the human-facing **Activity**
+feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 
 ## Tools
 
-| Tool              | Description                                                             |
-| ----------------- | ----------------------------------------------------------------------- |
-| `list_notes`      | List all note paths (optionally under a subtree).                       |
-| `read_note`       | Read a note's content + etag.                                           |
-| `create_note`     | Create a new note.                                                      |
-| `update_note`     | Overwrite a note (pass `etag` for safe writes).                         |
-| `search_notes`    | Full-text and/or tag search.                                            |
-| `semantic_search` | Relevance-ranked retrieval (TF-IDF) for RAG.                            |
-| `get_backlinks`   | Notes linking to a note via `[[wikilinks]]`.                            |
-| `recent_activity` | Read the provenance/audit trail.                                        |
-| `create_folder`   | Create a folder.                                                        |
-| `move_path`       | Move/rename a note or folder.                                           |
-| `delete_path`     | Delete a note or folder. (Use `recursive: true` for non-empty folders.) |
+| Tool                | Description                                                             |
+| ------------------- | ----------------------------------------------------------------------- |
+| `list_notes`        | List all note paths (optionally under a subtree).                       |
+| `read_note`         | Read a note by path or stable id (returns content + etag + `id`).       |
+| `read_block`        | Read a single `^block-id` block + surrounding context.                  |
+| `get_block_anchors` | List every `^block-id` anchor in a note.                                |
+| `create_note`       | Create a new note.                                                      |
+| `update_note`       | Overwrite a note (pass `etag` for safe writes).                         |
+| `patch_note`        | append/prepend/replace_section/replace_block/ensure_id, etag + dry-run. |
+| `search_notes`      | Full-text and/or tag search.                                            |
+| `semantic_search`   | Relevance-ranked retrieval (TF-IDF) for RAG.                            |
+| `get_backlinks`     | Notes linking to a note via `[[wikilinks]]` (includes `rel:` type).     |
+| `recent_activity`   | Read the provenance/audit trail.                                        |
+| `create_folder`     | Create a folder.                                                        |
+| `move_path`         | Move/rename a note or folder.                                           |
+| `delete_path`       | Delete a note or folder.                                                |
+| `propose_edit`      | Propose a create/update/delete for human review.                        |
+| `list_proposals`    | List proposals + review status (resolve is human).                      |
 
 `update_note` and `move_path` reject stale writes via the API's optimistic
 concurrency check. There is **no** `resolve` tool: edit-proposal resolution is
 human-only by design.
 
-## Build & run
-
-The dev workflow uses `tsx` for fast iteration; the production bin is a single
-bundled file with a `#!/usr/bin/env node` shebang.
+Build once, then launch:
 
 ```bash
-# dev (watch + auto-reload)
+npm install
+npm run build              # produces apps/mcp/dist/server.js
+npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
+```
+
+The server prints a one-line readiness banner on stderr:
+
+```
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=16 · actor=agent:mcp
+```
+
+For active development with auto-reload:
+
+```bash
 npm --workspace @repo/mcp run dev
+```
 
-# build the bin (-> apps/mcp/dist/server.js)
-npm --workspace @repo/mcp run build
+Or attach to an externally-running API:
 
-# run the built bin
-npm --workspace @repo/mcp run start
+```bash
+API_BASE_URL=http://localhost:3001 npm --workspace @repo/mcp run start
 ```
 
 After building, the bin is reachable as `fsbrain-mcp` (npm `bin`) or directly
@@ -51,84 +66,30 @@ as `node apps/mcp/dist/server.js`.
 
 ## Configuration
 
-| Env var        | Default                | Purpose                                                                                     |
-| -------------- | ---------------------- | ------------------------------------------------------------------------------------------- |
-| `CONTENT_ROOT` | `~/.fsbrain/vault`     | Where the vault lives. The directory is auto-created (`mkdir -p`) on startup.               |
-| `API_BASE_URL` | _(unset → in-process)_ | If set, proxy to that API instead of starting one. The in-process API binds to `127.0.0.1`. |
-| `PORT`         | _(ephemeral)_          | Force the embedded API to listen on a specific port.                                        |
-| `MCP_ACTOR`    | `agent:mcp`            | Actor label recorded on every write (`X-Actor`).                                            |
+| Env var        | Default              | Purpose                                                          |
+| -------------- | -------------------- | ---------------------------------------------------------------- |
+| `CONTENT_ROOT` | `~/.fsbrain/vault`   | Vault directory; auto-created on first run.                      |
+| `MCP_ACTOR`    | `agent:mcp`          | Actor label recorded on writes.                                  |
+| `API_BASE_URL` | _(unset)_            | When set, proxy this URL instead of starting the in-process API. |
+| `PORT`         | _(ephemeral)_        | Port for the in-process API (use `0` or omit for any).           |
+| `HOST`         | `127.0.0.1` in embed | Bind address for the in-process API.                             |
 
-When started in **embedded** mode (no `API_BASE_URL`), the MCP entry seeds a
-`welcome.md` if the vault is empty, so the agent has something to find on its
-first launch. The standalone `npm run dev:api` path doesn't seed — the human
-gets an empty (but existing) vault.
+When the vault is empty on first launch in embedded mode, the server seeds a
+`welcome.md` so an MCP host has something to list. (Running `npm run dev:api`
+against an empty vault does **not** auto-seed — only the MCP launcher does.)
 
-## Run under OpenClaw
+## Connect an MCP host
 
-OpenClaw spawns each MCP server as a child process and reads the definitions
-from `~/.openclaw/openclaw.json` under the `mcp.servers` block
-(see [docs.openclaw.ai/cli/mcp](https://docs.openclaw.ai/cli/mcp)).
+Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
+[`../../docs/CONNECT.md`](../../docs/CONNECT.md).
 
-Add this entry to `~/.openclaw/openclaw.json` (adjust the absolute paths):
+## Fresh-clone guarantee
 
-```json
-{
-  "mcp": {
-    "servers": {
-      "fsbrain-vault": {
-        "command": "node",
-        "args": ["/abs/path/to/file-system-like-github/apps/mcp/dist/server.js"],
-        "env": {
-          "CONTENT_ROOT": "/abs/path/to/your/vault",
-          "MCP_ACTOR": "agent:openclaw"
-        }
-      }
-    }
-  }
-}
-```
-
-Or register it from the CLI (same effect; OpenClaw writes the JSON for you):
-
-```bash
-openclaw mcp add fsbrain-vault \
-  --command node \
-  --arg /abs/path/to/file-system-like-github/apps/mcp/dist/server.js \
-  --env CONTENT_ROOT=/abs/path/to/your/vault \
-  --env MCP_ACTOR=agent:openclaw
-openclaw mcp doctor fsbrain-vault --probe
-```
-
-`openclaw mcp doctor --probe` does both static checks (resolve `node`, verify
-`cwd`) and a live connection probe; a successful probe means OpenClaw can list
-the 11 tools above.
-
-Notes:
-
-- Setting `MCP_ACTOR=agent:openclaw` tags every write OpenClaw makes through
-  the server in the audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`) and the web
-  **Activity** tab — humans can always see which agent did what.
-- Build the bundle (`npm --workspace @repo/mcp run build`) before registering
-  with OpenClaw — `dist/server.js` is the artifact OpenClaw will spawn.
-- Leave `API_BASE_URL` unset: the bin will start the storage API itself on
-  `127.0.0.1` and an ephemeral port. Only set it if you also run
-  `npm run dev:api` and want both the web UI and OpenClaw against one API.
-
-## Run under Claude Desktop
-
-Same self-contained bin, Claude-Desktop schema (`mcpServers` at the top level):
-
-```json
-{
-  "mcpServers": {
-    "fsbrain-vault": {
-      "command": "node",
-      "args": ["/abs/path/to/file-system-like-github/apps/mcp/dist/server.js"],
-      "env": {
-        "CONTENT_ROOT": "/abs/path/to/your/vault",
-        "MCP_ACTOR": "agent:claude-desktop"
-      }
-    }
-  }
-}
-```
+`src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
+against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
+It asserts `tools/list` returns all 16 expected names, round-trips
+`create_note` → `read_note` → `search_notes` → `semantic_search` →
+`propose_edit` → `list_proposals` → `recent_activity`, and confirms the write
+landed both on disk and in `.fsbrain/audit.jsonl`. A second test exercises
+the bundled `dist/server.js` (skipped if `npm run build` hasn't been run).
+Runs in `npm test`.

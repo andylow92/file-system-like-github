@@ -20,14 +20,15 @@ see it. See _What's built_ below.
 
 Always orient yourself using these documents before acting:
 
-| You want to know...                             | Read this                                                        |
-| ----------------------------------------------- | ---------------------------------------------------------------- |
-| What exists, what's done, what's next           | [`docs/implementation.md`](docs/implementation.md)               |
-| How to run, test, and validate the app          | [`docs/implementation.md`](docs/implementation.md) → _Commands_  |
-| Manual integration checks                       | [`docs/integration-test-plan.md`](docs/integration-test-plan.md) |
-| Backend API endpoints + request/response shapes | [`apps/api/README.md`](apps/api/README.md)                       |
-| Agent tools (MCP) + how writes are attributed   | [`apps/mcp/README.md`](apps/mcp/README.md)                       |
-| Project overview / human-facing pitch           | [`README.md`](README.md)                                         |
+| You want to know...                              | Read this                                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| What exists, what's done, what's next            | [`docs/implementation.md`](docs/implementation.md)               |
+| How to run, test, and validate the app           | [`docs/implementation.md`](docs/implementation.md) → _Commands_  |
+| Manual integration checks                        | [`docs/integration-test-plan.md`](docs/integration-test-plan.md) |
+| Backend API endpoints + request/response shapes  | [`apps/api/README.md`](apps/api/README.md)                       |
+| Agent tools (MCP) + how writes are attributed    | [`apps/mcp/README.md`](apps/mcp/README.md)                       |
+| Connect an MCP host (OpenClaw / Claude / Cursor) | [`docs/CONNECT.md`](docs/CONNECT.md)                             |
+| Project overview / human-facing pitch            | [`README.md`](README.md)                                         |
 
 `docs/implementation.md` is the **source of truth for project state**. When you
 finish a unit of work, update it (see _Goal-driven execution_ below).
@@ -57,19 +58,59 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
   appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 11 vault tools
-  (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
+- **Edit review queue** — instead of writing directly, an agent can submit a
+  **proposal** (`POST /api/proposals`, or the `propose_edit` MCP tool) for a
+  create/update/delete. A human reviews the before/after in the web **Review**
+  tab and approves (the edit is applied and audited as the proposing agent) or
+  rejects. Proposals live in `CONTENT_ROOT/.fsbrain/proposals/`. Both
+  destructive paths (`update`, `delete`) honor `baseEtag` and 409 on a stale
+  approval. Resolution is human-only — agents get `propose_edit` /
+  `list_proposals`, the MCP server omits a resolve tool, and the API rejects an
+  `agent:` resolver (403). This is convention-level (X-Actor is unauthenticated);
+  airtight enforcement would need authn/z, intentionally out of scope for this
+  local, single-user tool.
+- **Granular agent writes** — `PATCH /api/file` (or the `patch_note` MCP
+  tool) applies `append`, `prepend`, `replace_section`, `replace_block`, or
+  `ensure_id` ops without rewriting the whole note. It reuses the `etag`
+  optimistic-concurrency contract, accepts an `idempotencyKey` so a retried
+  patch is a no-op (keys cached in memory for the API process lifetime), and
+  supports `dryRun` to preview the result without writing or auditing. The
+  pure text-transform helpers live in `@repo/shared` (`patch.ts`).
+- **Structured knowledge** — Obsidian-style **block anchors** (`^id`) give
+  agents stable, citable addresses inside a note: `GET /api/block` /
+  `GET /api/block-anchors` (and the `read_block` / `get_block_anchors` MCP
+  tools) read by block; the `replace_block` patch op overwrites a block,
+  reattaching the anchor so future reads still resolve. A frontmatter
+  **`id:`** is the note's stable identity (opt-in via the `ensure_id` patch
+  op), accepted as `?id=` on `/api/file` / `/api/block` reads and on the
+  patch endpoint. **Typed wikilinks** `[[Target|rel:supports]]` surface a
+  relation on `/api/backlinks` (plain aliases still work). Pure helpers live
+  in `@repo/shared` (`blocks.ts`, `noteId.ts`).
+- **MCP server** (`apps/mcp`) — a stdio server exposing 16 vault tools
+  (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
+  `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`). It runs the storage API **in-process** by
-  default, so it's a single self-contained command an MCP host (e.g.
-  **OpenClaw**, Claude Desktop) can spawn — see
-  [`apps/mcp/README.md`](apps/mcp/README.md) for the copy-paste config. Agent
-  writes flow through the same validation, concurrency, and audit trail as the
-  web UI, attributed as `agent:mcp` (or whatever `MCP_ACTOR` is set to).
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It runs
+  the storage API **in-process** by default, so it is a single
+  self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
+  Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
+  the bundled `node apps/mcp/dist/server.js`. Copy-paste host configs live
+  in [`docs/CONNECT.md`](docs/CONNECT.md). On startup it prints a one-line
+  readiness banner on stderr (`fsbrain-mcp ready · mode=… · vault=… ·
+tools=… · actor=…`) so a host log immediately shows whether the spawn
+  worked. Agent writes carry `X-Actor: agent:mcp` (override via
+  `MCP_ACTOR`) and flow through the same validation, optimistic-
+  concurrency, and audit trail as the web UI.
+- **Clone-and-run guarantee** — `apps/mcp/src/__tests__/freshClone.test.ts`
+  spawns the MCP bin as a real stdio child against a temp `CONTENT_ROOT`,
+  drives it via the official MCP SDK client (tools/list + create/read/
+  search/semantic_search + propose_edit/list_proposals + recent_activity),
+  and asserts the write landed both on disk and in the audit log. Runs in
+  `npm test`, so a green test bar is the proof that a fresh clone works.
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
-semantic search, an agent-edit review/approval queue, and a live
-SSE/file-watcher layer. See the roadmap in `docs/implementation.md`.
+semantic search, and a live SSE/file-watcher layer. See the roadmap in
+`docs/implementation.md`.
 
 ---
 
@@ -79,9 +120,10 @@ SSE/file-watcher layer. See the roadmap in `docs/implementation.md`.
 apps/
   api/   # Node HTTP server + filesystem storage (CONTENT_ROOT). Endpoints under /api/*.
   web/   # React + Vite UI: file tree, editor/preview/activity tabs, Ctrl/Cmd-K search.
-  mcp/   # MCP stdio server exposing the vault as agent tools (proxies the API).
+  mcp/   # MCP stdio server exposing the vault as agent tools. Embeds the API in-process
+         # by default; bundled to a single bin (`apps/mcp/dist/server.js`, npm `fsbrain-mcp`).
 packages/
-  shared/  # Shared TS contracts + pure utilities: markdown.ts (links/tags), search.ts.
+  shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts.
 docs/      # Agent + human knowledge base. Start at implementation.md.
 ```
 
@@ -91,6 +133,9 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
   rejects traversal and absolute paths. Keep those guarantees intact.
 - **Provenance is a guarantee, not an option:** any new mutating path must read
   `X-Actor` and record an `AuditEntry`. Don't add writes that bypass the log.
+- **When the human should sign off on a change, propose it** (`propose_edit` /
+  `POST /api/proposals`) rather than writing directly. Resolving proposals is
+  human-only; don't add an agent path that approves them.
 - Relative imports under the API/MCP packages (NodeNext) use explicit `.js`
   extensions. `npm run build` is green across all workspaces — keep it green.
 
@@ -177,8 +222,11 @@ docs/      # Agent + human knowledge base. Start at implementation.md.
 npm install        # install workspaces
 npm run dev:api    # run API   (http://localhost:3001)
 npm run dev:web    # run web UI (http://localhost:5173)
-npm test           # run all workspace tests (vitest)
+npm run start:agent  # launch the self-contained MCP server (`fsbrain-mcp`, stdio)
+npm run doctor     # preflight: Node version + vault writable
+npm test           # run all workspace tests (vitest), incl. fresh-clone MCP e2e
 npm run lint       # eslint
+npm run build      # tsc/vite/esbuild build across workspaces (produces the MCP bin)
 npm run format     # prettier --check
 ```
 

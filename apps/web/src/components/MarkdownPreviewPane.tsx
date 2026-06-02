@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import hljs from 'highlight.js/lib/common';
 import { parseNote, resolveWikilink } from '@repo/shared';
 import { remarkWikilinks } from '../markdown/remarkWikilinks';
+import { BLOCK_ANCHOR_PREFIX, remarkBlockAnchors } from '../markdown/remarkBlockAnchors';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
 
@@ -145,7 +146,7 @@ export function MarkdownPreviewPane({
 
   const components = useMemo<Components>(
     () => ({
-      a({ href, children, ...props }) {
+      a({ href, children, title, ...props }) {
         if (href && href.startsWith(WIKILINK_PREFIX)) {
           const target = decodeURIComponent(href.slice(WIKILINK_PREFIX.length));
           const resolved = allPaths ? resolveWikilink(target, allPaths) : null;
@@ -159,6 +160,21 @@ export function MarkdownPreviewPane({
                   onNavigate(resolved);
                 }
               }}
+            >
+              {children}
+            </a>
+          );
+        }
+
+        if (href && href.startsWith(BLOCK_ANCHOR_PREFIX)) {
+          const blockId = decodeURIComponent(href.slice(BLOCK_ANCHOR_PREFIX.length));
+          return (
+            <a
+              className="block-anchor"
+              id={`block-${blockId}`}
+              href={`#block-${blockId}`}
+              title={title ?? `Block anchor ^${blockId}`}
+              aria-label={`Block anchor ${blockId}`}
             >
               {children}
             </a>
@@ -205,10 +221,14 @@ export function MarkdownPreviewPane({
         </div>
       ) : null}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkWikilinks]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkWikilinks, remarkBlockAnchors]}
         rehypePlugins={[rehypeKatex]}
         components={components}
-        urlTransform={(url) => (url.startsWith(WIKILINK_PREFIX) ? url : defaultUrlTransform(url))}
+        urlTransform={(url) =>
+          url.startsWith(WIKILINK_PREFIX) || url.startsWith(BLOCK_ANCHOR_PREFIX)
+            ? url
+            : defaultUrlTransform(url)
+        }
       >
         {body}
       </ReactMarkdown>

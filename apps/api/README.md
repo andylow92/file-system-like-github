@@ -20,18 +20,19 @@ Example:
 curl "http://localhost:3001/api/tree?path=notes"
 ```
 
-### `GET /api/file?path=...`
+### `GET /api/file?path=...` (or `?id=...`)
 
 Reads a markdown file.
 
-- Requires query param `path`.
+- Address the note by `path` (logical path under `CONTENT_ROOT`) or by `id`
+  (frontmatter `id:`, when present). Only `.md` files are supported.
 - Path must resolve under `CONTENT_ROOT`.
-- Only `.md` files are supported.
 
 Example:
 
 ```bash
 curl "http://localhost:3001/api/file?path=notes/todo.md"
+curl "http://localhost:3001/api/file?id=2f3a-stable"   # alternative
 ```
 
 Response includes:
@@ -39,6 +40,7 @@ Response includes:
 - `content`
 - `lastModified`
 - `etag` (for optimistic concurrency)
+- `id` — the note's stable id from frontmatter, when one is present
 
 ### `PUT /api/file`
 
@@ -66,6 +68,68 @@ Example:
 curl -X PUT "http://localhost:3001/api/file" \
   -H "Content-Type: application/json" \
   -d '{"path":"notes/todo.md","content":"# Updated","etag":"abc123"}'
+```
+
+### `PATCH /api/file`
+
+Applies a granular edit to an existing markdown file without rewriting the
+whole note. Designed for agents that want to add a task, prepend a status
+block, or rewrite one section.
+
+Request body schema:
+
+```json
+{
+  "path": "notes/todo.md",
+  "op": { "type": "append", "text": "- buy milk" },
+  "etag": "optional-current-etag",
+  "lastModified": "optional-current-lastModified",
+  "idempotencyKey": "optional-string",
+  "dryRun": false
+}
+```
+
+Address the note by `path` OR by `id` (frontmatter `id:`). Supported `op`
+shapes:
+
+- `{ "type": "append", "text": "..." }` — append `text` to the end of the note.
+- `{ "type": "prepend", "text": "..." }` — insert `text` at the top, AFTER any
+  YAML frontmatter block so metadata stays at the top of the note.
+- `{ "type": "replace_section", "heading": "## Tasks", "body": "..." }` —
+  replace the body under the first heading matching `heading` exactly, up to
+  the next sibling-or-higher heading (or EOF). The heading line itself is
+  preserved. Returns `404 not_found` when the heading is not present.
+- `{ "type": "replace_block", "blockId": "claim-1", "body": "..." }` —
+  replace the block (paragraph / list-item / heading section) carrying the
+  `^block-id` anchor. The anchor is re-attached to the replacement so future
+  reads can still address the block. Returns `404 not_found` when no anchor
+  with that id exists.
+- `{ "type": "ensure_id", "id": "optional-uuid" }` — ensure the note has a
+  stable `id:` in its frontmatter. If `id` is omitted, a fresh UUID is
+  generated. Idempotent: a second call returns the existing id without
+  rewriting the file or recording a new audit entry.
+
+Optimistic concurrency mirrors `PUT /api/file`: pass `etag` (or
+`lastModified`) to refuse the patch if the file changed under you (`409
+stale_write`).
+
+Idempotency: pass `idempotencyKey` so a retried request (e.g. after a network
+blip) is a no-op — the original response is replayed without writing again
+or recording a second audit entry. Keys are held in memory and reset on API
+restart.
+
+Dry run: pass `"dryRun": true` to receive the resulting content without
+writing the file or recording an audit entry. The response sets
+`dryRun: true`; its `etag` / `lastModified` describe the current (unchanged)
+file, while `content` is the would-be result.
+
+Example:
+
+```bash
+curl -X PATCH "http://localhost:3001/api/file" \
+  -H "Content-Type: application/json" \
+  -H "X-Actor: agent:mcp" \
+  -d '{"path":"notes/todo.md","op":{"type":"append","text":"- buy milk"}}'
 ```
 
 ### `POST /api/file`
@@ -148,7 +212,33 @@ curl -X DELETE "http://localhost:3001/api/path?path=notes/archive&recursive=true
 ### `GET /api/backlinks?path=...`
 
 Lists notes that link to `path` via `[[wikilinks]]`. Returns `Backlink[]`
-(`{ path, name }`).
+(`{ path, name, type? }`). When the link carried a typed relation
+(`[[Target|rel:supports]]`), the backlink includes `type: "supports"`.
+
+### `GET /api/block?path=...&block=<id>` (or `?id=<note-id>&block=<id>`)
+
+Reads a single block (paragraph / list-item / heading section) carrying the
+`^block-id` anchor, plus a few lines of surrounding context. Address the note
+by `path` or by stable `id`. Returns `404 not_found` when the anchor is not
+present.
+
+```json
+{
+  "path": "notes/idea.md",
+  "blockId": "claim-1",
+  "startLine": 5,
+  "endLine": 5,
+  "text": "A claim worth citing.",
+  "context": "Intro paragraph.\nA claim worth citing.\nClosing note.",
+  "etag": "abc123",
+  "lastModified": "2026-06-02T..."
+}
+```
+
+### `GET /api/block-anchors?path=...` (or `?id=<note-id>`)
+
+Lists every `^block-id` anchor in a note (id, 1-based line, line text). Useful
+for an agent to discover stable addresses before patching by block.
 
 ### `GET /api/search?q=...&tag=...&limit=...`
 
@@ -177,6 +267,37 @@ curl "http://localhost:3001/api/semantic-search?q=how%20do%20backups%20work"
 
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
 filtered to a single `path`.
+
+### Edit proposals (review queue)
+
+Lets agents suggest changes a human approves before they touch the vault.
+
+- `POST /api/proposals` — create a proposal. Body: `{ action: "create"|"update"|"delete",
+path, content?, baseEtag?, note? }`. `content` is required for create/update;
+  `baseEtag` (from a prior read) makes a stale `update` fail on approval. The
+  proposer is the `X-Actor` header. Returns the `EditProposal` (status `pending`).
+- `GET /api/proposals?status=pending|approved|rejected` — list proposals (newest first).
+- `POST /api/proposals/resolve` — body `{ id, decision: "approve"|"reject" }`. Approving
+  applies the edit (recorded in the audit log as the **proposing** actor) and marks the
+  proposal `approved`; rejecting discards it. Both destructive actions (`update`,
+  `delete`) honor `baseEtag` and return `409 stale_write` if the file changed since the
+  proposal was made. **Resolution is the human's action**; the resolver is taken from
+  `X-Actor` (default `human`) and requests with an `agent:` actor are rejected `403`.
+  This is convention-level (`X-Actor` is unauthenticated, so it is not airtight — the
+  MCP server also omits a resolve tool); true enforcement needs authn/z. Proposals are
+  stored under `CONTENT_ROOT/.fsbrain/proposals/`.
+
+```bash
+# Agent proposes an edit
+curl -X POST "http://localhost:3001/api/proposals" \
+  -H "Content-Type: application/json" -H "X-Actor: agent:mcp" \
+  -d '{"action":"update","path":"notes/todo.md","content":"# Updated by agent","note":"tidy up"}'
+
+# Human approves it
+curl -X POST "http://localhost:3001/api/proposals/resolve" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"<proposal-id>","decision":"approve"}'
+```
 
 ## Provenance: the `X-Actor` header
 

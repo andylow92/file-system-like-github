@@ -19,6 +19,12 @@ export interface WikiLink {
   heading?: string;
   /** Optional display alias after `|`. */
   alias?: string;
+  /**
+   * Optional typed relation extracted from a `rel:<type>` alias, e.g.
+   * `[[Target|rel:supports]]` → `type: 'supports'`. When present, the alias is
+   * NOT set (it was the type marker, not a display name).
+   */
+  type?: string;
 }
 
 export interface ParsedFrontmatter {
@@ -42,16 +48,28 @@ const FRONTMATTER_FENCE = /^---[ \t]*$/;
 export function parseWikilinkToken(raw: string): WikiLink {
   const trimmed = raw.trim();
   const [beforeAlias, ...aliasRest] = trimmed.split('|');
-  const alias = aliasRest.length > 0 ? aliasRest.join('|').trim() : undefined;
+  const rawAlias = aliasRest.length > 0 ? aliasRest.join('|').trim() : undefined;
 
   const [target, ...headingRest] = beforeAlias.split('#');
   const heading = headingRest.length > 0 ? headingRest.join('#').trim() : undefined;
+
+  let alias: string | undefined;
+  let type: string | undefined;
+  if (rawAlias) {
+    const typeMatch = /^rel:(.+)$/.exec(rawAlias);
+    if (typeMatch && typeMatch[1].trim()) {
+      type = typeMatch[1].trim();
+    } else {
+      alias = rawAlias;
+    }
+  }
 
   return {
     raw: trimmed,
     target: target.trim(),
     ...(heading ? { heading } : {}),
     ...(alias ? { alias } : {}),
+    ...(type ? { type } : {}),
   };
 }
 

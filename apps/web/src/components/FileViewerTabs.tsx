@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type ViewerTabKey = 'preview' | 'edit' | 'split' | 'activity';
+export type ViewerTabKey = 'preview' | 'edit' | 'split' | 'activity' | 'review';
 
 interface FileViewerTabsProps {
   activeTab: ViewerTabKey;
@@ -8,6 +8,9 @@ interface FileViewerTabsProps {
   preview: ReactNode;
   edit: ReactNode;
   activity: ReactNode;
+  review: ReactNode;
+  /** Number of pending proposals, shown as a badge on the Review tab. */
+  reviewCount?: number;
 }
 
 export function FileViewerTabs({
@@ -16,6 +19,8 @@ export function FileViewerTabs({
   preview,
   edit,
   activity,
+  review,
+  reviewCount = 0,
 }: FileViewerTabsProps) {
   return (
     <section className="viewer-region">
@@ -56,6 +61,16 @@ export function FileViewerTabs({
         >
           Activity
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'review'}
+          className={activeTab === 'review' ? 'tab active' : 'tab'}
+          onClick={() => onTabChange('review')}
+        >
+          Review
+          {reviewCount > 0 ? <span className="tab-badge">{reviewCount}</span> : null}
+        </button>
       </div>
       <div className="tab-content" role="region" aria-label="File viewer content">
         {activeTab === 'split' ? (
@@ -67,6 +82,8 @@ export function FileViewerTabs({
           preview
         ) : activeTab === 'activity' ? (
           activity
+        ) : activeTab === 'review' ? (
+          review
         ) : (
           edit
         )}

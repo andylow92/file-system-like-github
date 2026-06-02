@@ -38,6 +38,11 @@ export interface Backlink {
   path: string;
   /** Display name (basename) of the linking note. */
   name: string;
+  /**
+   * Typed relation extracted from the wikilink, e.g. `[[Target|rel:supports]]`
+   * → `"supports"`. Absent when the link did not carry a `rel:` marker.
+   */
+  type?: string;
 }
 
 export type AuditAction = 'create' | 'update' | 'move' | 'delete' | 'create_dir';
@@ -72,6 +77,38 @@ export interface SearchMatch {
   tags: string[];
 }
 
+export type ProposalAction = 'create' | 'update' | 'delete';
+export type ProposalStatus = 'pending' | 'approved' | 'rejected';
+
+/**
+ * A proposed edit awaiting human review. Lets agents suggest changes the human
+ * approves/rejects, instead of writing to the vault directly — the provenance
+ * trust loop.
+ */
+export interface EditProposal {
+  id: string;
+  /** ISO timestamp the proposal was created. */
+  ts: string;
+  /** Who proposed it, e.g. `agent:mcp`. */
+  actor: string;
+  action: ProposalAction;
+  path: string;
+  /** Proposed content for `create` / `update`. */
+  content?: string;
+  /** Etag the proposal was based on (used to detect a stale `update`). */
+  baseEtag?: string;
+  /** Optional rationale from the proposer. */
+  note?: string;
+  status: ProposalStatus;
+  /** ISO timestamp the proposal was approved/rejected. */
+  resolvedTs?: string;
+  /** Human actor who resolved it. */
+  resolvedBy?: string;
+}
+
+export * from './blocks.js';
 export * from './markdown.js';
+export * from './noteId.js';
+export * from './patch.js';
 export * from './search.js';
 export * from './semantic.js';
