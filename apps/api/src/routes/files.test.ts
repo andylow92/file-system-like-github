@@ -24,9 +24,11 @@ describe('PATCH /api/path', () => {
   async function createRouteDependencies(rootPath: string) {
     const { createPathResolver } = await import('../storage/pathResolver.js');
     const { createFileRepository } = await import('../storage/fileRepository.js');
+    const { createAuditLog } = await import('../storage/auditLog.js');
     const pathResolver = createPathResolver(rootPath);
     const repository = createFileRepository(pathResolver);
-    return { repository, pathResolver };
+    const auditLog = createAuditLog(rootPath);
+    return { repository, pathResolver, auditLog };
   }
 
   beforeEach(async () => {
@@ -34,14 +36,19 @@ describe('PATCH /api/path', () => {
     process.env.CONTENT_ROOT = contentRoot;
     vi.resetModules();
 
-    const { handleFileRoutes } = await import('./files');
+    const { handleFileRoutes } = await import('./files.js');
     const deps = await createRouteDependencies(contentRoot);
 
     server = http.createServer(async (req, res) => {
       const handled = await handleFileRoutes(req, res, deps);
       if (!handled.handled) {
         res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: false, error: { code: 'not_found', message: 'Endpoint not found.' } }));
+        res.end(
+          JSON.stringify({
+            success: false,
+            error: { code: 'not_found', message: 'Endpoint not found.' },
+          }),
+        );
       }
     });
 
@@ -96,8 +103,12 @@ describe('PATCH /api/path', () => {
     expect(body.success).toBe(true);
     expect(body.data).toEqual({ fromPath: 'notes/source.md', toPath: 'notes/destination.md' });
 
-    await expect(readFile(path.join(contentRoot, 'notes/destination.md'), 'utf8')).resolves.toBe('# source');
-    await expect(stat(path.join(contentRoot, 'notes/source.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(contentRoot, 'notes/destination.md'), 'utf8')).resolves.toBe(
+      '# source',
+    );
+    await expect(stat(path.join(contentRoot, 'notes/source.md'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('rejects markdown file moves when destination path is not .md', async () => {
@@ -114,8 +125,12 @@ describe('PATCH /api/path', () => {
       message: 'Only .md files are allowed for this operation',
     });
 
-    await expect(readFile(path.join(contentRoot, 'notes/source.md'), 'utf8')).resolves.toBe('# source');
-    await expect(stat(path.join(contentRoot, 'notes/destination.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(contentRoot, 'notes/source.md'), 'utf8')).resolves.toBe(
+      '# source',
+    );
+    await expect(stat(path.join(contentRoot, 'notes/destination.txt'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('still supports directory moves', async () => {
@@ -129,7 +144,9 @@ describe('PATCH /api/path', () => {
     expect(body.success).toBe(true);
     expect(body.data).toEqual({ fromPath: 'docs', toPath: 'archive/docs' });
 
-    await expect(readFile(path.join(contentRoot, 'archive/docs/guides/intro.md'), 'utf8')).resolves.toBe('# intro');
+    await expect(
+      readFile(path.join(contentRoot, 'archive/docs/guides/intro.md'), 'utf8'),
+    ).resolves.toBe('# intro');
     await expect(stat(path.join(contentRoot, 'docs'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

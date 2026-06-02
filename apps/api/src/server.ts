@@ -4,12 +4,14 @@ import type { ApiResponse, HealthResponse } from '@repo/shared';
 
 import { loadConfig } from './config.js';
 import { handleFileRoutes } from './routes/files.js';
+import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createPathResolver } from './storage/pathResolver.js';
 
 export function createServer(config = loadConfig()): http.Server {
   const pathResolver = createPathResolver(config.contentRoot);
   const repository = createFileRepository(pathResolver);
+  const auditLog = createAuditLog(config.contentRoot);
 
   function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -36,7 +38,7 @@ export function createServer(config = loadConfig()): http.Server {
       return;
     }
 
-    const routeResult = await handleFileRoutes(req, res, { repository, pathResolver });
+    const routeResult = await handleFileRoutes(req, res, { repository, pathResolver, auditLog });
     if (routeResult.handled) {
       return;
     }

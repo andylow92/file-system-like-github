@@ -1,0 +1,22 @@
+{
+  "name": "@repo/mcp",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Model Context Protocol server exposing the markdown vault as agent tools.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@repo/shared": "0.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

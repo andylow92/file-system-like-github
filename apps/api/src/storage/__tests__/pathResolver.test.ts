@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createPathResolver, StoragePathError } from '../pathResolver';
+import { createPathResolver, StoragePathError } from '../pathResolver.js';
 
 describe('createPathResolver', () => {
   it('rejects traversal and absolute paths', () => {

@@ -1,15 +1,22 @@
 import type { ReactNode } from 'react';
 
-export type ViewerTabKey = 'preview' | 'edit' | 'split';
+export type ViewerTabKey = 'preview' | 'edit' | 'split' | 'activity';
 
 interface FileViewerTabsProps {
   activeTab: ViewerTabKey;
   onTabChange: (tab: ViewerTabKey) => void;
   preview: ReactNode;
   edit: ReactNode;
+  activity: ReactNode;
 }
 
-export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileViewerTabsProps) {
+export function FileViewerTabs({
+  activeTab,
+  onTabChange,
+  preview,
+  edit,
+  activity,
+}: FileViewerTabsProps) {
   return (
     <section className="viewer-region">
       <div className="tabs" role="tablist" aria-label="File tabs">
@@ -40,6 +47,15 @@ export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileVi
         >
           Edit
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'activity'}
+          className={activeTab === 'activity' ? 'tab active' : 'tab'}
+          onClick={() => onTabChange('activity')}
+        >
+          Activity
+        </button>
       </div>
       <div className="tab-content" role="region" aria-label="File viewer content">
         {activeTab === 'split' ? (
@@ -49,6 +65,8 @@ export function FileViewerTabs({ activeTab, onTabChange, preview, edit }: FileVi
           </div>
         ) : activeTab === 'preview' ? (
           preview
+        ) : activeTab === 'activity' ? (
+          activity
         ) : (
           edit
         )}

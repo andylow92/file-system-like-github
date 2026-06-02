@@ -5,9 +5,11 @@ The API exposes filesystem-backed endpoints for GitHub-like tree browsing and No
 ## Endpoints
 
 ### `GET /health`
+
 Simple service health check.
 
 ### `GET /api/tree?path=...`
+
 Lists the directory tree recursively under the provided logical `path`.
 
 - `path` is optional. Empty path (`""`) lists the content root.
@@ -19,6 +21,7 @@ curl "http://localhost:3001/api/tree?path=notes"
 ```
 
 ### `GET /api/file?path=...`
+
 Reads a markdown file.
 
 - Requires query param `path`.
@@ -32,11 +35,13 @@ curl "http://localhost:3001/api/file?path=notes/todo.md"
 ```
 
 Response includes:
+
 - `content`
 - `lastModified`
 - `etag` (for optimistic concurrency)
 
 ### `PUT /api/file`
+
 Updates an existing markdown file.
 
 Request body schema:
@@ -51,6 +56,7 @@ Request body schema:
 ```
 
 Optimistic concurrency:
+
 - If `etag` is supplied and does not match current file `etag`, request fails with `409 stale_write`.
 - If `lastModified` is supplied and does not match current file `lastModified`, request fails with `409 stale_write`.
 
@@ -63,6 +69,7 @@ curl -X PUT "http://localhost:3001/api/file" \
 ```
 
 ### `POST /api/file`
+
 Creates a new markdown file.
 
 Request body schema:
@@ -83,6 +90,7 @@ curl -X POST "http://localhost:3001/api/file" \
 ```
 
 ### `POST /api/dir`
+
 Creates a directory (recursive mkdir).
 
 Request body schema:
@@ -102,6 +110,7 @@ curl -X POST "http://localhost:3001/api/dir" \
 ```
 
 ### `PATCH /api/path`
+
 Moves/renames a path.
 
 Request body schema:
@@ -124,6 +133,7 @@ curl -X PATCH "http://localhost:3001/api/path" \
 ```
 
 ### `DELETE /api/path?path=...&recursive=...`
+
 Deletes a markdown file or directory.
 
 - `path` (required): file or directory path.
@@ -133,6 +143,42 @@ Example:
 
 ```bash
 curl -X DELETE "http://localhost:3001/api/path?path=notes/archive&recursive=true"
+```
+
+### `GET /api/backlinks?path=...`
+
+Lists notes that link to `path` via `[[wikilinks]]`. Returns `Backlink[]`
+(`{ path, name }`).
+
+### `GET /api/search?q=...&tag=...&limit=...`
+
+Full-text and/or tag search across note bodies. At least one of `q` or `tag`
+is required. Returns `SearchMatch[]` (`{ path, name, score, snippet, line, tags }`)
+sorted by score.
+
+```bash
+curl "http://localhost:3001/api/search?q=roadmap"
+curl "http://localhost:3001/api/search?tag=project"
+```
+
+### `GET /api/audit?path=...&limit=...`
+
+Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
+filtered to a single `path`.
+
+## Provenance: the `X-Actor` header
+
+Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) may send an `X-Actor` header
+identifying who is making the change (e.g. `human`, `agent:mcp`). It defaults to
+`human`. Each successful mutation is appended to an append-only audit log at
+`CONTENT_ROOT/.fsbrain/audit.jsonl` and surfaced via `GET /api/audit` and the
+web **Activity** tab.
+
+```bash
+curl -X POST "http://localhost:3001/api/file" \
+  -H "Content-Type: application/json" \
+  -H "X-Actor: agent:mcp" \
+  -d '{"path":"notes/from-agent.md","content":"# Written by an agent"}'
 ```
 
 ## Error model

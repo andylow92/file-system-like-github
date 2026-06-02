@@ -2,8 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createFileRepository } from '../fileRepository';
-import { createPathResolver, StoragePathError } from '../pathResolver';
+import { createFileRepository } from '../fileRepository.js';
+import { createPathResolver, StoragePathError } from '../pathResolver.js';
 
 describe('fileRepository', () => {
   let contentRoot = '';

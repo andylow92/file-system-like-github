@@ -6,8 +6,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FileNode } from '@repo/shared';
 
-import { loadConfig } from '../config';
-import { createServer } from '../server';
+import { loadConfig } from '../config.js';
+import { createServer } from '../server.js';
 
 interface HttpResponse<T = unknown> {
   statusCode: number;
@@ -28,7 +28,9 @@ function requestJson<T>(
         port,
         method,
         path: pathname,
-        headers: body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : undefined,
+        headers: body
+          ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+          : undefined,
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -87,12 +89,18 @@ describe('server bootstrap', () => {
 
     const port = address.port;
 
-    const health = await requestJson<{ success: boolean; data: { contentRoot: string } }>(port, 'GET', '/health');
+    const health = await requestJson<{ success: boolean; data: { contentRoot: string } }>(
+      port,
+      'GET',
+      '/health',
+    );
     expect(health.statusCode).toBe(200);
     expect(health.body.success).toBe(true);
     expect(health.body.data.contentRoot).toBe(path.join(workspaceRoot, 'content'));
 
-    const createDir = await requestJson<{ success: boolean }>(port, 'POST', '/api/dir', { path: 'docs' });
+    const createDir = await requestJson<{ success: boolean }>(port, 'POST', '/api/dir', {
+      path: 'docs',
+    });
     expect(createDir.statusCode).toBe(201);
     expect(createDir.body.success).toBe(true);
 
@@ -112,7 +120,11 @@ describe('server bootstrap', () => {
     expect(readFile.body.success).toBe(true);
     expect(readFile.body.data.content).toBe('# guide');
 
-    const tree = await requestJson<{ success: boolean; data: FileNode[] }>(port, 'GET', '/api/tree');
+    const tree = await requestJson<{ success: boolean; data: FileNode[] }>(
+      port,
+      'GET',
+      '/api/tree',
+    );
     expect(tree.statusCode).toBe(200);
     expect(tree.body.success).toBe(true);
     expect(tree.body.data).toEqual([
@@ -130,6 +142,8 @@ describe('server bootstrap', () => {
       },
     ]);
 
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      server.close((error?: Error) => (error ? reject(error) : resolve())),
+    );
   });
 });
