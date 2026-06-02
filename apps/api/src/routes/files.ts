@@ -10,10 +10,14 @@ import type {
   Backlink,
   EditProposal,
   FileNode,
+  PatchOp,
   ProposalAction,
   SearchMatch,
 } from '@repo/shared';
 import {
+  PATCH_OP_TYPES,
+  SectionNotFoundError,
+  applyPatchOp,
   extractWikilinks,
   findTextMatch,
   parseNote,
@@ -23,6 +27,7 @@ import {
 
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
+import type { IdempotencyCache } from '../storage/idempotencyCache.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
 import type { ProposalStore } from '../storage/proposalStore.js';
@@ -39,6 +44,7 @@ interface RequestContext {
   pathResolver: PathResolver;
   auditLog: AuditLog;
   proposalStore: ProposalStore;
+  patchIdempotency: IdempotencyCache<PatchFileResponse>;
   /** Who is making the request, from the `X-Actor` header (default `human`). */
   actor: string;
 }
@@ -66,11 +72,17 @@ interface FileResponse {
   etag: string;
 }
 
+interface PatchFileResponse extends FileResponse {
+  /** True when the request ran in dry-run mode and no write happened. */
+  dryRun: boolean;
+}
+
 export interface FileRouteDependencies {
   repository: FileRepository;
   pathResolver: PathResolver;
   auditLog: AuditLog;
   proposalStore: ProposalStore;
+  patchIdempotency: IdempotencyCache<PatchFileResponse>;
 }
 
 const MAX_ACTOR_LENGTH = 64;
@@ -283,6 +295,113 @@ async function handlePutFile(context: RequestContext): Promise<void> {
   const updated = await loadFileFromContext(context, logicalPath);
   await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
   sendJson(res, 200, { success: true, data: updated });
+}
+
+function requireBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error(`"${fieldName}" must be a boolean`);
+  }
+  return value;
+}
+
+function parsePatchOp(raw: unknown): PatchOp {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('"op" must be an object');
+  }
+  const op = raw as Record<string, unknown>;
+  const type = requireString(op.type, 'op.type');
+  if (!(PATCH_OP_TYPES as string[]).includes(type)) {
+    throw new Error(`"op.type" must be one of ${PATCH_OP_TYPES.join(', ')}`);
+  }
+  if (type === 'append' || type === 'prepend') {
+    const text = requireOptionalString(op.text, 'op.text') ?? '';
+    return { type, text };
+  }
+  // replace_section
+  const heading = requireString(op.heading, 'op.heading');
+  const body = requireOptionalString(op.body, 'op.body') ?? '';
+  return { type: 'replace_section', heading, body };
+}
+
+async function handlePatchFile(context: RequestContext): Promise<void> {
+  const { req, res, repository, patchIdempotency } = context;
+  const body = await readJsonBody<Record<string, unknown>>(req);
+  const logicalPath = requireString(body.path, 'path');
+  const op = parsePatchOp(body.op);
+  const expectedEtag = requireOptionalString(body.etag, 'etag');
+  const expectedLastModified = requireOptionalString(body.lastModified, 'lastModified');
+  const dryRun = requireBoolean(body.dryRun, 'dryRun') ?? false;
+  const idempotencyKey = requireOptionalString(body.idempotencyKey, 'idempotencyKey')?.trim();
+
+  if (idempotencyKey) {
+    const cached = patchIdempotency.get(idempotencyKey);
+    if (cached) {
+      sendJson(res, 200, { success: true, data: cached });
+      return;
+    }
+  }
+
+  const current = await loadFileFromContext(context, logicalPath);
+
+  if (expectedEtag && expectedEtag !== current.etag) {
+    sendError(res, 409, {
+      code: 'stale_write',
+      message: 'Update rejected because provided etag does not match current file.',
+    });
+    return;
+  }
+
+  if (expectedLastModified && expectedLastModified !== current.lastModified) {
+    sendError(res, 409, {
+      code: 'stale_write',
+      message: 'Update rejected because provided lastModified does not match current file.',
+    });
+    return;
+  }
+
+  let nextContent: string;
+  try {
+    nextContent = applyPatchOp(current.content, op).content;
+  } catch (error: unknown) {
+    if (error instanceof SectionNotFoundError) {
+      sendError(res, 404, { code: 'not_found', message: error.message });
+      return;
+    }
+    if (error instanceof Error) {
+      sendError(res, 422, { code: 'validation_error', message: error.message });
+      return;
+    }
+    throw error;
+  }
+
+  if (dryRun) {
+    const response: PatchFileResponse = {
+      path: logicalPath,
+      content: nextContent,
+      encoding: 'utf-8',
+      lastModified: current.lastModified,
+      etag: current.etag,
+      dryRun: true,
+    };
+    if (idempotencyKey) {
+      patchIdempotency.set(idempotencyKey, response);
+    }
+    sendJson(res, 200, { success: true, data: response });
+    return;
+  }
+
+  await repository.updateMarkdownFile(logicalPath, nextContent);
+  const updated = await loadFileFromContext(context, logicalPath);
+  await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+
+  const response: PatchFileResponse = { ...updated, dryRun: false };
+  if (idempotencyKey) {
+    patchIdempotency.set(idempotencyKey, response);
+  }
+  sendJson(res, 200, { success: true, data: response });
 }
 
 async function handlePostFile(context: RequestContext): Promise<void> {
@@ -701,6 +820,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'PUT' && url.pathname === '/api/file') {
     await executeHandler(context, handlePutFile);
+    return { handled: true };
+  }
+
+  if (req.method === 'PATCH' && url.pathname === '/api/file') {
+    await executeHandler(context, handlePatchFile);
     return { handled: true };
   }
 

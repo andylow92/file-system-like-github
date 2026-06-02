@@ -230,6 +230,56 @@ server.tool(
 );
 
 server.tool(
+  'patch_note',
+  'Granular edits to a note: append text, prepend text (after frontmatter), ' +
+    'or replace the body under a heading. Pass `etag` (from read_note) for ' +
+    'safe optimistic-concurrency writes, an `idempotencyKey` to make a retry ' +
+    'a no-op, or `dryRun: true` to preview the result without writing.',
+  {
+    path: z.string(),
+    op: z.discriminatedUnion('type', [
+      z
+        .object({ type: z.literal('append'), text: z.string() })
+        .describe('Append `text` to the end of the note.'),
+      z
+        .object({ type: z.literal('prepend'), text: z.string() })
+        .describe('Insert `text` at the top; lands after frontmatter if present.'),
+      z
+        .object({
+          type: z.literal('replace_section'),
+          heading: z.string().describe('The full heading line, e.g. "## Tasks".'),
+          body: z.string().describe('New body to insert under the heading.'),
+        })
+        .describe('Replace the body under a heading; siblings are kept.'),
+    ]),
+    etag: z.string().optional().describe('Etag from read_note; rejects the patch if stale.'),
+    idempotencyKey: z
+      .string()
+      .optional()
+      .describe('Replay protection — the same key returns the original result without writing.'),
+    dryRun: z.boolean().optional().describe('Compute the result without writing.'),
+  },
+  tool(
+    async (args: {
+      path: string;
+      op:
+        | { type: 'append'; text: string }
+        | { type: 'prepend'; text: string }
+        | { type: 'replace_section'; heading: string; body: string };
+      etag?: string;
+      idempotencyKey?: string;
+      dryRun?: boolean;
+    }) => {
+      return apiRequest('/api/file', {
+        method: 'PATCH',
+        body: JSON.stringify(args),
+        actor: true,
+      });
+    },
+  ),
+);
+
+server.tool(
   'propose_edit',
   'Propose a create/update/delete for human review instead of writing directly. ' +
     'Use this when changes should be approved by the human before they land.',

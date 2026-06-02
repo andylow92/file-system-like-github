@@ -68,12 +68,20 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `agent:` resolver (403). This is convention-level (X-Actor is unauthenticated);
   airtight enforcement would need authn/z, intentionally out of scope for this
   local, single-user tool.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 13 vault tools
-  (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
-  `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It proxies the
-  HTTP API, so agent writes flow through the same validation, concurrency, and
-  audit trail, attributed as `agent:mcp`.
+- **Granular agent writes** — `PATCH /api/file` (or the `patch_note` MCP
+  tool) applies `append`, `prepend`, or `replace_section` ops without
+  rewriting the whole note. It reuses the `etag` optimistic-concurrency
+  contract, accepts an `idempotencyKey` so a retried patch is a no-op (keys
+  cached in memory for the API process lifetime), and supports `dryRun` to
+  preview the result without writing or auditing. The pure text-transform
+  helpers live in `@repo/shared` (`patch.ts`).
+- **MCP server** (`apps/mcp`) — a stdio server exposing 14 vault tools
+  (`list_notes`, `read_note`, `create_note`, `update_note`, `patch_note`,
+  `search_notes`, `semantic_search`, `get_backlinks`, `recent_activity`,
+  `create_folder`, `move_path`, `delete_path`, `propose_edit`,
+  `list_proposals`). It proxies the HTTP API, so agent writes flow through
+  the same validation, concurrency, and audit trail, attributed as
+  `agent:mcp`.
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
 semantic search, and a live SSE/file-watcher layer. See the roadmap in
