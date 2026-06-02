@@ -72,6 +72,35 @@ export interface SearchMatch {
   tags: string[];
 }
 
+export type ProposalAction = 'create' | 'update' | 'delete';
+export type ProposalStatus = 'pending' | 'approved' | 'rejected';
+
+/**
+ * A proposed edit awaiting human review. Lets agents suggest changes the human
+ * approves/rejects, instead of writing to the vault directly — the provenance
+ * trust loop.
+ */
+export interface EditProposal {
+  id: string;
+  /** ISO timestamp the proposal was created. */
+  ts: string;
+  /** Who proposed it, e.g. `agent:mcp`. */
+  actor: string;
+  action: ProposalAction;
+  path: string;
+  /** Proposed content for `create` / `update`. */
+  content?: string;
+  /** Etag the proposal was based on (used to detect a stale `update`). */
+  baseEtag?: string;
+  /** Optional rationale from the proposer. */
+  note?: string;
+  status: ProposalStatus;
+  /** ISO timestamp the proposal was approved/rejected. */
+  resolvedTs?: string;
+  /** Human actor who resolved it. */
+  resolvedBy?: string;
+}
+
 export * from './markdown.js';
 export * from './search.js';
 export * from './semantic.js';

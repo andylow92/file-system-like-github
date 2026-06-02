@@ -178,6 +178,37 @@ curl "http://localhost:3001/api/semantic-search?q=how%20do%20backups%20work"
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
 filtered to a single `path`.
 
+### Edit proposals (review queue)
+
+Lets agents suggest changes a human approves before they touch the vault.
+
+- `POST /api/proposals` — create a proposal. Body: `{ action: "create"|"update"|"delete",
+path, content?, baseEtag?, note? }`. `content` is required for create/update;
+  `baseEtag` (from a prior read) makes a stale `update` fail on approval. The
+  proposer is the `X-Actor` header. Returns the `EditProposal` (status `pending`).
+- `GET /api/proposals?status=pending|approved|rejected` — list proposals (newest first).
+- `POST /api/proposals/resolve` — body `{ id, decision: "approve"|"reject" }`. Approving
+  applies the edit (recorded in the audit log as the **proposing** actor) and marks the
+  proposal `approved`; rejecting discards it. Both destructive actions (`update`,
+  `delete`) honor `baseEtag` and return `409 stale_write` if the file changed since the
+  proposal was made. **Resolution is the human's action**; the resolver is taken from
+  `X-Actor` (default `human`) and requests with an `agent:` actor are rejected `403`.
+  This is convention-level (`X-Actor` is unauthenticated, so it is not airtight — the
+  MCP server also omits a resolve tool); true enforcement needs authn/z. Proposals are
+  stored under `CONTENT_ROOT/.fsbrain/proposals/`.
+
+```bash
+# Agent proposes an edit
+curl -X POST "http://localhost:3001/api/proposals" \
+  -H "Content-Type: application/json" -H "X-Actor: agent:mcp" \
+  -d '{"action":"update","path":"notes/todo.md","content":"# Updated by agent","note":"tidy up"}'
+
+# Human approves it
+curl -X POST "http://localhost:3001/api/proposals/resolve" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"<proposal-id>","decision":"approve"}'
+```
+
 ## Provenance: the `X-Actor` header
 
 Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) may send an `X-Actor` header
