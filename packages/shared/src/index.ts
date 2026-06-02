@@ -102,5 +102,6 @@ export interface EditProposal {
 }
 
 export * from './markdown.js';
+export * from './patch.js';
 export * from './search.js';
 export * from './semantic.js';

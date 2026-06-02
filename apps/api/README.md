@@ -68,6 +68,58 @@ curl -X PUT "http://localhost:3001/api/file" \
   -d '{"path":"notes/todo.md","content":"# Updated","etag":"abc123"}'
 ```
 
+### `PATCH /api/file`
+
+Applies a granular edit to an existing markdown file without rewriting the
+whole note. Designed for agents that want to add a task, prepend a status
+block, or rewrite one section.
+
+Request body schema:
+
+```json
+{
+  "path": "notes/todo.md",
+  "op": { "type": "append", "text": "- buy milk" },
+  "etag": "optional-current-etag",
+  "lastModified": "optional-current-lastModified",
+  "idempotencyKey": "optional-string",
+  "dryRun": false
+}
+```
+
+Supported `op` shapes:
+
+- `{ "type": "append", "text": "..." }` — append `text` to the end of the note.
+- `{ "type": "prepend", "text": "..." }` — insert `text` at the top, AFTER any
+  YAML frontmatter block so metadata stays at the top of the note.
+- `{ "type": "replace_section", "heading": "## Tasks", "body": "..." }` —
+  replace the body under the first heading matching `heading` exactly, up to
+  the next sibling-or-higher heading (or EOF). The heading line itself is
+  preserved. Returns `404 not_found` when the heading is not present.
+
+Optimistic concurrency mirrors `PUT /api/file`: pass `etag` (or
+`lastModified`) to refuse the patch if the file changed under you (`409
+stale_write`).
+
+Idempotency: pass `idempotencyKey` so a retried request (e.g. after a network
+blip) is a no-op — the original response is replayed without writing again
+or recording a second audit entry. Keys are held in memory and reset on API
+restart.
+
+Dry run: pass `"dryRun": true` to receive the resulting content without
+writing the file or recording an audit entry. The response sets
+`dryRun: true`; its `etag` / `lastModified` describe the current (unchanged)
+file, while `content` is the would-be result.
+
+Example:
+
+```bash
+curl -X PATCH "http://localhost:3001/api/file" \
+  -H "Content-Type: application/json" \
+  -H "X-Actor: agent:mcp" \
+  -d '{"path":"notes/todo.md","op":{"type":"append","text":"- buy milk"}}'
+```
+
 ### `POST /api/file`
 
 Creates a new markdown file.

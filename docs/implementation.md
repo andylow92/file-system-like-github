@@ -5,7 +5,7 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-02_
+_Last updated: 2026-06-02 (granular agent writes)_
 
 ---
 
@@ -29,18 +29,19 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
   FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags)
-    Activity|Review)               /api/dir      create folder      search.ts  (text match)
-  MarkdownPreviewPane (react-      /api/path     move / delete      semantic.ts (TF-IDF)
-    markdown: GFM/math/highlight   /api/backlinks        link graph   markdown/remarkWikilinks.ts
-    + wikilinks)                   /api/search           full-text    Audit/Search/Proposal types
-  BacklinksPanel / ActivityPanel   /api/semantic-search  ranked retrieval
-  SearchDialog (Text|Semantic)     /api/audit            provenance feed
-  ReviewPanel (proposals)          /api/proposals[/resolve]  edit review queue
-  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver,
-  openrouter/ (Fix Format)                   AuditLog, ProposalStore)
+    Activity|Review)               /api/file PATCH  granular edits  patch.ts (append/prepend/
+  MarkdownPreviewPane (react-      /api/dir      create folder        replace_section)
+    markdown: GFM/math/highlight   /api/path     move / delete      search.ts  (text match)
+    + wikilinks)                   /api/backlinks        link graph semantic.ts (TF-IDF)
+  BacklinksPanel / ActivityPanel   /api/search           full-text  markdown/remarkWikilinks.ts
+  SearchDialog (Text|Semantic)     /api/semantic-search  ranked     Audit/Search/Proposal/Patch
+  ReviewPanel (proposals)          /api/audit            provenance   types
+  api/files.ts (HTTP client)       /api/proposals[/resolve]  review queue
+  openrouter/ (Fix Format)         storage/ (FileRepository, PathResolver,
+                                              AuditLog, ProposalStore, IdempotencyCache)
 
-apps/mcp (MCP stdio server, 13 tools) — proxies the HTTP API: list/read/create/
-  update/search/semantic_search/backlinks/recent_activity/move/delete plus
+apps/mcp (MCP stdio server, 14 tools) — proxies the HTTP API: list/read/create/
+  update/patch/search/semantic_search/backlinks/recent_activity/move/delete plus
   propose_edit + list_proposals. Writes carry X-Actor: agent:mcp, so they land
   in the human Activity feed; proposals await human approval in the Review tab.
 ```
@@ -81,7 +82,9 @@ Key facts an agent must know:
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`     |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (13 tools) — proxies API as `agent:mcp`   |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool |
+| section + idempotency + dry-run)            |        |                                                      |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (14 tools) — proxies API as `agent:mcp`   |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
@@ -118,7 +121,7 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
 | Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
 | typed link graph)                                    |          |        |
-| Section/append/patch writes + idempotency + dry-run  |    P1    |   ⬜   |
+| Section/append/patch writes + idempotency + dry-run  |    P1    |   ✅   |
 | Live state (SSE/WebSocket + file watcher)            |    P2    |   ⬜   |
 | Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
@@ -143,7 +146,7 @@ next.
    `GET /api/search` (text + tag), `search.ts` helper, Ctrl/Cmd-K `SearchDialog`
    (prefix `#` for tag search).
 3. **Slice 4 — MCP server.** ✅ Done.
-   `apps/mcp` stdio server proxying the HTTP API (now 13 tools); writes carry
+   `apps/mcp` stdio server proxying the HTTP API (now 14 tools); writes carry
    `X-Actor: agent:mcp` and flow through the audit trail.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
@@ -165,6 +168,14 @@ next.
    `ProposalStore` keeps them in `.fsbrain/proposals/`. A human reviews the diff
    in the **Review** tab and approves (applied + audited as the proposer) or
    rejects. Resolution is human-only. Closes the provenance trust loop.
+8. **Slice 7 — Granular agent writes.** ✅ Done.
+   `PATCH /api/file` (and the `patch_note` MCP tool) apply `append`,
+   `prepend`, or `replace_section` ops without rewriting the whole note.
+   Pure transforms live in `@repo/shared` (`patch.ts`). The endpoint reuses
+   the `etag` optimistic-concurrency contract, accepts an `idempotencyKey`
+   so a retried patch is a no-op (in-memory LRU cache; resets on API
+   restart), supports `dryRun` to preview without writing or auditing, and
+   records audit attribution via `X-Actor`.
 
 ### Prioritization
 
@@ -176,8 +187,6 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
 ### Next up (open, in priority order)
 
-8. **Granular agent writes.** Section/append/patch edits, idempotency keys, and a
-   dry-run mode so agents don't have to rewrite whole notes.
 9. **Structured knowledge for precise retrieval/citation.** Stable note IDs and
    block anchors (`^id`) so agents can reference a specific paragraph; typed links.
 10. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
