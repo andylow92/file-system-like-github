@@ -23,8 +23,10 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  // Keep published npm deps external; only the workspace packages get inlined.
-  external: ['@modelcontextprotocol/sdk', 'zod'],
+  // Keep the MCP SDK external (it has native-ish deps and ships its own
+  // node_modules entries). `zod` is pure JS and gets inlined so the runtime
+  // dependency surface stays tight.
+  external: ['@modelcontextprotocol/sdk'],
   banner: { js: '#!/usr/bin/env node' },
   logLevel: 'info',
 });

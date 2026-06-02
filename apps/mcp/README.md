@@ -58,8 +58,10 @@ as `node apps/mcp/dist/server.js`.
 | `PORT`         | _(ephemeral)_          | Force the embedded API to listen on a specific port.                                        |
 | `MCP_ACTOR`    | `agent:mcp`            | Actor label recorded on every write (`X-Actor`).                                            |
 
-On first launch in an empty vault, the server seeds a `welcome.md` so the agent
-has something to find.
+When started in **embedded** mode (no `API_BASE_URL`), the MCP entry seeds a
+`welcome.md` if the vault is empty, so the agent has something to find on its
+first launch. The standalone `npm run dev:api` path doesn't seed — the human
+gets an empty (but existing) vault.
 
 ## Run under OpenClaw
 

@@ -7,13 +7,19 @@
 
 _Last updated: 2026-06-02_
 
-> **Latest change.** The MCP server is now a **self-contained, single-command
-> launcher**: when `API_BASE_URL` is unset it starts the storage API
-> in-process on `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT`
-> (defaulting to `~/.fsbrain/vault`), seeds a `welcome.md` on first run, and
-> bundles to a runnable `dist/server.js` (npm bin `fsbrain-mcp`). This is what
-> OpenClaw / Claude Desktop spawn — see
+> **Latest change.** The MCP server is now a **single-command launcher**: when
+> `API_BASE_URL` is unset it starts the storage API in-process on `127.0.0.1`
+> (ephemeral port), auto-creates `CONTENT_ROOT` (now defaulting to
+> `~/.fsbrain/vault`), seeds a `welcome.md` when launched against an empty
+> vault, and bundles to a runnable `dist/server.js` (npm bin `fsbrain-mcp`).
+> This is what OpenClaw / Claude Desktop spawn — see
 > [`apps/mcp/README.md`](../apps/mcp/README.md) for the copy-paste config.
+>
+> **Heads-up for existing local setups.** The default `CONTENT_ROOT` moved
+> from `<cwd>/content` to `~/.fsbrain/vault`. Existing `./content` notes
+> aren't deleted, but `npm run dev:api` / `dev:web` without `CONTENT_ROOT`
+> set will now read the new path. Set `CONTENT_ROOT=./content` (e.g. in
+> `apps/api/.env` or your shell) to keep the old location.
 
 ---
 
