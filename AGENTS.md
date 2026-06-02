@@ -60,9 +60,12 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **MCP server** (`apps/mcp`) — a stdio server exposing 11 vault tools
   (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
   `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`). It proxies the HTTP API, so agent writes flow
-  through the same validation, concurrency, and audit trail, attributed as
-  `agent:mcp`.
+  `move_path`, `delete_path`). It runs the storage API **in-process** by
+  default, so it's a single self-contained command an MCP host (e.g.
+  **OpenClaw**, Claude Desktop) can spawn — see
+  [`apps/mcp/README.md`](apps/mcp/README.md) for the copy-paste config. Agent
+  writes flow through the same validation, concurrency, and audit trail as the
+  web UI, attributed as `agent:mcp` (or whatever `MCP_ACTOR` is set to).
 
 **Not yet built (next):** Mermaid diagrams, real vector embeddings to back
 semantic search, an agent-edit review/approval queue, and a live

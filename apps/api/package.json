@@ -3,10 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "main": "src/server.ts",
+  "types": "src/server.ts",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
+    "start": "node dist/main.js",
     "test": "vitest run"
   },
   "dependencies": {

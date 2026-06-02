@@ -7,6 +7,14 @@
 
 _Last updated: 2026-06-02_
 
+> **Latest change.** The MCP server is now a **self-contained, single-command
+> launcher**: when `API_BASE_URL` is unset it starts the storage API
+> in-process on `127.0.0.1` (ephemeral port), auto-creates `CONTENT_ROOT`
+> (defaulting to `~/.fsbrain/vault`), seeds a `welcome.md` on first run, and
+> bundles to a runnable `dist/server.js` (npm bin `fsbrain-mcp`). This is what
+> OpenClaw / Claude Desktop spawn — see
+> [`apps/mcp/README.md`](../apps/mcp/README.md) for the copy-paste config.
+
 ---
 
 ## 1. Vision
@@ -38,10 +46,12 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver, AuditLog)
   openrouter/ (Fix Format)
 
-apps/mcp (MCP stdio server) — proxies the HTTP API, exposing the vault as agent
-  tools (list/read/create/update/search/semantic_search/backlinks/
-  recent_activity/move/delete). Writes carry X-Actor: agent:mcp, so they land
-  in the human Activity feed.
+apps/mcp (MCP stdio server) — exposes the vault as agent tools
+  (list/read/create/update/search/semantic_search/backlinks/
+  recent_activity/move/delete). When API_BASE_URL is unset it runs the storage
+  API in-process on 127.0.0.1, so OpenClaw / Claude Desktop can spawn it with
+  one `node dist/server.js` command. Writes carry X-Actor: agent:mcp (or
+  whatever MCP_ACTOR is set to), so they land in the human Activity feed.
 ```
 
 Key facts an agent must know:
@@ -63,24 +73,25 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                |
-| ------------------------------------------- | :----: | ---------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                    |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                 |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`           |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)     |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                       |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents    |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                     |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                     |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                   |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview       |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex     |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` — proxies API, attributes `agent:mcp`     |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
+| Capability                                  | Status | Notes                                                   |
+| ------------------------------------------- | :----: | ------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                       |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                    |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`              |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)        |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                          |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents       |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                        |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                        |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                      |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview          |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex        |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                           |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)          |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`    |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` — self-contained bin, attributes `agent:mcp` |
+| Turnkey **OpenClaw** entry (single command) |   ✅   | `mcp.servers.fsbrain-vault` → `node dist/server.js`     |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`               |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -141,8 +152,13 @@ next.
    `GET /api/search` (text + tag), `search.ts` helper, Ctrl/Cmd-K `SearchDialog`
    (prefix `#` for tag search).
 3. **Slice 4 — MCP server.** ✅ Done.
-   `apps/mcp` stdio server proxying the HTTP API with 10 tools; writes carry
-   `X-Actor: agent:mcp` and flow through the audit trail.
+   `apps/mcp` stdio server with 11 tools that an agent (OpenClaw, Claude
+   Desktop, …) can call. Self-contained: starts the storage API in-process
+   on `127.0.0.1` when `API_BASE_URL` is unset, auto-creates `CONTENT_ROOT`
+   (`~/.fsbrain/vault` by default), seeds a `welcome.md` on first run, and
+   builds to a single-file bin (`fsbrain-mcp` → `dist/server.js`). Writes
+   carry `X-Actor: agent:mcp` (override via `MCP_ACTOR`) and flow through
+   the audit trail.
 4. **Slice 6a — Provenance.** ✅ Done.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
