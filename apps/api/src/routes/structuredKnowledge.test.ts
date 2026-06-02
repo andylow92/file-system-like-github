@@ -284,4 +284,28 @@ describe('structured knowledge surface', () => {
     const backlinks = await api<Backlink[]>('GET', '/api/backlinks?path=target.md');
     expect(backlinks.body.data?.[0]?.type).toBeUndefined();
   });
+
+  it('rejects ensure_id with an id that would break the frontmatter', async () => {
+    await api('POST', '/api/file', { body: { path: 'doc.md', content: '# Doc\n' } });
+    const bad = await api('PATCH', '/api/file', {
+      body: { path: 'doc.md', op: { type: 'ensure_id', id: 'x\nmalicious: true' } },
+    });
+    expect(bad.status).toBe(422);
+    expect(bad.body.error?.code).toBe('validation_error');
+
+    // The file body must not have been mutated by the rejected patch.
+    const current = await api<{ content: string }>('GET', '/api/file?path=doc.md');
+    expect(current.body.data?.content).toBe('# Doc\n');
+  });
+
+  it('refuses to resolve `id=` when two notes share the same id (409)', async () => {
+    const shared = '---\nid: dup-id\n---\nfirst\n';
+    await api('POST', '/api/file', { body: { path: 'a.md', content: shared } });
+    await api('POST', '/api/file', { body: { path: 'b.md', content: shared } });
+
+    const conflict = await api('GET', '/api/file?id=dup-id');
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error?.code).toBe('conflict');
+    expect(conflict.body.error?.message).toMatch(/share id "dup-id"/);
+  });
 });

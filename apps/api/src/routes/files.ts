@@ -129,6 +129,13 @@ function toErrorResponse(error: unknown): { statusCode: number; error: ErrorResp
     };
   }
 
+  if (error instanceof DuplicateNoteIdError) {
+    return {
+      statusCode: 409,
+      error: { code: 'conflict', message: error.message },
+    };
+  }
+
   if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
     return {
       statusCode: 404,
@@ -216,19 +223,42 @@ async function loadFileFromContext(
   };
 }
 
-/** Walk the vault to find the note whose frontmatter `id:` matches. */
+/** Raised when two notes claim the same frontmatter `id:`. */
+class DuplicateNoteIdError extends Error {
+  constructor(
+    public id: string,
+    public paths: string[],
+  ) {
+    super(`Multiple notes share id "${id}": ${paths.join(', ')}`);
+    this.name = 'DuplicateNoteIdError';
+  }
+}
+
+/**
+ * Walk the vault to find the note whose frontmatter `id:` matches. Currently
+ * scans every note on each call — fine for a local single-user vault; an
+ * id→path index alongside the planned chunk/IDF cache is a known follow-up.
+ *
+ * Throws `DuplicateNoteIdError` when two notes share the same id, since the
+ * whole point of note ids is stable identity — silently resolving to one of
+ * the duplicates would hide the conflict.
+ */
 async function findPathByNoteId(
   repository: FileRepository,
   id: string,
 ): Promise<string | undefined> {
   const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  const matches: string[] = [];
   for (const filePath of allPaths) {
     const content = await repository.readMarkdownFile(filePath);
     if (findNoteId(content) === id) {
-      return filePath;
+      matches.push(filePath);
     }
   }
-  return undefined;
+  if (matches.length > 1) {
+    throw new DuplicateNoteIdError(id, matches);
+  }
+  return matches[0];
 }
 
 /**

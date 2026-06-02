@@ -52,4 +52,22 @@ describe('ensureNoteId', () => {
   it('throws when the supplied id is empty', () => {
     expect(() => ensureNoteId('body', '')).toThrow(/cannot be empty/);
   });
+
+  it('rejects ids that would break the YAML frontmatter', () => {
+    // A newline could inject sibling keys (`id: x\nmalicious: true` becomes a
+    // second YAML line); `:` / quotes / spaces / underscores fall outside the
+    // safe charset too. `---` is fine — it is spliced inline as `id: ---`,
+    // which does not terminate the frontmatter block.
+    expect(() => ensureNoteId('body', 'x\nmalicious: true')).toThrow(/match \[A-Za-z0-9-\]/);
+    expect(() => ensureNoteId('body', 'has space')).toThrow(/match/);
+    expect(() => ensureNoteId('body', 'under_score')).toThrow(/match/);
+    expect(() => ensureNoteId('body', 'has:colon')).toThrow(/match/);
+    expect(() => ensureNoteId('body', 'has"quote')).toThrow(/match/);
+  });
+
+  it('accepts a UUID-shaped id', () => {
+    const result = ensureNoteId('body', '550e8400-e29b-41d4-a716-446655440000');
+    expect(result.changed).toBe(true);
+    expect(result.id).toBe('550e8400-e29b-41d4-a716-446655440000');
+  });
 });
