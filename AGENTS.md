@@ -44,6 +44,11 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
 - **Links & metadata** — `[[wikilinks]]` (clickable, resolved), a backlinks
   panel (`GET /api/backlinks`), and frontmatter + `#tags` parsing. The pure
   helpers live in `@repo/shared` (`markdown.ts`).
+- **Rich rendering** — the preview uses `react-markdown` + `remark-gfm`
+  (tables, task lists, strikethrough, autolinks, h3–h6), `remark-math` +
+  `rehype-katex` (math), and highlight.js for fenced code (with a copy button).
+  Frontmatter is stripped and tags render as chips. Wikilinks are a remark
+  plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
 - **Search** — full-text + tag search (`GET /api/search`), with a Ctrl/Cmd-K
   quick-switcher in the web UI (prefix `#` to search a tag).
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
@@ -55,7 +60,7 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `delete_path`). It proxies the HTTP API, so agent writes flow through the same
   validation, concurrency, and audit trail, attributed as `agent:mcp`.
 
-**Not yet built (next):** a real CommonMark/GFM renderer (Slice 2), an
+**Not yet built (next):** Mermaid diagrams + a lazy-loaded renderer bundle, an
 agent-edit review/approval queue, semantic search, and a live SSE/file-watcher
 layer. See the roadmap in `docs/implementation.md`.
 
