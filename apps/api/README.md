@@ -161,6 +161,18 @@ curl "http://localhost:3001/api/search?q=roadmap"
 curl "http://localhost:3001/api/search?tag=project"
 ```
 
+### `GET /api/semantic-search?q=...&limit=...`
+
+Relevance-ranked retrieval. Chunks every note (frontmatter stripped) and ranks
+the chunks against `q` by TF-IDF cosine similarity, so it surfaces passages
+that are topically about the query rather than exact substring matches. `q` is
+required. Returns `SemanticHit[]` (`{ path, heading?, snippet, score, chunkIndex }`)
+sorted by score. Runs locally with no API key.
+
+```bash
+curl "http://localhost:3001/api/semantic-search?q=how%20do%20backups%20work"
+```
+
 ### `GET /api/audit?path=...&limit=...`
 
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally

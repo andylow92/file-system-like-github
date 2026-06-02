@@ -30,17 +30,18 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
   FileViewerTabs (Prev|Edit|       /api/file     read/create/update markdown.ts (links/tags)
     Split|Activity)                /api/dir      create folder      search.ts  (text match)
-  MarkdownPreviewPane (react-       /api/path     move / delete      Audit/Search types
-    markdown: GFM/math/highlight                                     markdown/remarkWikilinks.ts
-    + wikilinks)
-  BacklinksPanel / ActivityPanel   /api/backlinks  link graph
-  SearchDialog (Ctrl/Cmd-K)        /api/search   full-text + tags
-  api/files.ts (HTTP client)       /api/audit    provenance feed
-  openrouter/ (Fix Format)         storage/ (FileRepository, PathResolver, AuditLog)
+  MarkdownPreviewPane (react-      /api/path     move / delete      semantic.ts (TF-IDF)
+    markdown: GFM/math/highlight   /api/backlinks        link graph   markdown/remarkWikilinks.ts
+    + wikilinks)                   /api/search           full-text    Audit/Search types
+  BacklinksPanel / ActivityPanel   /api/semantic-search  ranked retrieval
+  SearchDialog (Text|Semantic)     /api/audit            provenance feed
+  api/files.ts (HTTP client)       storage/ (FileRepository, PathResolver, AuditLog)
+  openrouter/ (Fix Format)
 
 apps/mcp (MCP stdio server) — proxies the HTTP API, exposing the vault as agent
-  tools (list/read/create/update/search/backlinks/recent_activity/move/delete).
-  Writes carry X-Actor: agent:mcp, so they land in the human Activity feed.
+  tools (list/read/create/update/search/semantic_search/backlinks/
+  recent_activity/move/delete). Writes carry X-Actor: agent:mcp, so they land
+  in the human Activity feed.
 ```
 
 Key facts an agent must know:
@@ -76,6 +77,7 @@ Key facts an agent must know:
 | Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview       |
 | Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex     |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                        |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)       |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel` |
 | **MCP server** (agent tools)                |   ✅   | `apps/mcp` — proxies API, attributes `agent:mcp`     |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`            |
@@ -101,8 +103,8 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 | Plugin system, themes, mobile, multi-device sync   |    P3    |   ⬜   |
 
 \* link graph exists as backlinks; a visual graph view is still open. ◑ = quick
-switcher + split done; palette/outline/daily-notes open. † Mermaid diagrams and
-a lazy-loaded renderer bundle are the remaining follow-ups (see roadmap).
+switcher + split done; palette/outline/daily-notes open. † renderer shipped and
+lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 
 ### For agents (the brain)
 
@@ -111,7 +113,7 @@ a lazy-loaded renderer bundle are the remaining follow-ups (see roadmap).
 | Machine-facing API / **MCP server** over the vault   |    P0    |   ✅   |
 | **Provenance**: per-change attribution + audit feed  |    P0    |   ✅   |
 | agent-edit review/approval queue                     |    P1    |   ⬜   |
-| Semantic retrieval (chunking + embeddings + hybrid)  |    P1    |   ⬜   |
+| Semantic retrieval (chunking + ranking; embeddings)  |    P1    |  ✅‡   |
 | Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ◑    |
 | typed link graph)                                    |          |        |
 | Section/append/patch writes + idempotency + dry-run  |    P1    |   ⬜   |
@@ -119,6 +121,8 @@ a lazy-loaded renderer bundle are the remaining follow-ups (see roadmap).
 | Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
 
+‡ chunking + TF-IDF cosine ranking shipped (`semantic.ts`, no API key, runs
+offline); swapping in real vector embeddings via a provider is the follow-up.
 ◑ = wikilink graph + tags exist; note IDs / block anchors still open. The
 audit feed records attribution; an explicit human review/approval queue for
 agent edits is the natural next provenance step.
@@ -143,21 +147,27 @@ next.
    `X-Actor` attribution, append-only `AuditLog` (`.fsbrain/audit.jsonl`),
    `GET /api/audit`, and the human-facing **Activity** tab.
 5. **Slice 2 — Real renderer.** ✅ Done.
-   `MarkdownPreviewPane` now uses `react-markdown` + `remark-gfm` (tables, task
+   `MarkdownPreviewPane` uses `react-markdown` + `remark-gfm` (tables, task
    lists, strikethrough, autolinks, h3–h6), `remark-math` + `rehype-katex`
    (math), and highlight.js for fenced code (keeping the copy button). The
    `remarkWikilinks` plugin preserves `[[wikilinks]]`; frontmatter is stripped
-   and tags render as chips.
+   and tags render as chips. The pane is lazy-loaded (`React.lazy`), so the main
+   bundle stays ~63 kB gzip and the renderer (~186 kB gzip) loads on demand.
+6. **Slice 5 — Semantic search.** ✅ Done (local).
+   `semantic.ts` chunks notes and ranks them by TF-IDF cosine similarity;
+   `GET /api/semantic-search`, a Text|Semantic toggle in `SearchDialog`, and a
+   `semantic_search` MCP tool. Runs offline, no API key. A real embedding
+   provider can replace the ranking engine without changing callers.
 
 ### Next up (open)
 
-6. **Renderer follow-ups.** Lazy-loading ✅ done — the preview pane is
-   code-split (`React.lazy`), so the main bundle is back to ~63 kB gzip and the
-   renderer (~186 kB gzip) loads on demand. Mermaid diagrams remain open.
-7. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
+7. **Embeddings + renderer follow-ups.** Swap the TF-IDF ranker for real vector
+   embeddings (remote `/v1/embeddings` or on-device) with a token-budgeted
+   context-bundle endpoint for RAG. Cache the chunk/IDF index instead of
+   re-reading + re-ranking the whole vault per query (invalidate on writes via
+   the existing mutation/audit paths). Add Mermaid diagrams to the renderer.
+8. **Slice 6b — Agent-edit review queue.** Build on provenance: let agents
    propose edits a human approves/rejects, with diffs. Closes the trust loop.
-8. **Slice 5 — Semantic search.** Chunking + embeddings + hybrid retrieval; a
-   token-budgeted context-bundle endpoint for RAG.
 9. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
    Activity feed) updates the moment an agent writes.
 

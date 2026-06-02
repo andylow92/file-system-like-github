@@ -14,7 +14,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-import type { ApiResponse, AuditEntry, Backlink, FileNode, SearchMatch } from '@repo/shared';
+import type {
+  ApiResponse,
+  AuditEntry,
+  Backlink,
+  FileNode,
+  SearchMatch,
+  SemanticHit,
+} from '@repo/shared';
 
 const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 const ACTOR = process.env.MCP_ACTOR ?? 'agent:mcp';
@@ -142,6 +149,21 @@ server.tool(
     if (tag) params.set('tag', tag);
     if (limit) params.set('limit', String(limit));
     return apiRequest<SearchMatch[]>(`/api/search?${params.toString()}`);
+  }),
+);
+
+server.tool(
+  'semantic_search',
+  'Relevance-ranked retrieval: find the note passages most "about" a query, ' +
+    'even without exact keyword matches. Best for RAG-style context gathering.',
+  {
+    query: z.string().describe('A natural-language description of what to find.'),
+    limit: z.number().optional(),
+  },
+  tool(async ({ query, limit }: { query: string; limit?: number }) => {
+    const params = new URLSearchParams({ q: query });
+    if (limit) params.set('limit', String(limit));
+    return apiRequest<SemanticHit[]>(`/api/semantic-search?${params.toString()}`);
   }),
 );
 

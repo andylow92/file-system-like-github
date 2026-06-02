@@ -18,6 +18,7 @@ the agent did.
 | `create_note`     | Create a new note.                                |
 | `update_note`     | Overwrite a note (pass `etag` for safe writes).   |
 | `search_notes`    | Full-text and/or tag search.                      |
+| `semantic_search` | Relevance-ranked retrieval (TF-IDF) for RAG.      |
 | `get_backlinks`   | Notes linking to a note via `[[wikilinks]]`.      |
 | `recent_activity` | Read the provenance/audit trail.                  |
 | `create_folder`   | Create a folder.                                  |

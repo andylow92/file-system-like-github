@@ -49,20 +49,24 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `rehype-katex` (math), and highlight.js for fenced code (with a copy button).
   Frontmatter is stripped and tags render as chips. Wikilinks are a remark
   plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
-- **Search** — full-text + tag search (`GET /api/search`), with a Ctrl/Cmd-K
-  quick-switcher in the web UI (prefix `#` to search a tag).
+- **Search** — full-text + tag search (`GET /api/search`) and **semantic
+  (relevance) search** (`GET /api/semantic-search`, TF-IDF cosine over chunked
+  notes; `semantic.ts`). The Ctrl/Cmd-K quick-switcher has a Text|Semantic
+  toggle (prefix `#` for tags in Text mode). Semantic runs offline, no API key;
+  the ranking engine is swappable for real embeddings later.
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
   appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 10 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 11 vault tools
   (`list_notes`, `read_note`, `create_note`, `update_note`, `search_notes`,
-  `get_backlinks`, `recent_activity`, `create_folder`, `move_path`,
-  `delete_path`). It proxies the HTTP API, so agent writes flow through the same
-  validation, concurrency, and audit trail, attributed as `agent:mcp`.
+  `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
+  `move_path`, `delete_path`). It proxies the HTTP API, so agent writes flow
+  through the same validation, concurrency, and audit trail, attributed as
+  `agent:mcp`.
 
-**Not yet built (next):** Mermaid diagrams + a lazy-loaded renderer bundle, an
-agent-edit review/approval queue, semantic search, and a live SSE/file-watcher
-layer. See the roadmap in `docs/implementation.md`.
+**Not yet built (next):** Mermaid diagrams, real vector embeddings to back
+semantic search, an agent-edit review/approval queue, and a live
+SSE/file-watcher layer. See the roadmap in `docs/implementation.md`.
 
 ---
 

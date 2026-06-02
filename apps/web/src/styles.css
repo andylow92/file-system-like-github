@@ -2371,6 +2371,39 @@ textarea:focus-visible {
   color: var(--color-accent);
 }
 
+/* Search dialog: mode toggle + semantic score badge */
+.search-dialog__modes {
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+
+.search-dialog__mode {
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption, 0.75rem);
+  cursor: pointer;
+}
+
+.search-dialog__mode.is-active {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-ring);
+  color: var(--color-accent);
+}
+
+.search-dialog__result-score {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption, 0.75rem);
+  font-weight: 500;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Rich markdown rendering (GFM tables, task lists, headings, media)          */
 /* -------------------------------------------------------------------------- */
