@@ -302,6 +302,10 @@ Implementation notes:
   API-originated writes so a single change does not double-fire.
 - The stream sends periodic heartbeat comments to keep the connection alive and
   cleans up on client disconnect. The route is never buffered or compressed.
+- No CORS headers are set, matching the rest of the API. The web client reaches
+  it same-origin via the Vite dev proxy; a cross-origin deployment would need
+  CORS (and, like the rest of the API, auth — out of scope for this local,
+  single-user tool).
 
 ```bash
 curl -N "http://localhost:3001/api/events"

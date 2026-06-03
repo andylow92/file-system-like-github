@@ -54,6 +54,27 @@ describe('routeVaultEvent', () => {
     }
   });
 
+  it('on a move of the open file, refreshes the tree and the open file', () => {
+    const h = handlers();
+    routeVaultEvent(event({ type: 'moved', path: 'open.md', toPath: 'moved/open.md' }), {
+      openFilePath: 'open.md',
+      ...h,
+    });
+    expect(h.onTreeChanged).toHaveBeenCalledTimes(1);
+    expect(h.onOpenFileChanged).toHaveBeenCalledWith('moved/open.md');
+    expect(h.onActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('on a move that does not touch the open file, refreshes only the tree', () => {
+    const h = handlers();
+    routeVaultEvent(event({ type: 'moved', path: 'other.md', toPath: 'archive/other.md' }), {
+      openFilePath: 'open.md',
+      ...h,
+    });
+    expect(h.onTreeChanged).toHaveBeenCalledTimes(1);
+    expect(h.onOpenFileChanged).not.toHaveBeenCalled();
+  });
+
   it('bumps the pending-review count on proposal events', () => {
     const h = handlers();
     routeVaultEvent(event({ type: 'proposal_created' }), { ...h });

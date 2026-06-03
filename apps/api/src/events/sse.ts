@@ -37,11 +37,19 @@ export function handleEventStream(
   // The heartbeat alone must not keep the process alive.
   heartbeat.unref?.();
 
+  let cleanedUp = false;
   const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
     clearInterval(heartbeat);
     unsubscribe();
     res.end();
   };
 
   req.on('close', cleanup);
+  // An abrupt socket error should tear down the subscription too, not surface
+  // as an unhandled error.
+  res.on('error', cleanup);
 }

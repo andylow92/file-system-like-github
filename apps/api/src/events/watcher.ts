@@ -90,6 +90,15 @@ export function createVaultWatcher(options: {
     recentApiPaths.set(relativePath, Date.now());
   }
 
+  /** Drop de-dupe claims older than the window so the map can't grow unbounded. */
+  function pruneClaims(now: number): void {
+    for (const [claimedPath, at] of recentApiPaths) {
+      if (now - at >= DEDUPE_WINDOW_MS) {
+        recentApiPaths.delete(claimedPath);
+      }
+    }
+  }
+
   function recentlyClaimedByApi(relativePath: string): boolean {
     const at = recentApiPaths.get(relativePath);
     if (at === undefined) {
@@ -130,15 +139,30 @@ export function createVaultWatcher(options: {
     }
   });
 
+  // The watcher starts handling fs events immediately, but classifying
+  // created-vs-updated correctly needs the initial scan's known-paths set.
+  // `flush` defers until this resolves so an edit landing in the startup window
+  // isn't mislabeled `created`.
+  let scanComplete = false;
   void scanMarkdownPaths(contentRoot).then((paths) => {
     // Merge rather than replace: API events may have arrived during the scan.
     for (const p of paths) {
       knownPaths.add(p);
     }
+    scanComplete = true;
   });
 
   function flush(): void {
     flushTimer = undefined;
+    if (!scanComplete) {
+      // Wait for the initial scan (always resolves) before classifying.
+      flushTimer = setTimeout(flush, debounceMs);
+      flushTimer.unref?.();
+      return;
+    }
+
+    const now = Date.now();
+    pruneClaims(now);
     const paths = [...pending];
     pending.clear();
 

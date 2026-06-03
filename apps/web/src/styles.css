@@ -319,7 +319,12 @@ body {
 
 .live-indicator--reconnecting .live-indicator__dot {
   background: var(--color-accent);
-  animation: live-pulse 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-indicator--reconnecting .live-indicator__dot {
+    animation: live-pulse 1s ease-in-out infinite;
+  }
 }
 
 @keyframes live-pulse {

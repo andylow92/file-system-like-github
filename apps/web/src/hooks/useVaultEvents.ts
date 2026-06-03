@@ -72,6 +72,9 @@ export function useVaultEvents(options: UseVaultEventsOptions): { status: LiveSt
 
   const enabled = options.enabled ?? true;
 
+  // Effect depends only on `enabled` (not the callbacks/open file) so the
+  // EventSource is created once and survives re-renders; live values are read
+  // through `optionsRef` at dispatch time.
   useEffect(() => {
     if (!enabled || typeof EventSource === 'undefined') {
       return;
