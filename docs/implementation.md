@@ -5,7 +5,21 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-02 (clone-and-run hardening)_
+_Last updated: 2026-06-03 (live layer: SSE + file watcher)_
+
+> **Latest change.** The web UI now reflects vault changes **the instant they
+> happen**. An in-process `EventBus` (`apps/api/src/events/`) receives a
+> `VaultEvent` from every mutating handler — published right beside the audit
+> write so the stream and the audit log never diverge — and a recursive
+> `fs.watch` watcher publishes `source:'watch'` events for out-of-band edits
+> (a direct file edit, `git`, another process), ignoring `.fsbrain/` and
+> non-`.md` churn and de-duping against API writes. `GET /api/events` streams
+> these over Server-Sent Events; the web `useVaultEvents` hook subscribes and
+> surgically refreshes the tree, the open file (preserving unsaved drafts —
+> showing a non-destructive "changed on disk" prompt instead of clobbering),
+> the Activity feed, and the Review badge, with a live/reconnecting indicator.
+> The MCP server's embedded API starts the bus + watcher too, so an agent's
+> writes surface to a watching human live.
 
 > **Latest change.** The project is now **clone-and-run testable** for an
 > agent. `npm run start:agent` launches the self-contained `fsbrain-mcp` —
@@ -57,10 +71,12 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   SearchDialog (Text|Semantic)     /api/block-anchors    list ^ids  noteId.ts (stable id)
   ReviewPanel (proposals)          /api/search           full-text  search.ts  (text match)
   api/files.ts (HTTP client)       /api/semantic-search  ranked     semantic.ts (TF-IDF)
-  openrouter/ (Fix Format)         /api/audit            provenance markdown/remarkWikilinks.ts
-                                   /api/proposals[/resolve]  review queue
+  hooks/useVaultEvents (SSE)       /api/audit            provenance markdown/remarkWikilinks.ts
+  openrouter/ (Fix Format)         /api/proposals[/resolve]  review queue VaultEvent contract
+                                   /api/events     live SSE stream of VaultEvents
                                    storage/ (FileRepository, PathResolver,
                                               AuditLog, ProposalStore, IdempotencyCache)
+                                   events/ (EventBus, fs.watch watcher, SSE handler)
 
 apps/mcp (MCP stdio server, 16 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/backlinks/recent_activity/move/delete
@@ -92,31 +108,32 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                     |
-| ------------------------------------------- | :----: | --------------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                         |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                      |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)          |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                            |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents         |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                          |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                          |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                        |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview            |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex          |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                             |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)            |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`      |
-| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`          |
-| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool      |
-| section + idempotency + dry-run)            |        |                                                           |
-| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`          |
-| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                            |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`             |
-| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md |
-| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`               |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                 |
+| Capability                                  | Status | Notes                                                                |
+| ------------------------------------------- | :----: | -------------------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                    |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                 |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                           |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                     |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                       |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                    |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                     |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                     |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                   |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                       |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                     |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                        |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                       |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                 |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                     |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                 |
+| section + idempotency + dry-run)            |        |                                                                      |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                     |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                       |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`                        |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md            |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                          |
+| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents` |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                            |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -153,7 +170,7 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | Structured knowledge (note IDs, block anchors `^id`, |    P1    |   ✅   |
 | typed link graph)                                    |          |        |
 | Section/append/patch writes + idempotency + dry-run  |    P1    |   ✅   |
-| Live state (SSE/WebSocket + file watcher)            |    P2    |   ⬜   |
+| Live state (SSE/WebSocket + file watcher)            |    P2    |   ✅   |
 | Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
 
@@ -244,10 +261,25 @@ priorities are **agent depth** plus a **visual graph** for the human. Multi-user
 concerns (authn/z, per-agent scopes, rate limiting), CI, attachments, editor
 polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
 
+10. **Slice 9 — Live layer.** ✅ Done.
+    An in-process `EventBus` (`apps/api/src/events/eventBus.ts`) receives a
+    `VaultEvent` (`@repo/shared`) from every mutating handler, published beside
+    the audit write so the live stream and the audit log never diverge. A
+    recursive `fs.watch` watcher (`watcher.ts`, ~150ms debounce) publishes
+    `source:'watch'` events for out-of-band edits, ignoring `.fsbrain/` and
+    non-`.md` churn and de-duping against API writes within a short window.
+    `GET /api/events` (`sse.ts`) streams events over SSE with heartbeats and
+    disconnect cleanup. The web `useVaultEvents` hook subscribes via
+    `EventSource`, auto-reconnects, and surgically refreshes the tree, the open
+    file (preserving unsaved drafts — a "changed on disk" prompt rather than a
+    clobber), the Activity feed, and the Review badge; a live/reconnecting
+    indicator sits in the layout. The MCP server's embedded API starts the bus
+    - watcher too. Covered by `apps/api/src/routes/events.test.ts` (SSE +
+      watcher + `.fsbrain` exclusion) and
+      `apps/web/src/hooks/__tests__/useVaultEvents.test.ts`.
+
 ### Next up (open, in priority order)
 
-10. **Live layer.** SSE/WebSocket + file watcher so the human's view (and the
-    Activity feed / Review queue) updates the moment an agent writes.
 11. **Real embeddings + index cache + context bundles.** Swap the TF-IDF ranker
     for vector embeddings (remote `/v1/embeddings` or on-device); cache the
     chunk/IDF index (invalidate on writes); add a token-budgeted context-bundle

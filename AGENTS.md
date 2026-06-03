@@ -107,10 +107,20 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   search/semantic_search + propose_edit/list_proposals + recent_activity),
   and asserts the write landed both on disk and in the audit log. Runs in
   `npm test`, so a green test bar is the proof that a fresh clone works.
+- **Live layer** — the web UI reflects vault changes the moment they happen.
+  An in-process `EventBus` (`apps/api/src/events/`) gets a `VaultEvent` from
+  every mutating handler right beside its audit write, and a recursive
+  `fs.watch` watcher publishes `source:'watch'` events for out-of-band edits
+  (direct file edits, `git`, another process) — ignoring `.fsbrain/` and
+  non-`.md` churn and de-duping against API writes. `GET /api/events` streams
+  these over SSE; the web `useVaultEvents` hook subscribes and surgically
+  refreshes the tree, the open file (preserving unsaved drafts), the Activity
+  feed, and the Review badge, with a live/reconnecting indicator. The embedded
+  API the MCP server launches starts the bus + watcher too, so an agent's
+  writes surface to a watching human in real time.
 
-**Not yet built (next):** Mermaid diagrams, real vector embeddings to back
-semantic search, and a live SSE/file-watcher layer. See the roadmap in
-`docs/implementation.md`.
+**Not yet built (next):** Mermaid diagrams and real vector embeddings to back
+semantic search. See the roadmap in `docs/implementation.md`.
 
 ---
 

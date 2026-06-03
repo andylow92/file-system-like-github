@@ -290,6 +290,48 @@ body {
   gap: 0.5rem;
 }
 
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--color-text-dim);
+  font-family: var(--font-serif);
+  font-style: italic;
+  letter-spacing: 0;
+}
+
+.live-indicator__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-text-dim);
+}
+
+.live-indicator--live .live-indicator__dot {
+  background: #2ea043;
+  box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.18);
+}
+
+.live-indicator--reconnecting {
+  color: var(--color-accent);
+}
+
+.live-indicator--reconnecting .live-indicator__dot {
+  background: var(--color-accent);
+  animation: live-pulse 1s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 .save-kbd {
   font-family: var(--font-mono);
   font-size: 0.7rem;
