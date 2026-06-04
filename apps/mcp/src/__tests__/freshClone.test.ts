@@ -94,6 +94,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'get_backlinks',
         'get_block_anchors',
         'get_context',
+        'get_graph',
         'list_notes',
         'list_proposals',
         'move_path',
@@ -227,7 +228,7 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(17);
+    expect(tools.length).toBe(18);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
 
     // The readiness banner is what an MCP host log shows on a spawn — assert

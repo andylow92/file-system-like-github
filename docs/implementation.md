@@ -5,7 +5,26 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-04 (RAG: cached index + context bundles)_
+_Last updated: 2026-06-04 (visual knowledge graph — roadmap complete)_
+
+> **Latest change.** The vault's `[[wikilink]]` **knowledge graph** is now
+> visible to the human and traversable by agents — the last human-facing item on
+> the roadmap, so the planned roadmap is **complete**. A pure builder in
+> `@repo/shared` (`graph.ts` — `buildGraph`) turns the note corpus into
+> `GraphData` (`{ nodes: { id, label, tags, unresolved? }, edges: { source,
+target, type? } }`) using the same link extraction (`extractWikilinks` +
+> `resolveWikilink`) that backs `/api/backlinks`, so the graph and backlinks can
+> never disagree. Unresolved link targets become distinct placeholder nodes
+> (`unresolved: true`); the typed relation from `[[Target|rel:type]]` rides on
+> the edge. `GET /api/graph` (and the 18th MCP tool, `get_graph`) serves it from
+> the cached `VaultIndex` (no per-call vault re-read; `.fsbrain/` excluded). In
+> the web UI a new **Graph** tab renders a dependency-free, force-directed SVG
+> (`apps/web` `KnowledgeGraph`, lazy-loaded; layout in `graphLayout.ts`): click a
+> node to open the note, hover to highlight its neighbors, unresolved nodes are
+> styled distinctly, with pan/zoom — and it live-refreshes (debounced) off the
+> existing `/api/events` stream. Covered by `apps/api` `graph.test.ts` (pure
+> builder) + `routes/graph.test.ts` (endpoint, unresolved placeholder, no-stale-
+> after-write) and `apps/web` `GraphView.test.tsx` (renders nodes, click opens).
 
 > **Latest change.** The vault is now a first-class **RAG source** for agents.
 > An in-memory `VaultIndex` (`apps/api/src/index/vaultIndex.ts`) chunks every
@@ -94,12 +113,14 @@ real rendering) and _agent-brain_ (machine API, retrieval, provenance).
 apps/web (React + Vite)          apps/api (Node HTTP)             packages/shared
   GlobalLayout / FileTreeSidebar   /api/tree     list dir tree      FileNode, Api* contracts
   FileViewerTabs (Prev|Edit|Split| /api/file     read/create/update markdown.ts (links/tags,
-    Activity|Review)               /api/file PATCH  granular edits    typed `rel:` aliases)
+    Activity|Review|Graph)         /api/file PATCH  granular edits    typed `rel:` aliases)
   MarkdownPreviewPane (react-      /api/dir      create folder      patch.ts (append/prepend/
     markdown: GFM/math/highlight   /api/path     move / delete       replace_section/_block,
     + wikilinks + ^block-anchors)  /api/backlinks        link graph    ensure_id)
-  BacklinksPanel / ActivityPanel   /api/block            block read blocks.ts (^id helpers)
-  SearchDialog (Text|Semantic)     /api/block-anchors    list ^ids  noteId.ts (stable id)
+  GraphView / KnowledgeGraph       /api/graph            wikilink graph graph.ts (buildGraph,
+    (force-directed, lazy-loaded)  /api/block            block read    GraphData nodes/edges)
+  BacklinksPanel / ActivityPanel   /api/block-anchors    list ^ids  blocks.ts (^id helpers)
+  SearchDialog (Text|Semantic)                                      noteId.ts (stable id)
   ReviewPanel (proposals)          /api/search           full-text  search.ts  (text match)
   api/files.ts (HTTP client)       /api/semantic-search  ranked     semantic.ts (TF-IDF)
   hooks/useVaultEvents (SSE)       /api/audit            provenance markdown/remarkWikilinks.ts
@@ -112,9 +133,10 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 17 tools) — exposes the vault to agents: list/read/
-  create/update/patch/search/semantic_search/get_context/backlinks/recent_activity/
-  move/delete plus read_block, get_block_anchors, propose_edit + list_proposals. When
+apps/mcp (MCP stdio server, 18 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/get_context/backlinks/get_graph/
+  recent_activity/move/delete plus read_block, get_block_anchors, propose_edit +
+  list_proposals. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -142,34 +164,35 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                                |
-| ------------------------------------------- | :----: | -------------------------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                    |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                 |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                           |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                     |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                       |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                    |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                     |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                     |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                   |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                       |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                     |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                        |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                       |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                 |
-| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                     |
-| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                 |
-| section + idempotency + dry-run)            |        |                                                                      |
-| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                     |
-| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                       |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`                        |
-| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md            |
-| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                          |
-| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents` |
-| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic |
-| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)  |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                            |
+| Capability                                  | Status | Notes                                                                   |
+| ------------------------------------------- | :----: | ----------------------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                       |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                    |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                              |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                        |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                          |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                       |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                        |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                        |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                      |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                          |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                        |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                           |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                          |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                    |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                        |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                    |
+| section + idempotency + dry-run)            |        |                                                                         |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
+| Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`                           |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
+| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |
+| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic    |
+| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)     |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                               |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -181,7 +204,7 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 
 | Gap                                                | Priority | Status |
 | -------------------------------------------------- | :------: | :----: |
-| `[[wikilinks]]`, backlinks, link graph             |    P0    |  ✅\*  |
+| `[[wikilinks]]`, backlinks, link graph             |    P0    |   ✅   |
 | Real CommonMark/GFM renderer (tables, images, task |    P0    |  ✅†   |
 | lists, h3–h6, links, code highlight, math)         |          |        |
 | Full-text **content** search + quick switcher      |    P1    |   ✅   |
@@ -191,9 +214,10 @@ Legend: ✅ done · 🚧 in progress · ⬜ not started
 | Version history / trash / Git sync                 |    P2    |   ⬜   |
 | Plugin system, themes, mobile, multi-device sync   |    P3    |   ⬜   |
 
-\* link graph exists as backlinks; a visual graph view is still open. ◑ = quick
-switcher + split done; palette/outline/daily-notes open. † renderer shipped and
-lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
+The link graph now has both backlinks and a **visual force-directed graph view**
+(the Graph tab + `/api/graph`). ◑ = quick switcher + split done;
+palette/outline/daily-notes open. † renderer shipped and lazy-loaded; Mermaid
+diagrams are the remaining follow-up (see roadmap).
 
 ### For agents (the brain)
 
@@ -215,8 +239,8 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 offline); swapping in real vector embeddings via a provider is the follow-up.
 Structured knowledge: Obsidian-style block anchors (`^id`), a frontmatter
 `id:` for stable note identity (opt-in), and typed wikilinks
-`[[Target|rel:type]]` all shipped together; a visual link graph view is the
-remaining follow-up.
+`[[Target|rel:type]]` all shipped together; the visual link graph view has now
+shipped too (Graph tab + `GET /api/graph`).
 
 ---
 
@@ -334,16 +358,38 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
     `apps/api/src/routes/context.test.ts` (relevance, 422, no-stale-after-write).
     Fully local/offline; the ranking engine stays swappable for real embeddings.
 
+12. **Slice 11 — Visual knowledge graph.** ✅ Done. **Completes the planned
+    roadmap.** A pure `buildGraph` (`@repo/shared` `graph.ts`) turns the note
+    corpus into `GraphData` (`{ nodes: { id, label, tags, unresolved? }, edges:
+{ source, target, type? } }`) using the same `extractWikilinks` +
+    `resolveWikilink` as `/api/backlinks`. Unresolved link targets become
+    distinct placeholder nodes (`unresolved: true`); a typed `[[Target|rel:type]]`
+    relation rides on the edge; self-links and duplicate edges are dropped.
+    `GET /api/graph` (and the `get_graph` MCP tool, 18th tool) serves it from the
+    cached `VaultIndex` — no per-call vault re-read, `.fsbrain/` excluded,
+    read-only (no `VaultEvent`). The web **Graph** tab renders a dependency-free,
+    force-directed SVG (`apps/web` `KnowledgeGraph`, lazy-loaded; deterministic
+    Fruchterman–Reingold layout in `graphLayout.ts`): click a node to open the
+    note, hover to highlight a node + its neighbors, unresolved nodes styled with
+    the `wikilink--unresolved` palette, optional tag colouring, pan/zoom — and it
+    live-refreshes (debounced) off the existing `/api/events` stream. Covered by
+    `apps/api` `graph.test.ts` (builder) + `routes/graph.test.ts` (endpoint,
+    unresolved placeholder, no-stale-after-write) and `apps/web`
+    `GraphView.test.tsx` (renders nodes from `/api/graph`, click opens a note).
+
 ### Next up (open, in priority order)
 
-12. **Real embeddings** (the remaining half of RAG). Swap the TF-IDF ranker for
+The planned roadmap is complete. The remaining items are optional enhancements,
+not part of the original plan:
+
+13. **Real embeddings** (the remaining half of RAG). Swap the TF-IDF ranker for
     vector embeddings (remote `/v1/embeddings` or on-device) behind the existing
     `documents → ranked` seam — `buildSemanticIndex` / `queryRankedChunks` and
     the `VaultIndex` cache already isolate callers from the engine, and the
     context-bundle endpoint consumes ranked chunks regardless of how they were
     scored. Persist the index across restarts as a follow-on.
-13. **Visual graph view** (human) — render the wikilink graph (now with `rel:`
-    relations); Mermaid diagrams.
+14. **Mermaid diagrams** — render fenced ` ```mermaid ` blocks in the preview
+    (the last renderer follow-up; the wikilink graph view above is done).
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
@@ -351,8 +397,9 @@ notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
 follow-ups also deferred: settled-proposal retention/pruning, a computed
 line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
 
-The vault is now natively an agent's brain _and_ auditable by the human; the work
-above deepens agent interaction on the local machine.
+The vault is now natively an agent's brain _and_ auditable by the human, and the
+human can finally _see_ how it all connects via the graph — completing the
+planned roadmap. The optional items above deepen it further.
 
 ---
 
