@@ -27,12 +27,14 @@ describe('PATCH /api/path', () => {
     const { createAuditLog } = await import('../storage/auditLog.js');
     const { createProposalStore } = await import('../storage/proposalStore.js');
     const { createIdempotencyCache } = await import('../storage/idempotencyCache.js');
+    const { createEventBus } = await import('../events/eventBus.js');
     const pathResolver = createPathResolver(rootPath);
     const repository = createFileRepository(pathResolver);
     const auditLog = createAuditLog(rootPath);
     const proposalStore = createProposalStore(rootPath);
     const patchIdempotency = createIdempotencyCache<import('./files.js').PatchFileResponse>();
-    return { repository, pathResolver, auditLog, proposalStore, patchIdempotency };
+    const eventBus = createEventBus();
+    return { repository, pathResolver, auditLog, proposalStore, patchIdempotency, eventBus };
   }
 
   beforeEach(async () => {
