@@ -8,6 +8,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import type { FileNode } from '@repo/shared';
+import type { LiveStatus } from '../hooks/useVaultEvents';
 import { ModalDialog } from './ModalDialog';
 
 const ROOT_DROP_KEY = '__root__';
@@ -17,6 +18,8 @@ interface GlobalLayoutProps extends PropsWithChildren {
   treeLoading?: boolean;
   selectedFilePath?: string;
   isDirty?: boolean;
+  /** Live-connection state for the unobtrusive activity indicator. */
+  liveStatus?: LiveStatus;
   onSelectFile: (path: string) => Promise<void> | void;
   onCreateFile: (path: string) => Promise<void>;
   onCreateFolder: (path: string) => Promise<void>;
@@ -186,6 +189,7 @@ export function GlobalLayout({
   treeLoading = false,
   selectedFilePath,
   isDirty = false,
+  liveStatus,
   onSelectFile,
   onCreateFile,
   onCreateFolder,
@@ -810,6 +814,22 @@ export function GlobalLayout({
           )}
         </nav>
         <div className="topbar-actions">
+          {liveStatus ? (
+            <span
+              className={`live-indicator live-indicator--${liveStatus}`}
+              title={
+                liveStatus === 'live'
+                  ? 'Live — reflecting vault changes in real time'
+                  : liveStatus === 'reconnecting'
+                    ? 'Connection dropped — reconnecting…'
+                    : 'Connecting to live updates…'
+              }
+              aria-live="polite"
+            >
+              <span className="live-indicator__dot" aria-hidden="true" />
+              {liveStatus === 'reconnecting' ? 'Reconnecting' : 'Live'}
+            </span>
+          ) : null}
           <span className={isDirty ? 'topbar-status is-dirty' : 'topbar-status'}>
             {isDirty ? 'Unsaved' : 'Saved'}
           </span>

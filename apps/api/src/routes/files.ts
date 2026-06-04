@@ -14,6 +14,7 @@ import type {
   PatchOp,
   ProposalAction,
   SearchMatch,
+  VaultEvent,
 } from '@repo/shared';
 import {
   BlockNotFoundError,
@@ -32,6 +33,7 @@ import {
   semanticSearch,
 } from '@repo/shared';
 
+import type { EventBus } from '../events/eventBus.js';
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { IdempotencyCache } from '../storage/idempotencyCache.js';
@@ -52,6 +54,7 @@ interface RequestContext {
   auditLog: AuditLog;
   proposalStore: ProposalStore;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
+  eventBus: EventBus;
   /** Who is making the request, from the `X-Actor` header (default `human`). */
   actor: string;
 }
@@ -92,6 +95,7 @@ export interface FileRouteDependencies {
   auditLog: AuditLog;
   proposalStore: ProposalStore;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
+  eventBus: EventBus;
 }
 
 const MAX_ACTOR_LENGTH = 64;
@@ -109,6 +113,29 @@ async function recordAudit(context: RequestContext, entry: Omit<AuditEntry, 'ts'
     await context.auditLog.record({ actor: context.actor, ...entry });
   } catch {
     // Intentionally swallowed — the file operation has already succeeded.
+  }
+}
+
+/**
+ * Broadcast a live event for a successful change. Published alongside (never
+ * instead of) the audit write so connected clients see the change immediately.
+ * Best-effort: a publish failure must never break the underlying op.
+ */
+function publishVaultEvent(
+  context: RequestContext,
+  event: { type: VaultEvent['type']; path: string; toPath?: string; actor?: string },
+) {
+  try {
+    context.eventBus.publish({
+      type: event.type,
+      path: event.path,
+      ...(event.toPath ? { toPath: event.toPath } : {}),
+      actor: event.actor ?? context.actor,
+      ts: new Date().toISOString(),
+      source: 'api',
+    });
+  } catch {
+    // The change already succeeded; a broadcast failure is non-fatal.
   }
 }
 
@@ -471,6 +498,7 @@ async function handlePutFile(context: RequestContext): Promise<void> {
   await repository.updateMarkdownFile(logicalPath, content);
   const updated = await loadFileFromContext(context, logicalPath);
   await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+  publishVaultEvent(context, { type: 'updated', path: logicalPath });
   sendJson(res, 200, { success: true, data: updated });
 }
 
@@ -598,6 +626,7 @@ async function handlePatchFile(context: RequestContext): Promise<void> {
   const updated = await loadFileFromContext(context, logicalPath);
   if (!unchanged) {
     await recordAudit(context, { action: 'update', path: logicalPath, etag: updated.etag });
+    publishVaultEvent(context, { type: 'updated', path: logicalPath });
   }
 
   const response: PatchFileResponse = { ...updated, dryRun: false };
@@ -626,6 +655,7 @@ async function handlePostFile(context: RequestContext): Promise<void> {
 
   const created = await loadFileFromContext(context, logicalPath);
   await recordAudit(context, { action: 'create', path: logicalPath, etag: created.etag });
+  publishVaultEvent(context, { type: 'created', path: logicalPath });
   sendJson(res, 201, { success: true, data: created });
 }
 
@@ -636,6 +666,7 @@ async function handlePostDir(context: RequestContext): Promise<void> {
 
   await repository.createDirectory(logicalPath);
   await recordAudit(context, { action: 'create_dir', path: logicalPath });
+  publishVaultEvent(context, { type: 'dir_created', path: logicalPath });
   sendJson(res, 201, { success: true, data: { path: logicalPath } });
 }
 
@@ -678,6 +709,7 @@ async function handlePatchPath(context: RequestContext): Promise<void> {
   await fs.rename(sourceAbsolutePath, destinationAbsolutePath);
 
   await recordAudit(context, { action: 'move', path: fromPath, toPath });
+  publishVaultEvent(context, { type: 'moved', path: fromPath, toPath });
   sendJson(res, 200, {
     success: true,
     data: { fromPath, toPath },
@@ -696,6 +728,7 @@ async function handleDeletePath(context: RequestContext): Promise<void> {
 
   await repository.deletePath(logicalPath, { recursive });
   await recordAudit(context, { action: 'delete', path: logicalPath });
+  publishVaultEvent(context, { type: 'deleted', path: logicalPath });
   sendJson(res, 200, { success: true, data: { path: logicalPath, deleted: true } });
 }
 
@@ -807,6 +840,7 @@ async function handleCreateProposal(context: RequestContext): Promise<void> {
     baseEtag,
     note,
   });
+  publishVaultEvent(context, { type: 'proposal_created', path: logicalPath });
   sendJson(res, 201, { success: true, data: proposal });
 }
 
@@ -840,6 +874,7 @@ async function applyProposal(context: RequestContext, proposal: EditProposal): P
     }
     await repository.deletePath(proposal.path, { recursive: false });
     await recordAuditAs(context, proposal.actor, { action: 'delete', path: proposal.path });
+    publishVaultEvent(context, { type: 'deleted', path: proposal.path, actor: proposal.actor });
     return;
   }
 
@@ -873,6 +908,11 @@ async function applyProposal(context: RequestContext, proposal: EditProposal): P
     action: proposal.action,
     path: proposal.path,
     etag: updated.etag,
+  });
+  publishVaultEvent(context, {
+    type: proposal.action === 'create' ? 'created' : 'updated',
+    path: proposal.path,
+    actor: proposal.actor,
   });
 }
 
@@ -939,6 +979,7 @@ async function handleResolveProposal(context: RequestContext): Promise<void> {
     status: decision === 'approve' ? 'approved' : 'rejected',
     resolvedBy: actor,
   });
+  publishVaultEvent(context, { type: 'proposal_resolved', path: proposal.path });
   sendJson(res, 200, { success: true, data: resolved });
 }
 

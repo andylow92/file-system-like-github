@@ -77,6 +77,40 @@ export interface SearchMatch {
   tags: string[];
 }
 
+/**
+ * A live vault change broadcast to connected clients (web UI) over SSE, so the
+ * human sees what an agent (or another process) does the moment it happens.
+ *
+ * Emitted from two sources:
+ * - `api`   — published by a route handler alongside its audit write, on every
+ *             successful mutation or proposal event.
+ * - `watch` — published by the filesystem watcher for out-of-band edits (a
+ *             direct file edit, a `git` operation, another process) so they
+ *             surface even though they never went through the API.
+ */
+export type VaultEventType =
+  | 'created'
+  | 'updated'
+  | 'moved'
+  | 'deleted'
+  | 'dir_created'
+  | 'proposal_created'
+  | 'proposal_resolved';
+
+export interface VaultEvent {
+  type: VaultEventType;
+  /** Logical path affected (source path for moves). */
+  path: string;
+  /** Destination path, for moves. */
+  toPath?: string;
+  /** Who caused the change, e.g. `human`, `agent:mcp`, or `external` for watch. */
+  actor: string;
+  /** ISO timestamp of the change. */
+  ts: string;
+  /** Where the event originated. */
+  source: 'api' | 'watch';
+}
+
 export type ProposalAction = 'create' | 'update' | 'delete';
 export type ProposalStatus = 'pending' | 'approved' | 'rejected';
 

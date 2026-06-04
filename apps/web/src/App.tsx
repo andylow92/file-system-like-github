@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { FileNode } from '@repo/shared';
+import { useVaultEvents } from './hooks/useVaultEvents';
 import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
@@ -273,9 +274,78 @@ export function App() {
     bumpActivity();
   }
 
+  // React to an out-of-band change to the *currently open* file. Never clobber
+  // an unsaved draft: if there is one and the file genuinely diverged on disk,
+  // offer a non-destructive reload instead of overwriting the editor.
+  async function handleOpenFileChangedOnDisk(path: string) {
+    if (path !== selectedFilePath) {
+      return;
+    }
+
+    const base = savedFiles[path]?.content ?? '';
+    const isDirty = (draftContents[path] ?? base) !== base;
+
+    if (!isDirty) {
+      try {
+        await refreshCurrentFile(path);
+      } catch {
+        // The file may have just been removed; the tree refresh will reflect it.
+      }
+      return;
+    }
+
+    let latest: RemoteFile;
+    try {
+      latest = await fetchFile(path);
+    } catch {
+      return; // can't compare — leave the draft untouched
+    }
+    if (latest.content === base) {
+      return; // no real divergence (e.g. our own write echoed back over SSE)
+    }
+
+    const reload = await showConfirmModal({
+      title: 'File changed on disk',
+      description: `"${path}" was changed outside this editor. Reload and discard your unsaved edits?`,
+      confirmLabel: 'Reload',
+      cancelLabel: 'Keep my edits',
+      variant: 'info',
+    });
+
+    // Adopt the new base either way so a later save uses the fresh etag; only
+    // drop the draft when the human chose to reload.
+    setSavedFiles((current) => ({ ...current, [path]: latest }));
+    if (reload) {
+      setDraftContents((current) => {
+        const next = { ...current };
+        delete next[path];
+        return next;
+      });
+    }
+  }
+
+  // Live layer: subscribe to /api/events and refresh surgically as the vault
+  // changes (agent/MCP writes, another client, direct file edits). The manual
+  // refreshes after the human's own actions stay for instant local feedback;
+  // this adds the "someone else changed it" path.
+  const { status: liveStatus } = useVaultEvents({
+    openFilePath: selectedFilePath,
+    onTreeChanged: () => {
+      void refreshTree().catch(() => {
+        /* best-effort live refresh */
+      });
+    },
+    onOpenFileChanged: (path) => {
+      void handleOpenFileChangedOnDisk(path);
+    },
+    onActivity: bumpActivity,
+    onPendingChanged: bumpActivity,
+  });
+
   return (
     <>
       <GlobalLayout
+        liveStatus={liveStatus}
         tree={tree}
         treeLoading={treeLoading}
         selectedFilePath={selectedFilePath ?? undefined}

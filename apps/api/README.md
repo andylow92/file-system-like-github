@@ -268,6 +268,49 @@ curl "http://localhost:3001/api/semantic-search?q=how%20do%20backups%20work"
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
 filtered to a single `path`.
 
+### `GET /api/events`
+
+A [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events)
+stream (`Content-Type: text/event-stream`) of live vault changes, so a client
+(the web UI) reflects what an agent — or another process — does the instant it
+happens, without polling. Each change is sent as a single frame:
+
+```
+data: {"type":"created","path":"notes/idea.md","actor":"agent:mcp","ts":"2026-06-03T...","source":"api"}
+```
+
+The payload is a `VaultEvent` (from `@repo/shared`):
+
+- `type` — `created` | `updated` | `moved` | `deleted` | `dir_created` |
+  `proposal_created` | `proposal_resolved`.
+- `path` — logical path affected (source path for moves).
+- `toPath` — destination path, for `moved` events.
+- `actor` — who caused it (`human`, `agent:mcp`, …); `external` for out-of-band
+  edits picked up by the watcher.
+- `ts` — ISO timestamp.
+- `source` — `api` (published by a route handler alongside its audit write) or
+  `watch` (published by the filesystem watcher for edits that never went through
+  the API: a direct file edit, `git`, another process).
+
+Implementation notes:
+
+- Events come from an in-process `EventBus`. Every mutating handler publishes to
+  it right where it records the audit entry, so the stream and the audit log
+  never diverge.
+- A filesystem watcher (`fs.watch`, recursive) covers out-of-band edits. It
+  ignores the hidden `.fsbrain/` dir and non-`.md` churn, and de-dupes against
+  API-originated writes so a single change does not double-fire.
+- The stream sends periodic heartbeat comments to keep the connection alive and
+  cleans up on client disconnect. The route is never buffered or compressed.
+- No CORS headers are set, matching the rest of the API. The web client reaches
+  it same-origin via the Vite dev proxy; a cross-origin deployment would need
+  CORS (and, like the rest of the API, auth — out of scope for this local,
+  single-user tool).
+
+```bash
+curl -N "http://localhost:3001/api/events"
+```
+
 ### Edit proposals (review queue)
 
 Lets agents suggest changes a human approves before they touch the vault.
