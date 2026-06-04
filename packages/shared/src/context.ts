@@ -1,0 +1,122 @@
+/**
+ * Pure helpers for assembling a token-budgeted "context bundle" — the passages
+ * an agent should read before answering or editing. The retrieval (semantic
+ * ranking, reading the focus note, computing backlinks) happens in the API
+ * route against the cached index; everything here is pure and unit-tested:
+ * token estimation, de-duping, budget packing, and bundle shaping.
+ *
+ * Tokens are approximated as `ceil(chars / 4)` so there is no tokenizer
+ * dependency — close enough to pack a budget for a local, offline tool.
+ */
+
+/** A retrieved passage, before it is placed into a bundle. */
+export interface ContextCandidate {
+  path: string;
+  heading?: string;
+  /** The passage text fed to the LLM. */
+  text: string;
+  /** Relevance score (cosine similarity for matches; 0 for neighbors). */
+  score: number;
+}
+
+/** A passage included in the assembled bundle. */
+export interface ContextItem extends ContextCandidate {
+  /** `match` = ranked for the query; `neighbor` = focus-note / backlink context. */
+  kind: 'match' | 'neighbor';
+}
+
+/**
+ * A token-budgeted set of passages, ready to feed an LLM. Returned by
+ * `GET /api/context` and the `get_context` MCP tool.
+ */
+export interface ContextBundle {
+  query: string;
+  /** The note the bundle was centered on, when one was requested. */
+  focusPath?: string;
+  /** Approximate token budget requested. */
+  tokenBudget: number;
+  /** Approximate tokens used by the included items. */
+  usedTokens: number;
+  items: ContextItem[];
+  /** True when the budget was hit and at least one candidate was omitted. */
+  truncated: boolean;
+}
+
+export interface AssembleContextInput {
+  query: string;
+  focusPath?: string;
+  tokenBudget: number;
+  /** Query-ranked passages (highest priority). */
+  matches: ContextCandidate[];
+  /** Focus-note + backlink context, included after matches if the budget allows. */
+  neighbors?: ContextCandidate[];
+}
+
+/** Approximate the token count of a string as `ceil(chars / 4)`. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/** Approximate the tokens a candidate contributes (its heading counts too). */
+function estimateCandidateTokens(candidate: ContextCandidate): number {
+  return estimateTokens(
+    candidate.heading ? `${candidate.heading}\n${candidate.text}` : candidate.text,
+  );
+}
+
+/**
+ * Stable, collision-proof de-dupe key for a passage. JSON-encoding the
+ * path/heading/text triple keeps the key plain text (no magic separator byte)
+ * while disambiguating any separator that could legitimately appear inside the
+ * values, so distinct passages never collide.
+ */
+function dedupeKey(candidate: ContextCandidate): string {
+  return JSON.stringify([candidate.path, candidate.heading ?? '', candidate.text]);
+}
+
+/**
+ * Pack candidates into a bundle within `tokenBudget`. Matches are considered
+ * before neighbors; duplicates (same path+heading+text) are dropped, with the
+ * earlier (higher-priority) copy kept. Packing stops at the first candidate that
+ * would exceed the budget, marking the bundle `truncated`.
+ */
+export function assembleContextBundle(input: AssembleContextInput): ContextBundle {
+  const { query, focusPath, tokenBudget } = input;
+
+  const ordered: ContextItem[] = [
+    ...input.matches.map((m) => ({ ...m, kind: 'match' as const })),
+    ...(input.neighbors ?? []).map((n) => ({ ...n, kind: 'neighbor' as const })),
+  ];
+
+  const seen = new Set<string>();
+  const items: ContextItem[] = [];
+  let usedTokens = 0;
+  let truncated = false;
+
+  for (const candidate of ordered) {
+    const key = dedupeKey(candidate);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    const cost = estimateCandidateTokens(candidate);
+    if (usedTokens + cost > tokenBudget) {
+      // Budget hit — stop adding and report the bundle as truncated.
+      truncated = true;
+      break;
+    }
+
+    seen.add(key);
+    items.push(candidate);
+    usedTokens += cost;
+  }
+
+  return {
+    query,
+    ...(focusPath ? { focusPath } : {}),
+    tokenBudget,
+    usedTokens,
+    items,
+    truncated,
+  };
+}

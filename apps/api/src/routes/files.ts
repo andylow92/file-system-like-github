@@ -9,6 +9,7 @@ import type {
   AuditEntry,
   Backlink,
   BlockAnchor,
+  ContextCandidate,
   EditProposal,
   FileNode,
   PatchOp,
@@ -21,6 +22,8 @@ import {
   PATCH_OP_TYPES,
   SectionNotFoundError,
   applyPatchOp,
+  assembleContextBundle,
+  chunkNote,
   ensureNoteId,
   extractBlockAnchors,
   extractWikilinks,
@@ -30,10 +33,10 @@ import {
   parseFrontmatter,
   parseNote,
   resolveWikilink,
-  semanticSearch,
 } from '@repo/shared';
 
 import type { EventBus } from '../events/eventBus.js';
+import type { VaultIndex } from '../index/vaultIndex.js';
 import type { AuditLog } from '../storage/auditLog.js';
 import type { FileRepository, TreeNode } from '../storage/fileRepository.js';
 import type { IdempotencyCache } from '../storage/idempotencyCache.js';
@@ -55,6 +58,7 @@ interface RequestContext {
   proposalStore: ProposalStore;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
   eventBus: EventBus;
+  vaultIndex: VaultIndex;
   /** Who is making the request, from the `X-Actor` header (default `human`). */
   actor: string;
 }
@@ -96,6 +100,7 @@ export interface FileRouteDependencies {
   proposalStore: ProposalStore;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
   eventBus: EventBus;
+  vaultIndex: VaultIndex;
 }
 
 const MAX_ACTOR_LENGTH = 64;
@@ -734,7 +739,7 @@ async function handleDeletePath(context: RequestContext): Promise<void> {
 
 const DEFAULT_SEARCH_LIMIT = 50;
 
-async function handleSearch({ res, url, repository }: RequestContext): Promise<void> {
+async function handleSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
   const query = (url.searchParams.get('q') ?? '').trim();
   const tag = (url.searchParams.get('tag') ?? '').trim().replace(/^#/, '');
   const limitParam = Number(url.searchParams.get('limit'));
@@ -744,12 +749,13 @@ async function handleSearch({ res, url, repository }: RequestContext): Promise<v
     throw new Error('"q" or "tag" is required');
   }
 
-  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
+  // Read from the cached index instead of the disk each query; behavior is
+  // identical (same corpus, same order) but it doesn't re-read the whole vault.
+  const documents = await vaultIndex.getDocuments();
   const tagLower = tag.toLowerCase();
   const matches: SearchMatch[] = [];
 
-  for (const filePath of allPaths) {
-    const content = await repository.readMarkdownFile(filePath);
+  for (const { path: filePath, content } of documents) {
     const note = parseNote(content);
 
     if (tag && !note.tags.some((noteTag) => noteTag.toLowerCase() === tagLower)) {
@@ -784,7 +790,7 @@ async function handleSearch({ res, url, repository }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: matches.slice(0, limit) });
 }
 
-async function handleSemanticSearch({ res, url, repository }: RequestContext): Promise<void> {
+async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
   const query = (url.searchParams.get('q') ?? '').trim();
   const limitParam = Number(url.searchParams.get('limit'));
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 10;
@@ -793,16 +799,98 @@ async function handleSemanticSearch({ res, url, repository }: RequestContext): P
     throw new Error('"q" is required');
   }
 
-  const allPaths = flattenMarkdownPaths(await repository.listTree(''));
-  const documents = await Promise.all(
-    allPaths.map(async (filePath) => ({
-      path: filePath,
-      content: await repository.readMarkdownFile(filePath),
-    })),
-  );
-
-  const hits = semanticSearch(documents, query, { limit });
+  const hits = await vaultIndex.semanticSearch(query, { limit });
   sendJson(res, 200, { success: true, data: hits });
+}
+
+const DEFAULT_CONTEXT_BUDGET = 2000;
+const CONTEXT_MATCH_LIMIT = 12;
+const FOCUS_CHUNK_LIMIT = 4;
+const NEIGHBOR_EXCERPT_CHARS = 280;
+
+/** Build focus-note + backlink neighbor passages for a context bundle. */
+function buildContextNeighbors(
+  documents: readonly { path: string; content: string }[],
+  focusPath: string,
+): ContextCandidate[] {
+  const neighbors: ContextCandidate[] = [];
+
+  // The focus note itself, chunked — its most relevant chunks may already be
+  // matches (de-duped away); the rest provide surrounding context.
+  const focusDoc = documents.find((doc) => doc.path === focusPath);
+  if (focusDoc) {
+    for (const chunk of chunkNote(focusPath, focusDoc.content).slice(0, FOCUS_CHUNK_LIMIT)) {
+      neighbors.push({
+        path: focusPath,
+        ...(chunk.heading ? { heading: chunk.heading } : {}),
+        text: chunk.text,
+        score: 0,
+      });
+    }
+  }
+
+  // Notes that link to the focus note, each as a short excerpt — the neighbor
+  // graph around the note the agent is centered on.
+  const allPaths = documents.map((doc) => doc.path);
+  for (const doc of documents) {
+    if (doc.path === focusPath) {
+      continue;
+    }
+    const linksHere = extractWikilinks(doc.content).some(
+      (link) => resolveWikilink(link.target, allPaths) === focusPath,
+    );
+    if (!linksHere) {
+      continue;
+    }
+    const excerpt = (chunkNote(doc.path, doc.content)[0]?.text ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, NEIGHBOR_EXCERPT_CHARS);
+    if (excerpt) {
+      neighbors.push({ path: doc.path, text: excerpt, score: 0 });
+    }
+  }
+
+  return neighbors;
+}
+
+async function handleGetContext({ res, url, vaultIndex }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  if (!query) {
+    throw new Error('"q" is required');
+  }
+
+  const focusPath = (url.searchParams.get('path') ?? '').trim();
+  const budgetParam = Number(url.searchParams.get('budget'));
+  const tokenBudget =
+    Number.isFinite(budgetParam) && budgetParam > 0
+      ? Math.floor(budgetParam)
+      : DEFAULT_CONTEXT_BUDGET;
+
+  // (1) The most relevant passages for the query, with full chunk text.
+  const ranked = await vaultIndex.rankedChunks(query, { limit: CONTEXT_MATCH_LIMIT });
+  const matches: ContextCandidate[] = ranked.map((chunk) => ({
+    path: chunk.path,
+    ...(chunk.heading ? { heading: chunk.heading } : {}),
+    text: chunk.text,
+    score: chunk.score,
+  }));
+
+  // (2) When focused on a note, add it + its backlinks as neighbor context.
+  const neighbors = focusPath
+    ? buildContextNeighbors(await vaultIndex.getDocuments(), focusPath)
+    : undefined;
+
+  // (3) De-dupe + pack within the token budget (pure, tested in @repo/shared).
+  const bundle = assembleContextBundle({
+    query,
+    ...(focusPath ? { focusPath } : {}),
+    tokenBudget,
+    matches,
+    neighbors,
+  });
+
+  sendJson(res, 200, { success: true, data: bundle });
 }
 
 async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<void> {
@@ -1049,6 +1137,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/semantic-search') {
     await executeHandler(context, handleSemanticSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/context') {
+    await executeHandler(context, handleGetContext);
     return { handled: true };
   }
 

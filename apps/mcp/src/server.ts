@@ -29,6 +29,7 @@ import type {
   AuditEntry,
   Backlink,
   BlockAnchor,
+  ContextBundle,
   EditProposal,
   FileNode,
   SearchMatch,
@@ -330,6 +331,42 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       if (limit) params.set('limit', String(limit));
       return apiRequest<SemanticHit[]>(`/api/semantic-search?${params.toString()}`);
     }),
+  );
+
+  register(
+    'get_context',
+    'Assemble a token-budgeted RAG context bundle for a query: the most ' +
+      'relevant note passages, plus — when `focusPath` is given — that note and ' +
+      'its backlinks as neighbor context. The primary tool to call before ' +
+      'answering or editing so you ground on the vault. Returns a ContextBundle ' +
+      '(items have path, heading?, text, score, kind: "match" | "neighbor").',
+    {
+      query: z.string().describe('A natural-language description of what you need context about.'),
+      focusPath: z
+        .string()
+        .optional()
+        .describe('A note to center the bundle on; adds it and its backlinks as neighbor context.'),
+      budget: z
+        .number()
+        .optional()
+        .describe('Approximate token budget for the bundle (default ~2000).'),
+    },
+    tool(
+      async ({
+        query,
+        focusPath,
+        budget,
+      }: {
+        query: string;
+        focusPath?: string;
+        budget?: number;
+      }) => {
+        const params = new URLSearchParams({ q: query });
+        if (focusPath) params.set('path', focusPath);
+        if (budget) params.set('budget', String(budget));
+        return apiRequest<ContextBundle>(`/api/context?${params.toString()}`);
+      },
+    ),
   );
 
   register(

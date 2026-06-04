@@ -86,11 +86,12 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   patch endpoint. **Typed wikilinks** `[[Target|rel:supports]]` surface a
   relation on `/api/backlinks` (plain aliases still work). Pure helpers live
   in `@repo/shared` (`blocks.ts`, `noteId.ts`).
-- **MCP server** (`apps/mcp`) — a stdio server exposing 16 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 17 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
-  `semantic_search`, `get_backlinks`, `recent_activity`, `create_folder`,
-  `move_path`, `delete_path`, `propose_edit`, `list_proposals`). It runs
+  `semantic_search`, `get_context`, `get_backlinks`, `recent_activity`,
+  `create_folder`, `move_path`, `delete_path`, `propose_edit`,
+  `list_proposals`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -118,9 +119,24 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   feed, and the Review badge, with a live/reconnecting indicator. The embedded
   API the MCP server launches starts the bus + watcher too, so an agent's
   writes surface to a watching human in real time.
+- **RAG retrieval — cached index + context bundles** — a first-class retrieval
+  layer for agents. An in-memory `VaultIndex` (`apps/api/src/index/`) chunks
+  every note and computes IDF + per-chunk vectors once, reusing them across
+  queries; it subscribes to the live-layer `EventBus` so any create/update/
+  move/delete invalidates it and the next query rebuilds from disk (reusing
+  cached content of unchanged notes) — never stale after a write. Both
+  `/api/search` and `/api/semantic-search` read through it. `GET /api/context`
+  (and the `get_context` MCP tool) assembles a token-budgeted **context
+  bundle**: the top query-ranked passages plus — for a focus note — that note
+  and its backlinks as neighbor context, de-duped and packed to a token budget
+  (`ceil(chars/4)`, no tokenizer). Stays fully local/offline; the bundle-shaping
+  helpers are pure (`@repo/shared` `context.ts`) and the ranking engine is
+  swappable for real embeddings later behind the same `documents → ranked`
+  contract.
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
-semantic search. See the roadmap in `docs/implementation.md`.
+semantic search (the cached index + context bundle endpoint above are the seam
+for it). See the roadmap in `docs/implementation.md`.
 
 ---
 
@@ -129,11 +145,13 @@ semantic search. See the roadmap in `docs/implementation.md`.
 ```
 apps/
   api/   # Node HTTP server + filesystem storage (CONTENT_ROOT). Endpoints under /api/*.
+         # events/ (live SSE), index/ (cached retrieval VaultIndex behind search/context).
   web/   # React + Vite UI: file tree, editor/preview/activity tabs, Ctrl/Cmd-K search.
   mcp/   # MCP stdio server exposing the vault as agent tools. Embeds the API in-process
          # by default; bundled to a single bin (`apps/mcp/dist/server.js`, npm `fsbrain-mcp`).
 packages/
-  shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts.
+  shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts,
+           # context.ts (token-budgeted bundle packing).
 docs/      # Agent + human knowledge base. Start at implementation.md.
 ```
 
