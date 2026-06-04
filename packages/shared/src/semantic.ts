@@ -210,25 +210,50 @@ function cosine(a: Map<string, number>, b: Map<string, number>): number {
 }
 
 /**
- * Rank note chunks by TF-IDF cosine similarity to `query`. The IDF is computed
- * over the chunk corpus on each call (fine for a local vault).
+ * A reusable, pre-computed ranking index over a document corpus: every note is
+ * chunked once, each chunk's normalized TF-IDF vector is built once, and the IDF
+ * is fixed for the corpus. Build it once and query it many times — only the
+ * query side runs per call. Rebuild it when the corpus changes (see the API's
+ * cached `VaultIndex`).
  */
-export function semanticSearch(
-  documents: SemanticDocument[],
-  query: string,
-  options: SemanticSearchOptions = {},
-): SemanticHit[] {
-  const queryTokens = tokenize(query);
-  if (queryTokens.length === 0) {
-    return [];
-  }
+export interface SemanticIndex {
+  chunks: NoteChunk[];
+  /** Per-chunk normalized TF-IDF vector, parallel to `chunks`. */
+  vectors: Map<string, number>[];
+  /** Inverse document frequency over the chunk corpus. */
+  idf: (term: string) => number;
+}
 
+/** A ranked chunk carrying its full text (not just a display snippet). */
+export interface RankedChunk {
+  path: string;
+  heading?: string;
+  /** Full chunk text. */
+  text: string;
+  /** Cosine similarity in [0, 1], rounded to 4dp. */
+  score: number;
+  /** 0-based chunk index within its note. */
+  chunkIndex: number;
+}
+
+export interface RankQueryOptions {
+  limit?: number;
+  /** Minimum cosine score to include (filters near-zero noise). */
+  minScore?: number;
+}
+
+/**
+ * Build a `SemanticIndex` from a corpus: chunk every note, compute the IDF over
+ * the chunk corpus once, and pre-compute each chunk's TF-IDF vector. This is the
+ * expensive part — done once and reused across queries.
+ */
+export function buildSemanticIndex(
+  documents: SemanticDocument[],
+  options: { chunkSize?: number } = {},
+): SemanticIndex {
   const chunks: NoteChunk[] = [];
   for (const doc of documents) {
     chunks.push(...chunkNote(doc.path, doc.content, options.chunkSize));
-  }
-  if (chunks.length === 0) {
-    return [];
   }
 
   // Include the chunk's heading in its ranked tokens (the heading is a strong
@@ -247,11 +272,30 @@ export function semanticSearch(
   const total = chunks.length;
   const idf = (term: string) => Math.log(1 + total / ((documentFrequency.get(term) ?? 0) + 1));
 
-  const queryVector = buildVector(queryTokens, idf);
+  const vectors = chunkTokens.map((tokens) => buildVector(tokens, idf));
 
-  const scored = chunks.map((chunk, i) => ({
+  return { chunks, vectors, idf };
+}
+
+/**
+ * Rank a pre-built index's chunks against `query`, returning full chunk text.
+ * Only the query vector is built per call; the chunk vectors and IDF are reused.
+ */
+export function queryRankedChunks(
+  index: SemanticIndex,
+  query: string,
+  options: RankQueryOptions = {},
+): RankedChunk[] {
+  const queryTokens = tokenize(query);
+  if (queryTokens.length === 0 || index.chunks.length === 0) {
+    return [];
+  }
+
+  const queryVector = buildVector(queryTokens, index.idf);
+
+  const scored = index.chunks.map((chunk, i) => ({
     chunk,
-    score: cosine(queryVector, buildVector(chunkTokens[i], idf)),
+    score: cosine(queryVector, index.vectors[i]),
   }));
 
   const limit = options.limit ?? 10;
@@ -264,8 +308,41 @@ export function semanticSearch(
     .map((entry) => ({
       path: entry.chunk.path,
       ...(entry.chunk.heading ? { heading: entry.chunk.heading } : {}),
-      chunkIndex: entry.chunk.index,
+      text: entry.chunk.text,
       score: Number(entry.score.toFixed(4)),
-      snippet: entry.chunk.text.replace(/\s+/g, ' ').trim().slice(0, 200),
+      chunkIndex: entry.chunk.index,
     }));
+}
+
+/** Project ranked chunks to the `SemanticHit` shape (a trimmed display snippet). */
+export function querySemanticIndex(
+  index: SemanticIndex,
+  query: string,
+  options: RankQueryOptions = {},
+): SemanticHit[] {
+  return queryRankedChunks(index, query, options).map((chunk) => ({
+    path: chunk.path,
+    ...(chunk.heading ? { heading: chunk.heading } : {}),
+    chunkIndex: chunk.chunkIndex,
+    score: chunk.score,
+    snippet: chunk.text.replace(/\s+/g, ' ').trim().slice(0, 200),
+  }));
+}
+
+/**
+ * Rank note chunks by TF-IDF cosine similarity to `query`. Convenience wrapper
+ * that builds a one-shot index and queries it — equivalent to
+ * `querySemanticIndex(buildSemanticIndex(documents), query)`. Callers that query
+ * the same corpus repeatedly should build the index once and reuse it.
+ */
+export function semanticSearch(
+  documents: SemanticDocument[],
+  query: string,
+  options: SemanticSearchOptions = {},
+): SemanticHit[] {
+  if (tokenize(query).length === 0) {
+    return [];
+  }
+  const index = buildSemanticIndex(documents, { chunkSize: options.chunkSize });
+  return querySemanticIndex(index, query, { limit: options.limit, minScore: options.minScore });
 }

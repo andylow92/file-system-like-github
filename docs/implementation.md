@@ -5,7 +5,24 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-03 (live layer: SSE + file watcher)_
+_Last updated: 2026-06-04 (RAG: cached index + context bundles)_
+
+> **Latest change.** The vault is now a first-class **RAG source** for agents.
+> An in-memory `VaultIndex` (`apps/api/src/index/vaultIndex.ts`) chunks every
+> note and computes the IDF + per-chunk TF-IDF vectors **once**, reusing them
+> across queries instead of re-reading the whole vault per request. It
+> subscribes to the live-layer `EventBus`, so any create/update/move/delete
+> (API or out-of-band) invalidates it and the next query rebuilds from disk —
+> reusing the cached content of unchanged notes — and never serves stale results
+> after a write. Both `/api/search` and `/api/semantic-search` read through it
+> (ranking unchanged). A new **context-bundle** endpoint `GET /api/context`
+> (and the `get_context` MCP tool) assembles a token-budgeted bundle: the top
+> query-ranked passages (`kind:"match"`) plus — when a `path` focus note is
+> given — that note and its backlinks (`kind:"neighbor"`), de-duped and packed
+> to a token budget (`ceil(chars/4)`, no tokenizer). Stays fully local/offline;
+> the bundle-shaping is pure + tested in `@repo/shared` (`context.ts`) and the
+> ranking engine stays swappable for real embeddings behind the same
+> `documents → ranked` contract.
 
 > **Latest change.** The web UI now reflects vault changes **the instant they
 > happen**. An in-process `EventBus` (`apps/api/src/events/`) receives a
@@ -88,13 +105,16 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
   hooks/useVaultEvents (SSE)       /api/audit            provenance markdown/remarkWikilinks.ts
   openrouter/ (Fix Format)         /api/proposals[/resolve]  review queue VaultEvent contract
                                    /api/events     live SSE stream of VaultEvents
-                                   storage/ (FileRepository, PathResolver,
-                                              AuditLog, ProposalStore, IdempotencyCache)
-                                   events/ (EventBus, fs.watch watcher, SSE handler)
+                                   /api/context    token-budgeted RAG bundle context.ts (estimate
+                                   storage/ (FileRepository, PathResolver,       tokens, pack budget,
+                                              AuditLog, ProposalStore, IdempotencyCache)  shape bundle)
+                                   events/ (EventBus, fs.watch watcher, SSE handler) semantic.ts
+                                   index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
+                                           EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 16 tools) — exposes the vault to agents: list/read/
-  create/update/patch/search/semantic_search/backlinks/recent_activity/move/delete
-  plus read_block, get_block_anchors, propose_edit + list_proposals. When
+apps/mcp (MCP stdio server, 17 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/get_context/backlinks/recent_activity/
+  move/delete plus read_block, get_block_anchors, propose_edit + list_proposals. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -147,6 +167,8 @@ Key facts an agent must know:
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md            |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                          |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents` |
+| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic |
+| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)  |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                            |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
@@ -185,7 +207,8 @@ lazy-loaded; Mermaid diagrams are the remaining follow-up (see roadmap).
 | typed link graph)                                    |          |        |
 | Section/append/patch writes + idempotency + dry-run  |    P1    |   ✅   |
 | Live state (SSE/WebSocket + file watcher)            |    P2    |   ✅   |
-| Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ⬜   |
+| Cached search index (chunks+IDF, write-invalidated)  |    P2    |   ✅   |
+| Context-bundle retrieval endpoint (token-budgeted)   |    P2    |   ✅   |
 | Auth, per-agent scopes, path-level permissions       |    P2    |   ⬜   |
 
 ‡ chunking + TF-IDF cosine ranking shipped (`semantic.ts`, no API key, runs
@@ -292,13 +315,34 @@ polish, mobile, and multi-device sync are **explicitly deprioritized** for now.
       watcher + `.fsbrain` exclusion) and
       `apps/web/src/hooks/__tests__/useVaultEvents.test.ts`.
 
+11. **Slice 10 — RAG: cached index + context bundles.** ✅ Done.
+    An in-memory `VaultIndex` (`apps/api/src/index/vaultIndex.ts`) chunks every
+    note and computes the IDF + per-chunk TF-IDF vectors once (shared
+    `buildSemanticIndex` / `queryRankedChunks` in `semantic.ts`), reusing them
+    across queries. It subscribes to the live-layer `EventBus`, so any
+    create/update/move/delete (API or watcher) invalidates it; the next query
+    lazily rebuilds from disk, reusing the cached content of unchanged notes, and
+    never serves stale results after a write. Both `/api/search` and
+    `/api/semantic-search` read through it; ranking is unchanged (verified by the
+    pre-existing `semantic.test.ts` / `searchAudit.test.ts`). `GET /api/context`
+    (and the `get_context` MCP tool, 17th tool) assembles a token-budgeted
+    bundle — top query-ranked passages (`kind:"match"`) plus, for a focus
+    `path`, that note + its backlinks (`kind:"neighbor"`) — de-duped and packed
+    within the budget (`ceil(chars/4)`, no tokenizer dep). The shaping helpers
+    are pure + tested in `@repo/shared` (`context.ts`); covered by
+    `apps/api/src/__tests__/context.test.ts` (packing/de-dupe/truncation) and
+    `apps/api/src/routes/context.test.ts` (relevance, 422, no-stale-after-write).
+    Fully local/offline; the ranking engine stays swappable for real embeddings.
+
 ### Next up (open, in priority order)
 
-11. **Real embeddings + index cache + context bundles.** Swap the TF-IDF ranker
-    for vector embeddings (remote `/v1/embeddings` or on-device); cache the
-    chunk/IDF index (invalidate on writes); add a token-budgeted context-bundle
-    endpoint for RAG.
-12. **Visual graph view** (human) — render the wikilink graph (now with `rel:`
+12. **Real embeddings** (the remaining half of RAG). Swap the TF-IDF ranker for
+    vector embeddings (remote `/v1/embeddings` or on-device) behind the existing
+    `documents → ranked` seam — `buildSemanticIndex` / `queryRankedChunks` and
+    the `VaultIndex` cache already isolate callers from the engine, and the
+    context-bundle endpoint consumes ranked chunks regardless of how they were
+    scored. Persist the index across restarts as a follow-on.
+13. **Visual graph view** (human) — render the wikilink graph (now with `rel:`
     relations); Mermaid diagrams.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,

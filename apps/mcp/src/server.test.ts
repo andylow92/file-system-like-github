@@ -67,6 +67,7 @@ describe('mcp server (self-contained)', () => {
           'delete_path',
           'get_backlinks',
           'get_block_anchors',
+          'get_context',
           'list_notes',
           'list_proposals',
           'move_path',

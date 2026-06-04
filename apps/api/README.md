@@ -263,6 +263,64 @@ sorted by score. Runs locally with no API key.
 curl "http://localhost:3001/api/semantic-search?q=how%20do%20backups%20work"
 ```
 
+Internally, both `/api/search` and `/api/semantic-search` read through an
+in-memory cached index (chunks + IDF computed once, reused across queries and
+rebuilt when a note changes), so retrieval no longer re-reads the whole vault
+per request. Ranking is identical to reading the vault fresh each time.
+
+### `GET /api/context?q=...&path=...&budget=...`
+
+Assembles a token-budgeted **context bundle** — the passages an agent should
+read before answering or editing — ready to feed an LLM. Stays local: it ranks
+with the same offline TF-IDF engine, no embedding provider or network.
+
+- `q` (required): the query to retrieve passages for.
+- `path` (optional): a focus note. When given, the bundle also includes that
+  note's chunks and its backlinks (a short excerpt each) as **neighbor**
+  context.
+- `budget` (optional): approximate token budget (default `2000`). Tokens are
+  approximated as `ceil(chars / 4)` — no tokenizer dependency.
+
+Assembly: take the top query-ranked chunks (`kind: "match"`), then — if `path`
+is given — the focus note + backlink neighbors (`kind: "neighbor"`); de-dupe by
+path+heading+text, pack in priority order, and stop when the budget is hit.
+
+Returns a `ContextBundle` (from `@repo/shared`):
+
+```json
+{
+  "query": "how do backups work",
+  "focusPath": "ops/backups.md",
+  "tokenBudget": 2000,
+  "usedTokens": 184,
+  "items": [
+    {
+      "path": "ops/backups.md",
+      "heading": "Backup strategy",
+      "text": "Snapshots run nightly…",
+      "score": 0.42,
+      "kind": "match"
+    },
+    {
+      "path": "ops/runbook.md",
+      "text": "See [[backups]] before a restore…",
+      "score": 0,
+      "kind": "neighbor"
+    }
+  ],
+  "truncated": false
+}
+```
+
+```bash
+curl "http://localhost:3001/api/context?q=how%20do%20backups%20work&budget=1500"
+curl "http://localhost:3001/api/context?q=restore&path=ops/backups.md"
+```
+
+The bundle-shaping (token estimation, de-dupe, budget packing) lives as pure,
+tested helpers in `@repo/shared` (`context.ts`); the ranking engine is swappable
+for real vector embeddings later behind the same `documents → ranked` contract.
+
 ### `GET /api/audit?path=...&limit=...`
 
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally

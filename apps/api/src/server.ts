@@ -6,6 +6,7 @@ import { ensureContentRoot, loadConfig } from './config.js';
 import { createEventBus } from './events/eventBus.js';
 import { handleEventStream } from './events/sse.js';
 import { createVaultWatcher } from './events/watcher.js';
+import { createVaultIndex } from './index/vaultIndex.js';
 import { handleFileRoutes, type PatchFileResponse } from './routes/files.js';
 import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
@@ -27,6 +28,10 @@ export function createServer(config = loadConfig()): http.Server {
   // Surface out-of-band edits (direct file writes, git, another process) so the
   // human's view stays live even for changes that never hit the API.
   const watcher = createVaultWatcher({ contentRoot: config.contentRoot, eventBus });
+  // A cached retrieval index so search / semantic / context don't re-read the
+  // whole vault per query. It subscribes to the same bus, so any write (API or
+  // out-of-band) invalidates it and the next query rebuilds — never stale.
+  const vaultIndex = createVaultIndex({ repository, eventBus });
 
   function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -65,6 +70,7 @@ export function createServer(config = loadConfig()): http.Server {
       proposalStore,
       patchIdempotency,
       eventBus,
+      vaultIndex,
     });
     if (routeResult.handled) {
       return;
@@ -76,9 +82,12 @@ export function createServer(config = loadConfig()): http.Server {
     });
   });
 
-  // Tear down the watcher (and its bus subscription) when the server closes so
-  // tests and short-lived embedded instances don't leak fs.watch handles.
-  server.on('close', () => watcher.close());
+  // Tear down the watcher and the index (their bus subscriptions) when the
+  // server closes so tests and short-lived embedded instances don't leak.
+  server.on('close', () => {
+    watcher.close();
+    vaultIndex.close();
+  });
   return server;
 }
 
