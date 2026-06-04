@@ -1,6 +1,22 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { assembleContextBundle, estimateTokens, type ContextCandidate } from '@repo/shared';
+
+describe('context.ts source hygiene', () => {
+  it('stays plain UTF-8 text (no NUL bytes that would make git treat it as binary)', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(
+      path.resolve(here, '../../../../packages/shared/src/context.ts'),
+      'utf8',
+    );
+    // Build the NUL char at runtime so this test file never embeds one itself.
+    expect(source.includes(String.fromCharCode(0))).toBe(false);
+  });
+});
 
 describe('estimateTokens', () => {
   it('approximates tokens as ceil(chars / 4)', () => {
@@ -74,6 +90,21 @@ describe('assembleContextBundle', () => {
 
     expect(bundle.items).toHaveLength(1);
     expect(bundle.items[0]).toMatchObject({ path: 'a.md', kind: 'match' });
+  });
+
+  it('does not collide distinct passages whose joined fields would otherwise match', () => {
+    // Without a collision-proof key, ("a", "b|c") and ("a|b", "c") could share a
+    // naive `${path} ${heading} ${text}` key. They must stay distinct.
+    const bundle = assembleContextBundle({
+      query: 'q',
+      tokenBudget: 1000,
+      matches: [
+        { path: 'a', heading: 'b', text: 'c', score: 0.9 },
+        { path: 'a', heading: '', text: 'b c', score: 0.8 },
+      ],
+    });
+
+    expect(bundle.items).toHaveLength(2);
   });
 
   it('omits focusPath when absent and returns an empty bundle for no candidates', () => {

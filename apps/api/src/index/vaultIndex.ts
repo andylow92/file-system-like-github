@@ -151,20 +151,23 @@ export function createVaultIndex(options: {
   }
 
   async function ensureFresh(): Promise<void> {
-    if (semanticIndex && indexedSeq === mutationSeq) {
-      return;
-    }
-    if (rebuilding) {
-      await rebuilding;
-      if (semanticIndex && indexedSeq === mutationSeq) {
-        return;
+    // Loop until we observe an index that reflects the latest mutation. A write
+    // publishes synchronously (`markChanged` nulls `semanticIndex` and bumps
+    // `mutationSeq`) and can land in the microtask gap after `doRebuild` commits
+    // but before our `await` resumes; re-checking on each turn closes that race
+    // instead of returning a stale/empty result. Concurrent callers coalesce on
+    // the in-flight `rebuilding` promise.
+    while (!(semanticIndex && indexedSeq === mutationSeq)) {
+      if (rebuilding) {
+        await rebuilding;
+        continue;
       }
-    }
-    rebuilding = doRebuild();
-    try {
-      await rebuilding;
-    } finally {
-      rebuilding = null;
+      rebuilding = doRebuild();
+      try {
+        await rebuilding;
+      } finally {
+        rebuilding = null;
+      }
     }
   }
 
