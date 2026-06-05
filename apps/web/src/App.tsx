@@ -5,6 +5,7 @@ import { ActivityPanel } from './components/ActivityPanel';
 import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
+import { GraphView } from './components/GraphView';
 import { ReviewPanel } from './components/ReviewPanel';
 import { SearchDialog } from './components/SearchDialog';
 import { ModalDialog } from './components/ModalDialog';
@@ -499,6 +500,16 @@ export function App() {
                 bumpActivity();
               }}
               onSelectFile={(path) => {
+                void navigateToFile(path);
+              }}
+            />
+          }
+          graph={
+            <GraphView
+              refreshKey={activityKey}
+              selectedPath={selectedFilePath}
+              onSelectFile={(path) => {
+                setActiveTab('preview');
                 void navigateToFile(path);
               }}
             />

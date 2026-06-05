@@ -23,6 +23,7 @@ import {
   SectionNotFoundError,
   applyPatchOp,
   assembleContextBundle,
+  buildGraph,
   chunkNote,
   ensureNoteId,
   extractBlockAnchors,
@@ -391,6 +392,14 @@ async function handleGetBacklinks({ res, url, repository }: RequestContext): Pro
   }
 
   sendJson(res, 200, { success: true, data: backlinks });
+}
+
+async function handleGetGraph({ res, vaultIndex }: RequestContext): Promise<void> {
+  // Reuse the cached index's corpus instead of re-reading the vault per call;
+  // `.fsbrain/` and other dotfiles are already excluded from it.
+  const documents = await vaultIndex.getDocuments();
+  const graph = buildGraph(documents);
+  sendJson(res, 200, { success: true, data: graph });
 }
 
 interface BlockResponse {
@@ -1117,6 +1126,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/backlinks') {
     await executeHandler(context, handleGetBacklinks);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/graph') {
+    await executeHandler(context, handleGetGraph);
     return { handled: true };
   }
 

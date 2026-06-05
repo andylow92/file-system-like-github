@@ -32,6 +32,7 @@ import type {
   ContextBundle,
   EditProposal,
   FileNode,
+  GraphData,
   SearchMatch,
   SemanticHit,
 } from '@repo/shared';
@@ -375,6 +376,17 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     { path: z.string() },
     tool(async ({ path: notePath }: { path: string }) => {
       return apiRequest<Backlink[]>(`/api/backlinks?path=${encodeURIComponent(notePath)}`);
+    }),
+  );
+
+  register(
+    'get_graph',
+    'Fetch the whole vault wikilink graph for traversal: `nodes` (id = note ' +
+      'path, label, tags, unresolved? for missing link targets) and `edges` ' +
+      '(source, target, optional typed `type`). Use it to walk how notes connect.',
+    {},
+    tool(async () => {
+      return apiRequest<GraphData>('/api/graph');
     }),
   );
 

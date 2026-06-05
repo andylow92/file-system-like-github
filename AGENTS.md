@@ -86,12 +86,21 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   patch endpoint. **Typed wikilinks** `[[Target|rel:supports]]` surface a
   relation on `/api/backlinks` (plain aliases still work). Pure helpers live
   in `@repo/shared` (`blocks.ts`, `noteId.ts`).
-- **MCP server** (`apps/mcp`) — a stdio server exposing 17 vault tools
+- **Knowledge graph** — the vault's `[[wikilink]]` graph is rendered as an
+  interactive, force-directed **Graph** tab in the web UI (click a node to open
+  the note, hover to highlight its neighbors, unresolved link targets shown as
+  distinct placeholders, live-refreshed on vault changes) and exposed for agent
+  traversal at `GET /api/graph` (and the `get_graph` MCP tool) as `GraphData`
+  (`{ nodes: { id, label, tags, unresolved? }, edges: { source, target, type? } }`).
+  It is built from the same link extraction as backlinks, served from the cached
+  index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
+  (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
+- **MCP server** (`apps/mcp`) — a stdio server exposing 18 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
-  `semantic_search`, `get_context`, `get_backlinks`, `recent_activity`,
-  `create_folder`, `move_path`, `delete_path`, `propose_edit`,
-  `list_proposals`). It runs
+  `semantic_search`, `get_context`, `get_backlinks`, `get_graph`,
+  `recent_activity`, `create_folder`, `move_path`, `delete_path`,
+  `propose_edit`, `list_proposals`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -151,7 +160,7 @@ apps/
          # by default; bundled to a single bin (`apps/mcp/dist/server.js`, npm `fsbrain-mcp`).
 packages/
   shared/  # Shared TS contracts + pure utilities: markdown.ts, search.ts, semantic.ts,
-           # context.ts (token-budgeted bundle packing).
+           # context.ts (token-budgeted bundle packing), graph.ts (wikilink graph).
 docs/      # Agent + human knowledge base. Start at implementation.md.
 ```
 

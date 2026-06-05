@@ -1,0 +1,129 @@
+/**
+ * Pure helpers for building the vault's wikilink **knowledge graph** — the set
+ * of notes (nodes) and the `[[wikilink]]` references between them (edges). The
+ * graph powers both the human-facing Graph view and the agent-facing
+ * `GET /api/graph` traversal endpoint.
+ *
+ * It reuses the same link extraction (`extractWikilinks` + `resolveWikilink`)
+ * that backs `/api/backlinks`, so the graph and the backlinks panel can never
+ * disagree about what links where. A link whose target does not resolve to a
+ * real note is kept as a distinct **placeholder** node (`unresolved: true`), so
+ * the human can see the gaps in their vault. The optional typed relation from a
+ * `[[Target|rel:supports]]` link is carried on the edge.
+ *
+ * Everything here is pure + dependency-free so it runs in both the Node API and
+ * the browser and is unit-tested in isolation (its tests live in `apps/api`).
+ */
+import { extractTags, extractWikilinks, resolveWikilink } from './markdown.js';
+
+export interface GraphNode {
+  /** Stable node id: a real note's logical path, or the raw target for a placeholder. */
+  id: string;
+  /** Display name — the basename without the `.md` extension. */
+  label: string;
+  /** Tags declared by the note (frontmatter + inline `#tags`); empty for placeholders. */
+  tags: string[];
+  /** True when this node is an unresolved link target, not a real note on disk. */
+  unresolved?: boolean;
+}
+
+export interface GraphEdge {
+  /** Source note's logical path. */
+  source: string;
+  /** Target node id (a note path, or a placeholder id for an unresolved link). */
+  target: string;
+  /** Typed relation from `[[Target|rel:type]]`, when the link carried one. */
+  type?: string;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+/** A note to include in the graph (the cached index's `{ path, content }` shape). */
+export interface GraphDocument {
+  path: string;
+  content: string;
+}
+
+/** Display label for a node id: the basename without the `.md` extension. */
+function labelForPath(id: string): string {
+  const base = id.split('/').pop() ?? id;
+  return base.replace(/\.md$/i, '');
+}
+
+/**
+ * Build the wikilink graph from a corpus of notes. Every note becomes a node;
+ * every resolved `[[wikilink]]` becomes an edge to the linked note; every
+ * unresolved link becomes an edge to a placeholder node (`unresolved: true`).
+ * Self-links and duplicate edges (same source/target/type) are dropped. Nodes
+ * and edges are returned in a stable, sorted order for deterministic output.
+ */
+export function buildGraph(documents: readonly GraphDocument[]): GraphData {
+  const allPaths = documents.map((doc) => doc.path);
+  const nodes = new Map<string, GraphNode>();
+
+  // A node for every real note first, so a later unresolved target can never
+  // shadow a real note (and tags are always attached to the real note).
+  for (const doc of documents) {
+    nodes.set(doc.path, {
+      id: doc.path,
+      label: labelForPath(doc.path),
+      tags: extractTags(doc.content),
+    });
+  }
+
+  const edgeKeys = new Set<string>();
+  const edges: GraphEdge[] = [];
+
+  for (const doc of documents) {
+    for (const link of extractWikilinks(doc.content)) {
+      const resolved = resolveWikilink(link.target, allPaths);
+
+      let targetId: string;
+      if (resolved) {
+        targetId = resolved;
+      } else {
+        const cleaned = link.target.replace(/^\.\//, '').trim();
+        if (!cleaned) {
+          continue;
+        }
+        targetId = cleaned;
+        if (!nodes.has(targetId)) {
+          nodes.set(targetId, {
+            id: targetId,
+            label: labelForPath(targetId),
+            tags: [],
+            unresolved: true,
+          });
+        }
+      }
+
+      // Skip self-links — they add no information to the graph.
+      if (targetId === doc.path) {
+        continue;
+      }
+
+      // JSON-encode the triple as the de-dupe key so a path/target containing a
+      // space (or any other character) can never collide — same approach as
+      // context.ts's dedupeKey, and plain text (no delimiter bytes).
+      const key = JSON.stringify([doc.path, targetId, link.type ?? '']);
+      if (edgeKeys.has(key)) {
+        continue;
+      }
+      edgeKeys.add(key);
+      edges.push({ source: doc.path, target: targetId, ...(link.type ? { type: link.type } : {}) });
+    }
+  }
+
+  const sortedNodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const sortedEdges = edges.sort(
+    (a, b) =>
+      a.source.localeCompare(b.source) ||
+      a.target.localeCompare(b.target) ||
+      (a.type ?? '').localeCompare(b.type ?? ''),
+  );
+
+  return { nodes: sortedNodes, edges: sortedEdges };
+}

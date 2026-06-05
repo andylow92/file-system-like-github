@@ -133,9 +133,9 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 16
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 18
 vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
-`semantic_search`, `propose_edit`, …) and records every agent write to
+`semantic_search`, `get_graph`, `propose_edit`, …) and records every agent write to
 `<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
 
 **Copy-paste config snippets** for OpenClaw / Claude Desktop / Claude Code

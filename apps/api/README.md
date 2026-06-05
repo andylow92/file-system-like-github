@@ -215,6 +215,35 @@ Lists notes that link to `path` via `[[wikilinks]]`. Returns `Backlink[]`
 (`{ path, name, type? }`). When the link carried a typed relation
 (`[[Target|rel:supports]]`), the backlink includes `type: "supports"`.
 
+### `GET /api/graph`
+
+Returns the whole vault wikilink graph — `GraphData`
+(`{ nodes, edges }`) — built from the same `[[wikilink]]` extraction +
+resolution as `/api/backlinks`, served from the cached index (no per-call
+vault re-read). `.fsbrain/` is excluded. Read-only (emits no `VaultEvent`).
+
+- `nodes`: `{ id, label, tags, unresolved? }`. A real note's `id` is its logical
+  path; `label` is the basename without `.md`. An unresolved link target (a
+  `[[wikilink]]` that resolves to no note) is included as a distinct placeholder
+  node with `unresolved: true` and empty `tags`.
+- `edges`: `{ source, target, type? }`. `source`/`target` are node ids;
+  `type` carries the typed relation from `[[Target|rel:supports]]` when present.
+  Self-links and duplicate edges are dropped.
+
+```json
+{
+  "nodes": [
+    { "id": "claim.md", "label": "claim", "tags": ["thesis"] },
+    { "id": "evidence.md", "label": "evidence", "tags": [] },
+    { "id": "ghost", "label": "ghost", "tags": [], "unresolved": true }
+  ],
+  "edges": [
+    { "source": "claim.md", "target": "evidence.md", "type": "supports" },
+    { "source": "claim.md", "target": "ghost" }
+  ]
+}
+```
+
 ### `GET /api/block?path=...&block=<id>` (or `?id=<note-id>&block=<id>`)
 
 Reads a single block (paragraph / list-item / heading section) carrying the

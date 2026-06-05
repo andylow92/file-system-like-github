@@ -4,6 +4,7 @@ import type {
   Backlink,
   EditProposal,
   FileNode,
+  GraphData,
   ProposalStatus,
   SearchMatch,
   SemanticHit,
@@ -84,6 +85,10 @@ export async function fetchBacklinks(path: string): Promise<Backlink[]> {
     method: 'GET',
     headers: {},
   });
+}
+
+export async function fetchGraph(): Promise<GraphData> {
+  return requestJson<GraphData>('/api/graph', { method: 'GET', headers: {} });
 }
 
 export async function searchNotes(params: {
