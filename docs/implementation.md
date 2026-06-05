@@ -186,7 +186,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (16 tools) — writes as `agent:mcp`                           |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (18 tools) — writes as `agent:mcp`                           |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |

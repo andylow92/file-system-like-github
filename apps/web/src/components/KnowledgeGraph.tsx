@@ -165,7 +165,7 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
         viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label={`Knowledge graph with ${graph.nodes.length} notes`}
+        aria-label={`Knowledge graph with ${graph.nodes.length} nodes`}
         onPointerDown={handleBackgroundPointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endPan}
