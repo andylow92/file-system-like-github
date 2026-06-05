@@ -2752,12 +2752,13 @@ textarea:focus-visible {
   color: var(--color-text);
 }
 
-/* Edges — soft curves that brighten when an endpoint is focused. */
+/* Edges — soft curves, coloured by a per-edge source→target gradient (set via
+   the `stroke` attribute), that brighten to the accent when an endpoint is
+   focused. No base `stroke` here so the gradient attribute isn't overridden. */
 .graph-edge {
   fill: none;
-  stroke: var(--color-border-strong);
   stroke-width: 1.2;
-  stroke-opacity: 0.5;
+  stroke-opacity: 0.55;
   stroke-linecap: round;
   transition:
     stroke 0.18s ease,
@@ -2811,6 +2812,18 @@ textarea:focus-visible {
   stroke-width: 1.6;
   stroke-opacity: 0.85;
   pointer-events: none;
+  /* A slow, quiet pulse to draw the eye to the currently-open note. */
+  animation: graph-ring-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes graph-ring-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.85;
+  }
+  50% {
+    stroke-opacity: 0.3;
+  }
 }
 
 .graph-node__label {
@@ -2906,4 +2919,14 @@ textarea:focus-visible {
   opacity: 0.75;
   outline: 1.5px dashed var(--color-danger);
   outline-offset: 1px;
+}
+
+/* Respect a reduced-motion preference: no pulse, no glide. */
+@media (prefers-reduced-motion: reduce) {
+  .graph-node {
+    transition: none;
+  }
+  .graph-node__ring {
+    animation: none;
+  }
 }

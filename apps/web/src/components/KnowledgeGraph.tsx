@@ -64,6 +64,16 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
   );
   const adjacency = useMemo(() => computeAdjacency(graph), [graph]);
 
+  // Node colour by id, so an edge can fade from its source's colour to its
+  // target's (a softer, more organic look than a flat line).
+  const colorById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const node of graph.nodes) {
+      map.set(node.id, nodeColor(node));
+    }
+    return map;
+  }, [graph]);
+
   // A quiet key for the colours actually in use (first tag of each note).
   const legend = useMemo(() => {
     const tags = new Set<string>();
@@ -196,8 +206,31 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
         onPointerUp={endPan}
         onPointerCancel={endPan}
       >
+        <defs>
+          {graph.edges.map((edge, i) => {
+            const a = positions.get(edge.source);
+            const b = positions.get(edge.target);
+            if (!a || !b || edge.type) {
+              return null;
+            }
+            return (
+              <linearGradient
+                key={i}
+                id={`graph-edge-grad-${i}`}
+                gradientUnits="userSpaceOnUse"
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+              >
+                <stop offset="0%" style={{ stopColor: colorById.get(edge.source) }} />
+                <stop offset="100%" style={{ stopColor: colorById.get(edge.target) }} />
+              </linearGradient>
+            );
+          })}
+        </defs>
         <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
-          {graph.edges.map((edge) => {
+          {graph.edges.map((edge, i) => {
             const a = positions.get(edge.source);
             const b = positions.get(edge.target);
             if (!a || !b) {
@@ -213,6 +246,7 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
                 key={`${edge.source}->${edge.target}:${edge.type ?? ''}`}
                 className={`graph-edge${edge.type ? ' graph-edge--typed' : ''}${mod}`}
                 d={edgePath(a, b)}
+                stroke={edge.type ? undefined : `url(#graph-edge-grad-${i})`}
               >
                 {edge.type ? <title>{edge.type}</title> : null}
               </path>
