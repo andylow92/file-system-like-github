@@ -6,12 +6,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { GraphData, GraphNode } from '@repo/shared';
-import { computeAdjacency, computeGraphLayout, tagHue } from './graphLayout';
+import { colorForTag, computeAdjacency, computeGraphLayout, type Point } from './graphLayout';
 
 const VIEW_WIDTH = 1000;
 const VIEW_HEIGHT = 720;
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 3;
+const BASE_RADIUS = 6;
+const UNRESOLVED_RADIUS = 5;
 
 interface KnowledgeGraphProps {
   graph: GraphData;
@@ -26,14 +28,26 @@ interface ViewTransform {
   ty: number;
 }
 
-function nodeFill(node: GraphNode): string {
+function nodeColor(node: GraphNode): string {
   if (node.unresolved) {
     return 'var(--color-danger)';
   }
   if (node.tags.length > 0) {
-    return `hsl(${tagHue(node.tags[0])} 58% 55%)`;
+    return colorForTag(node.tags[0]);
   }
   return 'var(--color-accent)';
+}
+
+/** A gentle quadratic arc between two points — softer than a straight line. */
+function edgePath(a: Point, b: Point): string {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  // Bow the curve perpendicular to the edge by a small fraction of its length.
+  const cx = mx - dy * 0.08;
+  const cy = my + dx * 0.08;
+  return `M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`;
 }
 
 /**
@@ -49,6 +63,20 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
     [graph],
   );
   const adjacency = useMemo(() => computeAdjacency(graph), [graph]);
+
+  // A quiet key for the colours actually in use (first tag of each note).
+  const legend = useMemo(() => {
+    const tags = new Set<string>();
+    let hasUnresolved = false;
+    for (const node of graph.nodes) {
+      if (node.unresolved) {
+        hasUnresolved = true;
+      } else if (node.tags[0]) {
+        tags.add(node.tags[0]);
+      }
+    }
+    return { tags: [...tags].sort().slice(0, 8), hasUnresolved };
+  }, [graph]);
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [view, setView] = useState<ViewTransform>({ scale: 1, tx: 0, ty: 0 });
@@ -78,16 +106,13 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
     return () => svg.removeEventListener('wheel', onWheel);
   }, []);
 
-  const highlightId = hoveredId;
-  const isDimmed = (id: string): boolean => {
-    if (!highlightId) {
-      return false;
-    }
-    if (id === highlightId) {
-      return false;
-    }
-    return !adjacency.get(highlightId)?.has(id);
-  };
+  const neighbors = hoveredId ? adjacency.get(hoveredId) : undefined;
+
+  // A node's radius grows with how connected it is, giving hubs visual weight.
+  function radiusFor(node: GraphNode): number {
+    const base = node.unresolved ? UNRESOLVED_RADIUS : BASE_RADIUS;
+    return base + Math.min(adjacency.get(node.id)?.size ?? 0, 10) * 0.85;
+  }
 
   function handleBackgroundPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
     // Only start a pan when the background itself was grabbed (not a node).
@@ -178,18 +203,19 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
             if (!a || !b) {
               return null;
             }
-            const dim = isDimmed(edge.source) && isDimmed(edge.target);
+            const mod = !hoveredId
+              ? ''
+              : edge.source === hoveredId || edge.target === hoveredId
+                ? ' graph-edge--active'
+                : ' graph-edge--dim';
             return (
-              <line
+              <path
                 key={`${edge.source}->${edge.target}:${edge.type ?? ''}`}
-                className={`graph-edge${edge.type ? ' graph-edge--typed' : ''}${dim ? ' graph-edge--dim' : ''}`}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
+                className={`graph-edge${edge.type ? ' graph-edge--typed' : ''}${mod}`}
+                d={edgePath(a, b)}
               >
                 {edge.type ? <title>{edge.type}</title> : null}
-              </line>
+              </path>
             );
           })}
 
@@ -198,12 +224,16 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
             if (!pos) {
               return null;
             }
-            const dim = isDimmed(node.id);
+            const radius = radiusFor(node);
+            const color = nodeColor(node);
+            const active = !!hoveredId && (node.id === hoveredId || !!neighbors?.has(node.id));
+            const dim = !!hoveredId && !active;
             const selected = node.id === selectedPath;
             const classes = [
               'graph-node',
               node.unresolved ? 'graph-node--unresolved' : '',
               selected ? 'graph-node--selected' : '',
+              active ? 'graph-node--active' : '',
               dim ? 'graph-node--dim' : '',
             ]
               .filter(Boolean)
@@ -212,11 +242,13 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
               <g
                 key={node.id}
                 className={classes}
-                transform={`translate(${pos.x} ${pos.y})`}
+                style={{
+                  transform: `translate(${pos.x}px, ${pos.y}px)`,
+                  cursor: node.unresolved ? 'help' : 'pointer',
+                }}
                 role={node.unresolved ? undefined : 'button'}
                 tabIndex={node.unresolved ? undefined : 0}
                 aria-label={node.unresolved ? `${node.label} (unresolved link)` : node.label}
-                style={{ cursor: node.unresolved ? 'help' : 'pointer' }}
                 onClick={() => {
                   if (!node.unresolved) {
                     onSelectFile(node.id);
@@ -235,12 +267,10 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
                 onFocus={() => setHoveredId(node.id)}
                 onBlur={() => setHoveredId((current) => (current === node.id ? null : current))}
               >
-                <circle
-                  className="graph-node__dot"
-                  r={selected ? 10 : 7}
-                  style={{ fill: nodeFill(node) }}
-                />
-                <text className="graph-node__label" x={11} y={4}>
+                <circle className="graph-node__halo" r={radius * 2.2} style={{ fill: color }} />
+                {selected ? <circle className="graph-node__ring" r={radius + 4} /> : null}
+                <circle className="graph-node__dot" r={radius} style={{ fill: color }} />
+                <text className="graph-node__label" y={radius + 13}>
                   {node.label}
                 </text>
                 <title>{node.id}</title>
@@ -249,6 +279,26 @@ export function KnowledgeGraph({ graph, onSelectFile, selectedPath }: KnowledgeG
           })}
         </g>
       </svg>
+
+      {legend.tags.length > 0 || legend.hasUnresolved ? (
+        <div className="graph-legend" aria-hidden="true">
+          {legend.tags.map((tag) => (
+            <span key={tag} className="graph-legend__item">
+              <span
+                className="graph-legend__swatch"
+                style={{ backgroundColor: colorForTag(tag), color: colorForTag(tag) }}
+              />
+              {tag}
+            </span>
+          ))}
+          {legend.hasUnresolved ? (
+            <span className="graph-legend__item">
+              <span className="graph-legend__swatch graph-legend__swatch--unresolved" />
+              unresolved
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

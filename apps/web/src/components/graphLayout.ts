@@ -154,7 +154,23 @@ export function computeAdjacency(graph: GraphData): Map<string, Set<string>> {
   return adjacency;
 }
 
-/** A stable, pleasant hue derived from a node's first tag (for tag colouring). */
-export function tagHue(tag: string): number {
-  return hashString(tag) % 360;
+/**
+ * A curated palette of soft, harmonious colours for tag-based node colouring —
+ * chosen to sit alongside the app's warm gold accent on the dark canvas without
+ * the clashing neon you get from a raw hash-to-hue.
+ */
+export const GRAPH_TAG_COLORS = [
+  '#d4a76a', // gold (the app accent)
+  '#7cb89a', // sage
+  '#6fa8c7', // dusty blue
+  '#b58bc4', // mauve
+  '#d98a72', // terracotta
+  '#c9a14a', // amber
+  '#84b06a', // moss
+  '#c77f9e', // rose
+] as const;
+
+/** Pick a stable colour from the curated palette for a tag. */
+export function colorForTag(tag: string): string {
+  return GRAPH_TAG_COLORS[hashString(tag) % GRAPH_TAG_COLORS.length];
 }
