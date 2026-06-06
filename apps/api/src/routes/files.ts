@@ -14,9 +14,11 @@ import type {
   EditProposal,
   FileNode,
   HybridHit,
+  MaintenanceFinding,
   PatchOp,
   ProposalAction,
   RankedChunk,
+  ScanVaultOptions,
   SearchMatch,
   VaultEvent,
 } from '@repo/shared';
@@ -39,6 +41,7 @@ import {
   parseNote,
   reciprocalRankFusion,
   resolveWikilink,
+  scanVault,
 } from '@repo/shared';
 
 import type { EventBus } from '../events/eventBus.js';
@@ -1322,6 +1325,140 @@ async function handleResolveProposal(context: RequestContext): Promise<void> {
   sendJson(res, 200, { success: true, data: resolved });
 }
 
+/** The actor every maintenance-filed proposal is attributed to. */
+const MAINTENANCE_ACTOR = 'agent:maintenance';
+
+export interface MaintenanceScanResult {
+  findings: MaintenanceFinding[];
+  proposalsFiled: EditProposal[];
+}
+
+/** Broadcast a `proposal_created` event for a maintenance-filed proposal. */
+function publishMaintenanceProposal(eventBus: EventBus, logicalPath: string): void {
+  try {
+    eventBus.publish({
+      type: 'proposal_created',
+      path: logicalPath,
+      actor: MAINTENANCE_ACTOR,
+      ts: new Date().toISOString(),
+      source: 'api',
+    });
+  } catch {
+    // The proposal already persisted; a broadcast failure is non-fatal.
+  }
+}
+
+/**
+ * The current etag of a note, computed exactly as `loadFileFromContext` does
+ * (`sha1(content + lastModified)`), or `undefined` if the file can't be read.
+ * Used to stamp a maintenance `update` proposal with a `baseEtag` so approving a
+ * stale one 409s instead of clobbering edits made between the scan and approval.
+ */
+async function currentNoteEtag(
+  pathResolver: PathResolver,
+  logicalPath: string,
+): Promise<string | undefined> {
+  try {
+    const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
+    const stat = await fs.stat(absolutePath);
+    if (!stat.isFile()) {
+      return undefined;
+    }
+    const content = await fs.readFile(absolutePath, 'utf8');
+    return toEtag(content, stat.mtime.toISOString());
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run the dream-cycle maintenance scan over the cached corpus and file each
+ * actionable finding's suggestion as an edit proposal (attributed to
+ * `agent:maintenance`) for human review in the Review tab. Resolution stays
+ * human-only — nothing here applies an edit.
+ *
+ * Idempotent: a suggestion whose `action`+`path` already matches a still-relevant
+ * proposal — **pending** (awaiting review) or **rejected** (the human already
+ * said no) — is skipped, so re-running never spams the Review queue and never
+ * re-surfaces a suggestion the human declined (which would otherwise reappear
+ * every `MAINTENANCE_INTERVAL_MS`). An `update` suggestion (the duplicate
+ * cross-link, whose `content` is a full-note snapshot taken at scan time) is
+ * filed with the target's current `baseEtag`, so approving it after the note
+ * changed is rejected (`409 stale_write`) by `applyProposal` rather than silently
+ * overwriting the edit. Shared by `POST /api/maintenance/scan` and the optional
+ * `MAINTENANCE_INTERVAL_MS` scheduler in `createServer`.
+ */
+export async function runMaintenanceScan(deps: {
+  vaultIndex: VaultIndex;
+  proposalStore: ProposalStore;
+  eventBus: EventBus;
+  pathResolver: PathResolver;
+  options?: ScanVaultOptions;
+}): Promise<MaintenanceScanResult> {
+  const documents = await deps.vaultIndex.getDocuments();
+  const findings = scanVault(documents, deps.options);
+
+  // Block re-filing against pending + rejected proposals. Approved ones aren't
+  // blocked: the fix already landed, so the finding resolves on its own (a
+  // created stub now exists; an approved cross-link makes the pair already
+  // linked, so `scanVault` reports it without a suggestion).
+  const existing = await deps.proposalStore.list();
+  const blockedKeys = new Set(
+    existing
+      .filter((proposal) => proposal.status === 'pending' || proposal.status === 'rejected')
+      .map((proposal) => `${proposal.action}:${proposal.path}`),
+  );
+
+  const proposalsFiled: EditProposal[] = [];
+  for (const finding of findings) {
+    const { suggestion } = finding;
+    if (!suggestion) {
+      continue;
+    }
+    const key = `${suggestion.action}:${suggestion.path}`;
+    if (blockedKeys.has(key)) {
+      continue;
+    }
+    // Guard against two findings suggesting the same action+path within one scan.
+    blockedKeys.add(key);
+
+    // Stamp an `update` with the target's current etag so a stale approval is
+    // rejected instead of clobbering edits. (A `create` needs none — it 409s on
+    // "File already exists".)
+    const baseEtag =
+      suggestion.action === 'update'
+        ? await currentNoteEtag(deps.pathResolver, suggestion.path)
+        : undefined;
+
+    const proposal = await deps.proposalStore.create({
+      actor: MAINTENANCE_ACTOR,
+      action: suggestion.action,
+      path: suggestion.path,
+      ...(suggestion.content !== undefined ? { content: suggestion.content } : {}),
+      ...(baseEtag ? { baseEtag } : {}),
+      note: suggestion.note,
+    });
+    publishMaintenanceProposal(deps.eventBus, suggestion.path);
+    proposalsFiled.push(proposal);
+  }
+
+  return { findings, proposalsFiled };
+}
+
+/** GET /api/maintenance — a dry preview: scan the cached corpus, file nothing. */
+async function handleMaintenancePreview({ res, vaultIndex }: RequestContext): Promise<void> {
+  const documents = await vaultIndex.getDocuments();
+  const findings = scanVault(documents);
+  sendJson<{ findings: MaintenanceFinding[] }>(res, 200, { success: true, data: { findings } });
+}
+
+/** POST /api/maintenance/scan — scan and file each actionable finding as a proposal. */
+async function handleMaintenanceScan(context: RequestContext): Promise<void> {
+  const { res, vaultIndex, proposalStore, eventBus, pathResolver } = context;
+  const result = await runMaintenanceScan({ vaultIndex, proposalStore, eventBus, pathResolver });
+  sendJson<MaintenanceScanResult>(res, 200, { success: true, data: result });
+}
+
 async function executeHandler(
   context: RequestContext,
   handler: (ctx: RequestContext) => Promise<void>,
@@ -1413,6 +1550,16 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/audit') {
     await executeHandler(context, handleGetAudit);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/maintenance') {
+    await executeHandler(context, handleMaintenancePreview);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/maintenance/scan') {
+    await executeHandler(context, handleMaintenanceScan);
     return { handled: true };
   }
 

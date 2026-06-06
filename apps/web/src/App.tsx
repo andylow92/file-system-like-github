@@ -6,6 +6,7 @@ import { BacklinksPanel } from './components/BacklinksPanel';
 import { FileViewerTabs, type ViewerTabKey } from './components/FileViewerTabs';
 import { GlobalLayout } from './components/GlobalLayout';
 import { GraphView } from './components/GraphView';
+import { MaintenancePanel } from './components/MaintenancePanel';
 import { ReviewPanel } from './components/ReviewPanel';
 import { SearchDialog } from './components/SearchDialog';
 import { ModalDialog } from './components/ModalDialog';
@@ -493,16 +494,19 @@ export function App() {
             />
           }
           review={
-            <ReviewPanel
-              refreshKey={activityKey}
-              onResolved={() => {
-                void refreshTreeAndCurrentFile();
-                bumpActivity();
-              }}
-              onSelectFile={(path) => {
-                void navigateToFile(path);
-              }}
-            />
+            <>
+              <MaintenancePanel onFiled={bumpActivity} />
+              <ReviewPanel
+                refreshKey={activityKey}
+                onResolved={() => {
+                  void refreshTreeAndCurrentFile();
+                  bumpActivity();
+                }}
+                onSelectFile={(path) => {
+                  void navigateToFile(path);
+                }}
+              />
+            </>
           }
           graph={
             <GraphView

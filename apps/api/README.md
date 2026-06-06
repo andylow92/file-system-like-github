@@ -513,6 +513,51 @@ curl -X POST "http://localhost:3001/api/proposals/resolve" \
   -d '{"id":"<proposal-id>","decision":"approve"}'
 ```
 
+### Maintenance (the "dream cycle")
+
+A scan that finds vault-hygiene problems and files each actionable one as an
+**edit proposal** a human approves in the Review tab — reusing the proposal queue
+above. It runs fully offline (no model, no API key) over the cached `VaultIndex`
+(no extra vault read). The detector is a pure, deterministic helper in
+`@repo/shared` (`maintenance.ts`, `scanVault`). It detects:
+
+- `broken_link` — a `[[wikilink]]` that resolves to no note. Suggestion: a
+  `create` proposal for a stub of the missing target.
+- `orphan` — a note with no inbound and no outbound **resolved** wikilinks
+  (an isolated node). Report-only (no suggestion).
+- `duplicate` — a pair of notes whose note-level TF-IDF cosine is ≥ a threshold.
+  Suggestion (conservative): an `update` proposal appending a
+  `> See also [[other]]` cross-link — never a merge.
+
+Each finding is `{ kind, paths, detail, score?, suggestion? }`, where
+`suggestion` (when present) is a safe, reversible `{ action, path, content?,
+note }` that maps 1:1 onto a proposal.
+
+- `GET /api/maintenance` — a **dry preview**: returns `{ findings }`; files
+  nothing.
+- `POST /api/maintenance/scan` — files each finding's suggestion as a proposal
+  (attributed to the `agent:maintenance` actor) and returns
+  `{ findings, proposalsFiled }`. **Idempotent**: a suggestion whose
+  `action`+`path` already matches a still-relevant proposal — `pending` (awaiting
+  review) or `rejected` (the human already declined it) — is skipped, so
+  re-running never spams the Review queue and never re-surfaces a rejected fix. An
+  `update` suggestion (the duplicate
+  cross-link) is stamped with the target note's current `baseEtag`, so approving
+  it after the note changed returns `409 stale_write` rather than overwriting the
+  edit. Resolution stays human-only — the scan only proposes; it never applies an
+  edit.
+
+Scheduling is on-demand by default. Setting `MAINTENANCE_INTERVAL_MS` to a
+positive number makes `createServer` also run the scan on that interval (the
+timer is `unref`'d so it never keeps the process alive); leave it unset to
+disable. Contradiction detection is intentionally out of scope for v1 (it needs
+an LLM, which would break the offline guarantee).
+
+```bash
+curl "http://localhost:3001/api/maintenance"                  # preview, files nothing
+curl -X POST "http://localhost:3001/api/maintenance/scan"     # scan + file proposals
+```
+
 ## Provenance: the `X-Actor` header
 
 Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) may send an `X-Actor` header

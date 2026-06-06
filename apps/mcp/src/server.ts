@@ -35,6 +35,7 @@ import type {
   FileNode,
   GraphData,
   HybridHit,
+  MaintenanceFinding,
   SearchMatch,
   SemanticHit,
 } from '@repo/shared';
@@ -619,6 +620,23 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       const query = params.toString();
       return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
     }),
+  );
+
+  register(
+    'run_maintenance',
+    'Run the dream-cycle vault maintenance scan: detect near-duplicate notes, ' +
+      'broken [[wikilinks]], and orphan notes, and file each actionable finding ' +
+      'as an edit proposal for human review (actor `agent:maintenance`). ' +
+      'Idempotent — re-running will not re-file an already-open proposal, so it ' +
+      'is safe to call repeatedly. Resolution stays human-only in the Review ' +
+      'tab; this tool never applies an edit. Returns { findings, proposalsFiled }.',
+    {},
+    tool(async () =>
+      apiRequest<{ findings: MaintenanceFinding[]; proposalsFiled: EditProposal[] }>(
+        '/api/maintenance/scan',
+        { method: 'POST' },
+      ),
+    ),
   );
 
   return count;

@@ -7,7 +7,7 @@ import { createEventBus } from './events/eventBus.js';
 import { handleEventStream } from './events/sse.js';
 import { createVaultWatcher } from './events/watcher.js';
 import { createVaultIndex } from './index/vaultIndex.js';
-import { handleFileRoutes, type PatchFileResponse } from './routes/files.js';
+import { handleFileRoutes, runMaintenanceScan, type PatchFileResponse } from './routes/files.js';
 import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
@@ -32,6 +32,22 @@ export function createServer(config = loadConfig()): http.Server {
   // whole vault per query. It subscribes to the same bus, so any write (API or
   // out-of-band) invalidates it and the next query rebuilds — never stale.
   const vaultIndex = createVaultIndex({ repository, eventBus });
+
+  // Optional "dream cycle": when MAINTENANCE_INTERVAL_MS is a positive number,
+  // periodically scan the vault for hygiene problems (broken links, orphans,
+  // near-duplicates) and file each fix as a proposal for human review. Off by
+  // default (unset); on-demand scanning is always available via the endpoints.
+  const maintenanceIntervalMs = Number(process.env.MAINTENANCE_INTERVAL_MS);
+  let maintenanceTimer: NodeJS.Timeout | undefined;
+  if (Number.isFinite(maintenanceIntervalMs) && maintenanceIntervalMs > 0) {
+    maintenanceTimer = setInterval(() => {
+      void runMaintenanceScan({ vaultIndex, proposalStore, eventBus, pathResolver }).catch(() => {
+        // Best-effort: a scheduled scan must never crash the server.
+      });
+    }, maintenanceIntervalMs);
+    // Don't keep the process (or a test's event loop) alive just for the scan.
+    maintenanceTimer.unref?.();
+  }
 
   function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -87,6 +103,9 @@ export function createServer(config = loadConfig()): http.Server {
   server.on('close', () => {
     watcher.close();
     vaultIndex.close();
+    if (maintenanceTimer) {
+      clearInterval(maintenanceTimer);
+    }
   });
   return server;
 }

@@ -5,7 +5,43 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-06 (`think` — cited answer kit + offline gap analysis)_
+_Last updated: 2026-06-06 (dream-cycle maintenance scan → review proposals)_
+
+> **Latest change.** The vault now runs a **dream-cycle maintenance** scan that
+> finds hygiene problems and files each actionable one as a **proposal** the
+> human approves in the Review tab — reusing the `ProposalStore` + `EventBus` we
+> already ship, no new subsystem. A pure, deterministic helper in `@repo/shared`
+> (`maintenance.ts` — `scanVault`, `MaintenanceFinding`) detects, **fully
+> offline** (no model, no API key): **broken links** (a `[[wikilink]]` resolving
+> to no note → suggest a `create` stub of the missing target), **orphans** (a
+> note with no inbound/outbound _resolved_ links → report-only, no auto-edit),
+> and **near-duplicates** (a pair of notes whose note-level TF-IDF cosine ≥ a
+> threshold → suggest an `update` that appends a conservative
+> `> See also [[other]]` cross-link, never a merge). Each suggestion is a safe,
+> reversible `{ action, path, content?, note }` that maps 1:1 onto a proposal.
+> `GET /api/maintenance` is a dry preview (scan the cached `VaultIndex`, file
+> nothing); `POST /api/maintenance/scan` (and the 21st MCP tool,
+> `run_maintenance`) files each suggestion as a proposal attributed to a distinct
+> `agent:maintenance` actor and returns `{ findings, proposalsFiled }`. It
+> **dedupes against pending _and_ rejected proposals** (match on action+path) so
+> re-running is idempotent — it never spams the Review queue nor re-surfaces a fix
+> the human already declined. An `update` suggestion (the duplicate cross-link,
+> whose content is a full-note snapshot) is filed with the target's current
+> `baseEtag`, so approving it after the note changed `409`s instead of clobbering
+> the edit. Scheduling is on-demand by
+> default; an optional `MAINTENANCE_INTERVAL_MS` timer in `createServer` runs it
+> periodically when set. **Resolution stays human-only** — there is no agent
+> approval path. A light **Maintenance** action sits atop the web Review tab (run
+> a scan, see findings grouped by kind; filed fixes appear as proposals just
+> below). Contradiction detection is intentionally **out of scope for v1** (it
+> needs an LLM, which breaks the offline guarantee) and is left as a follow-up
+> behind the same server-side `OPENROUTER_API_KEY` gate as `think`'s synthesis.
+> Covered by `apps/api` `__tests__/maintenance.test.ts` (pure: each finding kind,
+> threshold boundary, clean vault → [], determinism, empty corpus) and
+> `routes/maintenance.test.ts` (dry preview files nothing, scan files as
+> `agent:maintenance`, idempotent re-run, duplicate cross-link); the fresh-clone
+> MCP test now asserts the 21-tool surface and exercises `run_maintenance`. This
+> is the third gbrain-inspired enhancement (item #17; see _Next up_).
 
 > **Latest change.** The vault now has a **`think`** brain layer: "search gives
 > raw pages, the brain gives the answer." `GET /api/think` (and the 20th MCP tool,
@@ -22,7 +58,7 @@ _Last updated: 2026-06-06 (`think` — cited answer kit + offline gap analysis)_
 > stays **fully offline by default**: the agent calling the MCP tool is itself the
 > LLM and composes the final cited answer from the kit. Only when an OpenRouter
 > key is configured **server-side** (`OPENROUTER_API_KEY`, mirroring the web
-> app's wiring) *and* the request opts in (`?synthesize=1`) does it also include a
+> app's wiring) _and_ the request opts in (`?synthesize=1`) does it also include a
 > synthesized prose `answer` that cites the numbered sources — and a synthesis
 > failure never fails the offline kit. Covered by `apps/api` `__tests__/think.test.ts`
 > (pure: multi-citation mapping, weak-coverage flag, stem-aware uncovered-term
@@ -177,10 +213,10 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 20 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 21 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
-  get_block_anchors, propose_edit + list_proposals. When
+  get_block_anchors, propose_edit + list_proposals + run_maintenance. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -208,37 +244,38 @@ Key facts an agent must know:
 
 ## 3. Current capabilities (grounded in code)
 
-| Capability                                  | Status | Notes                                                                   |
-| ------------------------------------------- | :----: | ----------------------------------------------------------------------- |
-| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                       |
-| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                    |
-| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                              |
-| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                        |
-| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                          |
-| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                       |
-| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                        |
-| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                        |
-| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                      |
-| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                          |
-| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                        |
-| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                           |
-| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                          |
+| Capability                                  | Status | Notes                                                                            |
+| ------------------------------------------- | :----: | -------------------------------------------------------------------------------- |
+| GitHub-style file tree + folders-first sort |   ✅   | `FileTreeSidebar`, `GlobalLayout`                                                |
+| Create / rename / move / delete (md + dirs) |   ✅   | `/api/file`, `/api/dir`, `/api/path`                                             |
+| Read / update with optimistic concurrency   |   ✅   | `etag` / `lastModified` in `handlePutFile`                                       |
+| Edit ↔ Preview tabs                         |   ✅   | `FileViewerTabs`; hard toggle (not live WYSIWYG)                                 |
+| Path sandboxing inside `CONTENT_ROOT`       |   ✅   | `PathResolver`                                                                   |
+| Sidebar filter by **filename**              |   ✅   | `filterQuery` — name/path only, not file contents                                |
+| "Fix Format" via OpenRouter                 |   ✅   | Client-side only (`openrouter/`)                                                 |
+| `[[wikilinks]]` (clickable) + resolution    |   ✅   | `markdown.ts`, `remarkWikilinks`                                                 |
+| Backlinks panel                             |   ✅   | `/api/backlinks`, `BacklinksPanel`                                               |
+| Frontmatter + `#tags` parsing               |   ✅   | `@repo/shared` `markdown.ts`; chips in preview                                   |
+| Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                                 |
+| Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                                    |
+| Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                                   |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
-| `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)            |
-| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                    |
-| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                        |
-| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                    |
-| section + idempotency + dry-run)            |        |                                                                         |
-| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
-| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
-| Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (20 tools) — writes as `agent:mcp`                           |
-| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
-| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
-| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |
-| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic    |
-| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)     |
-| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                               |
+| `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                     |
+| Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)     |
+| Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                             |
+| Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                                 |
+| Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                             |
+| section + idempotency + dry-run)            |        |                                                                                  |
+| Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
+| Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
+| Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (21 tools) — writes as `agent:mcp`                                    |
+| Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
+| Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
+| Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |
+| Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic             |
+| Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)              |
+| `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                                        |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -468,12 +505,27 @@ into infrastructure we already have rather than adding a new subsystem.
     `apps/api` `__tests__/think.test.ts` (pure) + `routes/think.test.ts`
     (endpoint). _gbrain parallel: `gbrain think` — "search gives raw pages, the
     brain gives the answer," with built-in gap analysis._
-17. **Dream-cycle maintenance → proposals.** A scheduled scan that flags
-    near-duplicate notes, broken wikilinks, orphans, and contradictory
-    statements, then files each as a **proposal** a human approves in the Review
-    tab — reusing the `ProposalStore` + `EventBus` we already ship. _gbrain
-    parallel: its 24/7 "dream cycle" that dedupes, fixes citations, and finds
-    contradictions overnight._
+17. **Dream-cycle maintenance → proposals.** ✅ **Done.** A scan
+    (`@repo/shared` `maintenance.ts` — `scanVault`) flags **broken
+    `[[wikilinks]]`**, **orphan notes**, and **near-duplicate notes** (note-level
+    TF-IDF cosine ≥ threshold), then files each actionable one as a **proposal** a
+    human approves in the Review tab — reusing the `ProposalStore` + `EventBus`,
+    no new subsystem. Each finding carries a safe, reversible suggestion that maps
+    1:1 onto a proposal (broken link → `create` a stub; duplicate → `update`
+    appending a `> See also [[other]]` cross-link, never a merge; orphan is
+    report-only). `GET /api/maintenance` previews (files nothing);
+    `POST /api/maintenance/scan` + the `run_maintenance` MCP tool (21st) file each
+    suggestion as `agent:maintenance`, **deduped against pending + rejected
+    proposals** so re-runs are idempotent and never re-surface a declined fix; an
+    `update` (cross-link) carries the target's `baseEtag` so a stale approval
+    `409`s. On-demand by default;
+    optional `MAINTENANCE_INTERVAL_MS` timer in `createServer`. Resolution stays
+    **human-only**. A light Maintenance action sits atop the web Review tab.
+    **Contradiction detection is deferred** (it needs an LLM, which breaks the
+    offline guarantee) behind the same `OPENROUTER_API_KEY` gate as `think`
+    synthesis. Tests: `apps/api` `__tests__/maintenance.test.ts` (pure) +
+    `routes/maintenance.test.ts` (endpoint). _gbrain parallel: its 24/7 "dream
+    cycle" that dedupes, fixes citations, and finds contradictions overnight._
 18. **Self-wiring typed graph edges.** Derive typed edges from frontmatter
     (e.g. `related:`, `type:`) so the knowledge graph wires itself without manual
     `[[Target|rel:type]]` discipline. _gbrain parallel: typed edges

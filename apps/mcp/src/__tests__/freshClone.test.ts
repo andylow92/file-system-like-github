@@ -111,6 +111,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'read_block',
         'read_note',
         'recent_activity',
+        'run_maintenance',
         'search_notes',
         'semantic_search',
         'think',
@@ -224,6 +225,35 @@ describe('fresh-clone MCP end-to-end', () => {
     const lastEntry = JSON.parse(auditLines[auditLines.length - 1]) as AuditEntry;
     expect(lastEntry.actor).toBe('agent:fresh-clone');
     expect(lastEntry.path).toBe('notes/idea.md');
+
+    // 8) run_maintenance — the dream cycle. Seed a note with a broken link,
+    // kick the scan, and assert the missing target was filed as a pending
+    // proposal (attributed to agent:maintenance) that surfaces in the Review
+    // queue. Resolution stays human-only — the scan only proposes.
+    await client.callTool({
+      name: 'create_note',
+      arguments: { path: 'links.md', content: '# Links\nThis points at [[missing-note]].\n' },
+    });
+    const maintenanceResult = (await client.callTool({
+      name: 'run_maintenance',
+      arguments: {},
+    })) as ContentResult;
+    const maintenance = decode<{
+      findings: Array<{ kind: string }>;
+      proposalsFiled: EditProposal[];
+    }>(maintenanceResult);
+    expect(maintenance.findings.some((finding) => finding.kind === 'broken_link')).toBe(true);
+    const stub = maintenance.proposalsFiled.find((p) => p.path === 'missing-note.md');
+    expect(stub).toBeDefined();
+    expect(stub!.action).toBe('create');
+    expect(stub!.actor).toBe('agent:maintenance');
+
+    const afterScanResult = (await client.callTool({
+      name: 'list_proposals',
+      arguments: { status: 'pending' },
+    })) as ContentResult;
+    const afterScan = decode<EditProposal[]>(afterScanResult);
+    expect(afterScan.map((p) => p.id)).toContain(stub!.id);
   });
 
   it('drives `tools/list` over the bundled `dist/server.js` when it exists', async () => {
@@ -260,7 +290,7 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(20);
+    expect(tools.length).toBe(21);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
     expect(tools.map((tool) => tool.name)).toContain('think');
 
