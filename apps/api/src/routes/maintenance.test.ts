@@ -120,6 +120,27 @@ describe('maintenance — scan → review proposals', () => {
     expect(pending.body.data).toHaveLength(1);
   });
 
+  it('does not re-file a suggestion the human already rejected', async () => {
+    await seed('index.md', '# Index\nSee [[guide]] and [[ghost]] for more.');
+    await seed('guide.md', '# Guide\nBack to [[index]].');
+
+    const first = await api<ScanResult>('POST', '/api/maintenance/scan');
+    const filed = first.body.data!.proposalsFiled[0];
+    expect(filed.path).toBe('ghost.md');
+
+    // The human rejects the stub-create.
+    await api('POST', '/api/proposals/resolve', { body: { id: filed.id, decision: 'reject' } });
+
+    // Re-running still reports the broken link, but does NOT re-file the
+    // rejected suggestion — so an interval scan can't spam a declined fix.
+    const second = await api<ScanResult>('POST', '/api/maintenance/scan');
+    expect(second.body.data!.findings.some((f) => f.kind === 'broken_link')).toBe(true);
+    expect(second.body.data!.proposalsFiled).toEqual([]);
+
+    const pending = await api<EditProposal[]>('GET', '/api/proposals?status=pending');
+    expect(pending.body.data).toEqual([]);
+  });
+
   it('files a conservative cross-link update for a near-duplicate pair', async () => {
     const body = '# Topic\nThe nightly dream cycle dedupes notes and repairs broken links.';
     await seed('dupA.md', body);

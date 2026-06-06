@@ -1377,14 +1377,16 @@ async function currentNoteEtag(
  * `agent:maintenance`) for human review in the Review tab. Resolution stays
  * human-only — nothing here applies an edit.
  *
- * Idempotent: a suggestion whose `action`+`path` already matches an **open
- * (pending)** proposal is skipped, so re-running the scan never spams the Review
- * queue. An `update` suggestion (the duplicate cross-link, whose `content` is a
- * full-note snapshot taken at scan time) is filed with the target's current
- * `baseEtag`, so approving it after the note changed is rejected (`409
- * stale_write`) by `applyProposal` rather than silently overwriting the edit.
- * Shared by `POST /api/maintenance/scan` and the optional `MAINTENANCE_INTERVAL_MS`
- * scheduler in `createServer`.
+ * Idempotent: a suggestion whose `action`+`path` already matches a still-relevant
+ * proposal — **pending** (awaiting review) or **rejected** (the human already
+ * said no) — is skipped, so re-running never spams the Review queue and never
+ * re-surfaces a suggestion the human declined (which would otherwise reappear
+ * every `MAINTENANCE_INTERVAL_MS`). An `update` suggestion (the duplicate
+ * cross-link, whose `content` is a full-note snapshot taken at scan time) is
+ * filed with the target's current `baseEtag`, so approving it after the note
+ * changed is rejected (`409 stale_write`) by `applyProposal` rather than silently
+ * overwriting the edit. Shared by `POST /api/maintenance/scan` and the optional
+ * `MAINTENANCE_INTERVAL_MS` scheduler in `createServer`.
  */
 export async function runMaintenanceScan(deps: {
   vaultIndex: VaultIndex;
@@ -1396,8 +1398,16 @@ export async function runMaintenanceScan(deps: {
   const documents = await deps.vaultIndex.getDocuments();
   const findings = scanVault(documents, deps.options);
 
-  const pending = await deps.proposalStore.list({ status: 'pending' });
-  const openKeys = new Set(pending.map((proposal) => `${proposal.action}:${proposal.path}`));
+  // Block re-filing against pending + rejected proposals. Approved ones aren't
+  // blocked: the fix already landed, so the finding resolves on its own (a
+  // created stub now exists; an approved cross-link makes the pair already
+  // linked, so `scanVault` reports it without a suggestion).
+  const existing = await deps.proposalStore.list();
+  const blockedKeys = new Set(
+    existing
+      .filter((proposal) => proposal.status === 'pending' || proposal.status === 'rejected')
+      .map((proposal) => `${proposal.action}:${proposal.path}`),
+  );
 
   const proposalsFiled: EditProposal[] = [];
   for (const finding of findings) {
@@ -1406,11 +1416,11 @@ export async function runMaintenanceScan(deps: {
       continue;
     }
     const key = `${suggestion.action}:${suggestion.path}`;
-    if (openKeys.has(key)) {
+    if (blockedKeys.has(key)) {
       continue;
     }
     // Guard against two findings suggesting the same action+path within one scan.
-    openKeys.add(key);
+    blockedKeys.add(key);
 
     // Stamp an `update` with the target's current etag so a stale approval is
     // rejected instead of clobbering edits. (A `create` needs none — it 409s on

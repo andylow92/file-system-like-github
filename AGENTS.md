@@ -163,9 +163,10 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   proposal** the human approves in the Review tab (reusing the `ProposalStore` +
   `EventBus`). `GET /api/maintenance` previews; `POST /api/maintenance/scan` (and
   the `run_maintenance` MCP tool) files suggestions as a distinct
-  `agent:maintenance` actor and is **idempotent** — it dedupes against open
-  proposals, so re-running never spams the queue. On-demand by default (optional
-  `MAINTENANCE_INTERVAL_MS` timer). Resolution stays human-only; contradiction
+  `agent:maintenance` actor and is **idempotent** — it dedupes against pending
+  _and_ rejected proposals, so re-running never spams the queue or re-surfaces a
+  declined fix. On-demand by default (optional `MAINTENANCE_INTERVAL_MS` timer).
+  Resolution stays human-only; contradiction
   detection is a deferred follow-up (it needs an LLM, out of the offline scope).
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back

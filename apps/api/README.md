@@ -538,8 +538,10 @@ note }` that maps 1:1 onto a proposal.
 - `POST /api/maintenance/scan` — files each finding's suggestion as a proposal
   (attributed to the `agent:maintenance` actor) and returns
   `{ findings, proposalsFiled }`. **Idempotent**: a suggestion whose
-  `action`+`path` already matches an open (`pending`) proposal is skipped, so
-  re-running never spams the Review queue. An `update` suggestion (the duplicate
+  `action`+`path` already matches a still-relevant proposal — `pending` (awaiting
+  review) or `rejected` (the human already declined it) — is skipped, so
+  re-running never spams the Review queue and never re-surfaces a rejected fix. An
+  `update` suggestion (the duplicate
   cross-link) is stamped with the target note's current `baseEtag`, so approving
   it after the note changed returns `409 stale_write` rather than overwriting the
   edit. Resolution stays human-only — the scan only proposes; it never applies an
