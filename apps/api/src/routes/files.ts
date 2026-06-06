@@ -12,8 +12,10 @@ import type {
   ContextCandidate,
   EditProposal,
   FileNode,
+  HybridHit,
   PatchOp,
   ProposalAction,
+  RankedChunk,
   SearchMatch,
   VaultEvent,
 } from '@repo/shared';
@@ -33,6 +35,7 @@ import {
   findTextMatch,
   parseFrontmatter,
   parseNote,
+  reciprocalRankFusion,
   resolveWikilink,
 } from '@repo/shared';
 
@@ -762,37 +765,28 @@ async function handleSearch({ res, url, vaultIndex }: RequestContext): Promise<v
   // identical (same corpus, same order) but it doesn't re-read the whole vault.
   const documents = await vaultIndex.getDocuments();
   const tagLower = tag.toLowerCase();
-  const matches: SearchMatch[] = [];
 
-  for (const { path: filePath, content } of documents) {
-    const note = parseNote(content);
-
-    if (tag && !note.tags.some((noteTag) => noteTag.toLowerCase() === tagLower)) {
-      continue;
+  let matches: SearchMatch[];
+  if (query) {
+    // Lexical ranking (shared with `/api/hybrid-search`), then an optional tag
+    // filter — equivalent to the old per-note `tag && !has → continue` guard.
+    matches = rankByText(documents, query);
+    if (tag) {
+      matches = matches.filter((match) =>
+        match.tags.some((noteTag) => noteTag.toLowerCase() === tagLower),
+      );
     }
-
-    const name = filePath.split('/').pop() ?? filePath;
-
-    if (query) {
-      const textMatch = findTextMatch(note.body, query);
-      const nameMatches = name.toLowerCase().includes(query.toLowerCase());
-      if (!textMatch && !nameMatches) {
+  } else {
+    // Tag-only search: every note carrying the tag, with no ranking signal.
+    matches = [];
+    for (const { path: filePath, content } of documents) {
+      const note = parseNote(content);
+      if (!note.tags.some((noteTag) => noteTag.toLowerCase() === tagLower)) {
         continue;
       }
-
-      matches.push({
-        path: filePath,
-        name,
-        score: (textMatch?.count ?? 0) + (nameMatches ? 1 : 0),
-        snippet: textMatch?.snippet ?? '',
-        line: textMatch?.line ?? 0,
-        tags: note.tags,
-      });
-      continue;
+      const name = filePath.split('/').pop() ?? filePath;
+      matches.push({ path: filePath, name, score: 1, snippet: '', line: 0, tags: note.tags });
     }
-
-    // Tag-only search.
-    matches.push({ path: filePath, name, score: 1, snippet: '', line: 0, tags: note.tags });
   }
 
   matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
@@ -809,6 +803,133 @@ async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): P
   }
 
   const hits = await vaultIndex.semanticSearch(query, { limit });
+  sendJson(res, 200, { success: true, data: hits });
+}
+
+const DEFAULT_HYBRID_LIMIT = 10;
+// How many candidate notes each engine contributes to the fusion. A wider pool
+// than the returned `limit` lets RRF reorder across engines before we truncate.
+const HYBRID_CANDIDATE_LIMIT = 50;
+// The semantic engine ranks *chunks*, and several top chunks can share one long
+// note; oversample the chunk pool so that, after collapsing to one chunk per
+// note, semantic still feeds RRF a full pool of distinct candidate notes.
+const HYBRID_CHUNK_OVERSAMPLE = 4;
+
+/**
+ * The lexical engine: rank notes by full-text (body) + filename substring match,
+ * highest occurrence count first. Shared by `/api/search` (which slices it for
+ * its response) and `/api/hybrid-search` (which feeds it into RRF), so the two
+ * endpoints can never drift on how they score keyword relevance.
+ */
+function rankByText(
+  documents: readonly { path: string; content: string }[],
+  query: string,
+): SearchMatch[] {
+  const matches: SearchMatch[] = [];
+  for (const { path: filePath, content } of documents) {
+    const note = parseNote(content);
+    const name = filePath.split('/').pop() ?? filePath;
+    const textMatch = findTextMatch(note.body, query);
+    const nameMatches = name.toLowerCase().includes(query.toLowerCase());
+    if (!textMatch && !nameMatches) {
+      continue;
+    }
+    matches.push({
+      path: filePath,
+      name,
+      score: (textMatch?.count ?? 0) + (nameMatches ? 1 : 0),
+      snippet: textMatch?.snippet ?? '',
+      line: textMatch?.line ?? 0,
+      tags: note.tags,
+    });
+  }
+  matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  return matches;
+}
+
+/** First non-empty body line of a note (heading marker stripped) — a fallback
+ * display snippet for hits that have no exact match line and no semantic chunk. */
+function firstBodyLine(content: string): string {
+  const { body } = parseNote(content);
+  for (const raw of body.split('\n')) {
+    const text = raw
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) {
+      return text.slice(0, 200);
+    }
+  }
+  return '';
+}
+
+/**
+ * Hybrid retrieval: fuse the lexical (keyword) and semantic (relevance) rankings
+ * with Reciprocal Rank Fusion. Each engine ranks notes by a non-comparable
+ * score, so we fuse by rank position and keep the best snippet from whichever
+ * engine matched (preferring the exact lexical line for legibility).
+ */
+async function handleHybridSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_HYBRID_LIMIT;
+
+  if (!query) {
+    throw new Error('"q" is required');
+  }
+
+  const documents = await vaultIndex.getDocuments();
+
+  // Lexical ranking: notes ordered by full-text + filename match.
+  const lexical = rankByText(documents, query).slice(0, HYBRID_CANDIDATE_LIMIT);
+
+  // Semantic ranking: collapse the per-chunk ranking to the best chunk per note,
+  // preserving order (the index returns chunks already sorted by score).
+  // Oversample chunks, then keep the top HYBRID_CANDIDATE_LIMIT *distinct* notes
+  // so semantic feeds RRF a pool comparable to lexical even on long-note vaults.
+  const ranked = await vaultIndex.rankedChunks(query, {
+    limit: HYBRID_CANDIDATE_LIMIT * HYBRID_CHUNK_OVERSAMPLE,
+  });
+  const bestChunk = new Map<string, RankedChunk>();
+  for (const chunk of ranked) {
+    if (!bestChunk.has(chunk.path)) {
+      bestChunk.set(chunk.path, chunk);
+      if (bestChunk.size >= HYBRID_CANDIDATE_LIMIT) {
+        break;
+      }
+    }
+  }
+
+  // Fuse by rank (scales aren't comparable across engines).
+  const fused = reciprocalRankFusion([
+    { keys: lexical.map((match) => match.path), label: 'text' },
+    { keys: [...bestChunk.keys()], label: 'semantic' },
+  ]);
+
+  const lexicalByPath = new Map(lexical.map((match) => [match.path, match]));
+  const contentByPath = new Map(documents.map((doc) => [doc.path, doc.content]));
+
+  const hits: HybridHit[] = fused.slice(0, limit).map((item) => {
+    const lex = lexicalByPath.get(item.key);
+    const sem = bestChunk.get(item.key);
+    const content = contentByPath.get(item.key) ?? '';
+    const semSnippet = sem ? sem.text.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    const useLexicalSnippet = Boolean(lex?.snippet);
+    // Prefer the exact lexical line, then the semantic chunk; fall back to the
+    // note's first line so a filename-only hit never renders a blank preview.
+    const snippet = (useLexicalSnippet ? lex!.snippet : semSnippet) || firstBodyLine(content);
+    return {
+      path: item.key,
+      name: item.key.split('/').pop() ?? item.key,
+      score: Number(item.score.toFixed(4)),
+      snippet,
+      ...(!useLexicalSnippet && sem?.heading ? { heading: sem.heading } : {}),
+      line: lex?.line ?? 0,
+      tags: lex?.tags ?? parseNote(content).tags,
+      sources: item.sources as ('text' | 'semantic')[],
+    };
+  });
+
   sendJson(res, 200, { success: true, data: hits });
 }
 
@@ -1151,6 +1272,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/semantic-search') {
     await executeHandler(context, handleSemanticSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/hybrid-search') {
+    await executeHandler(context, handleHybridSearch);
     return { handled: true };
   }
 

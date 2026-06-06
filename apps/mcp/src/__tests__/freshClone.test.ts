@@ -22,7 +22,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { AuditEntry, EditProposal, SearchMatch, SemanticHit } from '@repo/shared';
+import type { AuditEntry, EditProposal, HybridHit, SearchMatch, SemanticHit } from '@repo/shared';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mcpRoot = path.resolve(here, '..', '..');
@@ -95,6 +95,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'get_block_anchors',
         'get_context',
         'get_graph',
+        'hybrid_search',
         'list_notes',
         'list_proposals',
         'move_path',
@@ -151,6 +152,15 @@ describe('fresh-clone MCP end-to-end', () => {
     const hits = decode<SemanticHit[]>(semanticResult);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits.map((hit) => hit.path)).toContain('notes/idea.md');
+
+    // 5b) hybrid_search fuses keyword + semantic ranking and finds it too.
+    const hybridResult = (await client.callTool({
+      name: 'hybrid_search',
+      arguments: { query: 'brainstorm vault for agents', limit: 5 },
+    })) as ContentResult;
+    const hybridHits = decode<HybridHit[]>(hybridResult);
+    expect(hybridHits.map((hit) => hit.path)).toContain('notes/idea.md');
+    expect(hybridHits.every((hit) => hit.sources.length > 0)).toBe(true);
 
     // 6) propose_edit + list_proposals — agent-driven review queue.
     const proposeResult = (await client.callTool({
@@ -228,8 +238,9 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(18);
+    expect(tools.length).toBe(19);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
+    expect(tools.map((tool) => tool.name)).toContain('hybrid_search');
 
     // The readiness banner is what an MCP host log shows on a spawn — assert
     // both the prefix and the mode so a silent regression here is visible.

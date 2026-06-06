@@ -33,6 +33,7 @@ import type {
   EditProposal,
   FileNode,
   GraphData,
+  HybridHit,
   SearchMatch,
   SemanticHit,
 } from '@repo/shared';
@@ -331,6 +332,24 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       const params = new URLSearchParams({ q: query });
       if (limit) params.set('limit', String(limit));
       return apiRequest<SemanticHit[]>(`/api/semantic-search?${params.toString()}`);
+    }),
+  );
+
+  register(
+    'hybrid_search',
+    'Hybrid retrieval: fuses full-text (keyword) and semantic (relevance) ' +
+      'ranking via Reciprocal Rank Fusion. Prefer this as the default search — ' +
+      'it surfaces exact keyword hits and conceptually-related passages in one ' +
+      'ranked list, so you miss neither. Returns HybridHit[] (path, name, score, ' +
+      'snippet, heading?, line, tags, sources: ("text" | "semantic")[]).',
+    {
+      query: z.string().describe('What to find — keywords or a natural-language description.'),
+      limit: z.number().optional(),
+    },
+    tool(async ({ query, limit }: { query: string; limit?: number }) => {
+      const params = new URLSearchParams({ q: query });
+      if (limit) params.set('limit', String(limit));
+      return apiRequest<HybridHit[]>(`/api/hybrid-search?${params.toString()}`);
     }),
   );
 

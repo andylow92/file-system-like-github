@@ -213,7 +213,7 @@ See the full deployment examples in this README’s history and backend docs.
 
 ## Roadmap ideas
 
-- Search across markdown files
+- ✅ Search across markdown files (full-text, semantic, and **hybrid** RRF)
 - Git sync workflows
 - Multi-user auth + permissions
 - Real-time collaborative editing
