@@ -421,6 +421,10 @@ Returns an `AnswerKit` (from `@repo/shared`), optionally with `answer`:
 }
 ```
 
+Each `citations[].block` is the passage's block-anchor **id only** — the bare
+`claim-1`, not the on-page `^claim-1` marker — so it can be passed straight to
+`/api/block?block=`. It is present only when the passage carries an anchor.
+
 The gap analysis is deterministic and computed with **no model**: `weakCoverage`
 is true when the best match score is below `threshold` (or nothing matched), and
 `uncoveredTerms` lists query terms (stem-compared) that no passage supports.

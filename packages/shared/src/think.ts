@@ -123,6 +123,9 @@ export function assembleAnswerKit(
 
   // Compare *stems* (the same tokenizer the ranking engine uses) so a query
   // "felines" is covered by "feline" in a passage. Report the original word.
+  // Coverage is measured over `passages` — the bundle's budget-packed items —
+  // so a very tight token budget that drops a covering passage can surface its
+  // term as uncovered; at the default budget this effectively never bites.
   const passageStems = new Set<string>();
   for (const item of passages) {
     const text = item.heading ? `${item.heading}\n${item.text}` : item.text;

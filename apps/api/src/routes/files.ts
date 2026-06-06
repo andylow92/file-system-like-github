@@ -1065,6 +1065,10 @@ async function handleThink(context: RequestContext): Promise<void> {
   const ranked = await vaultIndex.rankedChunks(query, {
     limit: THINK_MATCH_LIMIT * THINK_CHUNK_OVERSAMPLE,
   });
+  // Collapse to the best chunk per note. The `rankedChunks` limit above already
+  // bounds this map, and `fused.slice(0, THINK_MATCH_LIMIT)` bounds the final
+  // pool — so, unlike `handleHybridSearch` (which serves a much wider list and
+  // caps distinct notes at HYBRID_CANDIDATE_LIMIT), no explicit cap is needed here.
   const bestChunk = new Map<string, RankedChunk>();
   for (const chunk of ranked) {
     if (!bestChunk.has(chunk.path)) {
@@ -1090,7 +1094,11 @@ async function handleThink(context: RequestContext): Promise<void> {
       });
       continue;
     }
-    // Lexical-only note: include its leading chunk (score 0 — no relevance signal).
+    // Lexical-only note: include its leading chunk. Score 0 is deliberate — a
+    // keyword/filename hit carries no comparable relevance signal, so it does
+    // not count toward coverage *strength* (`gaps.weakCoverage` / `topScore`).
+    // Its terms still register as covered via `uncoveredTerms`, so a pure
+    // keyword hit can read as "weak coverage" yet leave no term uncovered.
     const lead = chunkNote(item.key, contentByPath.get(item.key) ?? '')[0];
     if (lead?.text) {
       matches.push({
