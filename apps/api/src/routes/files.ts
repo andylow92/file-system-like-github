@@ -1349,6 +1349,29 @@ function publishMaintenanceProposal(eventBus: EventBus, logicalPath: string): vo
 }
 
 /**
+ * The current etag of a note, computed exactly as `loadFileFromContext` does
+ * (`sha1(content + lastModified)`), or `undefined` if the file can't be read.
+ * Used to stamp a maintenance `update` proposal with a `baseEtag` so approving a
+ * stale one 409s instead of clobbering edits made between the scan and approval.
+ */
+async function currentNoteEtag(
+  pathResolver: PathResolver,
+  logicalPath: string,
+): Promise<string | undefined> {
+  try {
+    const absolutePath = pathResolver.resolveMarkdownPath(logicalPath);
+    const stat = await fs.stat(absolutePath);
+    if (!stat.isFile()) {
+      return undefined;
+    }
+    const content = await fs.readFile(absolutePath, 'utf8');
+    return toEtag(content, stat.mtime.toISOString());
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Run the dream-cycle maintenance scan over the cached corpus and file each
  * actionable finding's suggestion as an edit proposal (attributed to
  * `agent:maintenance`) for human review in the Review tab. Resolution stays
@@ -1356,13 +1379,18 @@ function publishMaintenanceProposal(eventBus: EventBus, logicalPath: string): vo
  *
  * Idempotent: a suggestion whose `action`+`path` already matches an **open
  * (pending)** proposal is skipped, so re-running the scan never spams the Review
- * queue. Shared by `POST /api/maintenance/scan` and the optional
- * `MAINTENANCE_INTERVAL_MS` scheduler in `createServer`.
+ * queue. An `update` suggestion (the duplicate cross-link, whose `content` is a
+ * full-note snapshot taken at scan time) is filed with the target's current
+ * `baseEtag`, so approving it after the note changed is rejected (`409
+ * stale_write`) by `applyProposal` rather than silently overwriting the edit.
+ * Shared by `POST /api/maintenance/scan` and the optional `MAINTENANCE_INTERVAL_MS`
+ * scheduler in `createServer`.
  */
 export async function runMaintenanceScan(deps: {
   vaultIndex: VaultIndex;
   proposalStore: ProposalStore;
   eventBus: EventBus;
+  pathResolver: PathResolver;
   options?: ScanVaultOptions;
 }): Promise<MaintenanceScanResult> {
   const documents = await deps.vaultIndex.getDocuments();
@@ -1384,11 +1412,20 @@ export async function runMaintenanceScan(deps: {
     // Guard against two findings suggesting the same action+path within one scan.
     openKeys.add(key);
 
+    // Stamp an `update` with the target's current etag so a stale approval is
+    // rejected instead of clobbering edits. (A `create` needs none — it 409s on
+    // "File already exists".)
+    const baseEtag =
+      suggestion.action === 'update'
+        ? await currentNoteEtag(deps.pathResolver, suggestion.path)
+        : undefined;
+
     const proposal = await deps.proposalStore.create({
       actor: MAINTENANCE_ACTOR,
       action: suggestion.action,
       path: suggestion.path,
       ...(suggestion.content !== undefined ? { content: suggestion.content } : {}),
+      ...(baseEtag ? { baseEtag } : {}),
       note: suggestion.note,
     });
     publishMaintenanceProposal(deps.eventBus, suggestion.path);
@@ -1407,8 +1444,8 @@ async function handleMaintenancePreview({ res, vaultIndex }: RequestContext): Pr
 
 /** POST /api/maintenance/scan — scan and file each actionable finding as a proposal. */
 async function handleMaintenanceScan(context: RequestContext): Promise<void> {
-  const { res, vaultIndex, proposalStore, eventBus } = context;
-  const result = await runMaintenanceScan({ vaultIndex, proposalStore, eventBus });
+  const { res, vaultIndex, proposalStore, eventBus, pathResolver } = context;
+  const result = await runMaintenanceScan({ vaultIndex, proposalStore, eventBus, pathResolver });
   sendJson<MaintenanceScanResult>(res, 200, { success: true, data: result });
 }
 

@@ -41,7 +41,7 @@ export function createServer(config = loadConfig()): http.Server {
   let maintenanceTimer: NodeJS.Timeout | undefined;
   if (Number.isFinite(maintenanceIntervalMs) && maintenanceIntervalMs > 0) {
     maintenanceTimer = setInterval(() => {
-      void runMaintenanceScan({ vaultIndex, proposalStore, eventBus }).catch(() => {
+      void runMaintenanceScan({ vaultIndex, proposalStore, eventBus, pathResolver }).catch(() => {
         // Best-effort: a scheduled scan must never crash the server.
       });
     }, maintenanceIntervalMs);

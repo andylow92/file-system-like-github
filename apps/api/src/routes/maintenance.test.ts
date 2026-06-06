@@ -138,4 +138,32 @@ describe('maintenance — scan → review proposals', () => {
     expect(proposalsFiled[0].path).toBe('dupA.md');
     expect(proposalsFiled[0].content).toContain('> See also [[dupB]]');
   });
+
+  it('stamps a duplicate update with baseEtag so a stale approval is rejected', async () => {
+    const body = '# Topic\nThe nightly dream cycle dedupes notes and repairs broken links.';
+    await seed('dupA.md', body);
+    await seed('dupB.md', body);
+
+    const scan = await api<ScanResult>('POST', '/api/maintenance/scan');
+    const update = scan.body.data!.proposalsFiled.find((p) => p.action === 'update');
+    expect(update).toBeDefined();
+    // The update carries the target's current etag — the optimistic-concurrency guard.
+    expect(update!.baseEtag).toBeTruthy();
+
+    // A human edits dupA after the scan was filed...
+    const before = await api<{ etag: string }>('GET', '/api/file?path=dupA.md');
+    await api('PUT', '/api/file', {
+      body: { path: 'dupA.md', content: `${body}\n\nHuman edit.`, etag: before.body.data!.etag },
+    });
+
+    // ...so approving the now-stale maintenance proposal 409s instead of clobbering it.
+    const resolve = await api('POST', '/api/proposals/resolve', {
+      body: { id: update!.id, decision: 'approve' },
+    });
+    expect(resolve.status).toBe(409);
+
+    // And the human's edit survived.
+    const after = await api<{ content: string }>('GET', '/api/file?path=dupA.md');
+    expect(after.body.data!.content).toContain('Human edit.');
+  });
 });

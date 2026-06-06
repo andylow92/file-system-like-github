@@ -539,8 +539,11 @@ note }` that maps 1:1 onto a proposal.
   (attributed to the `agent:maintenance` actor) and returns
   `{ findings, proposalsFiled }`. **Idempotent**: a suggestion whose
   `action`+`path` already matches an open (`pending`) proposal is skipped, so
-  re-running never spams the Review queue. Resolution stays human-only — the scan
-  only proposes; it never applies an edit.
+  re-running never spams the Review queue. An `update` suggestion (the duplicate
+  cross-link) is stamped with the target note's current `baseEtag`, so approving
+  it after the note changed returns `409 stale_write` rather than overwriting the
+  edit. Resolution stays human-only — the scan only proposes; it never applies an
+  edit.
 
 Scheduling is on-demand by default. Setting `MAINTENANCE_INTERVAL_MS` to a
 positive number makes `createServer` also run the scan on that interval (the
