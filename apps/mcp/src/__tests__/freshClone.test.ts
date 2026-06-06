@@ -22,7 +22,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { AuditEntry, EditProposal, HybridHit, SearchMatch, SemanticHit } from '@repo/shared';
+import type {
+  AnswerKit,
+  AuditEntry,
+  EditProposal,
+  HybridHit,
+  SearchMatch,
+  SemanticHit,
+} from '@repo/shared';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mcpRoot = path.resolve(here, '..', '..');
@@ -106,6 +113,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'recent_activity',
         'search_notes',
         'semantic_search',
+        'think',
         'update_note',
       ].sort(),
     );
@@ -161,6 +169,20 @@ describe('fresh-clone MCP end-to-end', () => {
     const hybridHits = decode<HybridHit[]>(hybridResult);
     expect(hybridHits.map((hit) => hit.path)).toContain('notes/idea.md');
     expect(hybridHits.every((hit) => hit.sources.length > 0)).toBe(true);
+
+    // 5c) think returns a cited answer kit + offline gap analysis (no key needed).
+    const thinkResult = (await client.callTool({
+      name: 'think',
+      arguments: { query: 'can the vault serve agents and humans?' },
+    })) as ContentResult;
+    const kit = decode<AnswerKit>(thinkResult);
+    expect(kit.citations.length).toBeGreaterThan(0);
+    expect(kit.citations.map((c) => c.path)).toContain('notes/idea.md');
+    // Citation numbers map onto the gathered passages.
+    expect(kit.citations.map((c) => c.n)).toEqual(kit.passages.map((_, i) => i + 1));
+    // The deterministic gap analysis is present and offline (no synthesized answer).
+    expect(kit.gaps).toHaveProperty('uncoveredTerms');
+    expect((kit as AnswerKit & { answer?: string }).answer).toBeUndefined();
 
     // 6) propose_edit + list_proposals — agent-driven review queue.
     const proposeResult = (await client.callTool({
@@ -238,9 +260,9 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(19);
+    expect(tools.length).toBe(20);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
-    expect(tools.map((tool) => tool.name)).toContain('hybrid_search');
+    expect(tools.map((tool) => tool.name)).toContain('think');
 
     // The readiness banner is what an MCP host log shows on a spawn — assert
     // both the prefix and the mode so a silent regression here is visible.
