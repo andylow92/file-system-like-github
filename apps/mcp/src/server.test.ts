@@ -80,6 +80,7 @@ describe('mcp server (self-contained)', () => {
           'recent_activity',
           'search_notes',
           'semantic_search',
+          'think',
           'update_note',
         ].sort(),
       );

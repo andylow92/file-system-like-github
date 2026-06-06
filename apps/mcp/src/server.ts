@@ -25,6 +25,7 @@ import { createServer as createApiServer, loadConfig, type ServerConfig } from '
 import { z } from 'zod';
 
 import type {
+  AnswerKit,
   ApiResponse,
   AuditEntry,
   Backlink,
@@ -385,6 +386,44 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
         if (focusPath) params.set('path', focusPath);
         if (budget) params.set('budget', String(budget));
         return apiRequest<ContextBundle>(`/api/context?${params.toString()}`);
+      },
+    ),
+  );
+
+  register(
+    'think',
+    'Answer a question *grounded in the vault*. Runs hybrid retrieval, assembles ' +
+      'a token-budgeted context bundle, and returns an AnswerKit: numbered ' +
+      'citations ([1], [2]…) mapped to source passages (path, heading?, block?), ' +
+      'the passages themselves, an offline gap analysis (`gaps.weakCoverage` + ' +
+      '`gaps.uncoveredTerms` — "what the vault does not yet cover"), and a ' +
+      'coverage summary. Call this before answering, then compose the final cited ' +
+      'answer yourself from the returned citations — the synthesis is yours to do.',
+    {
+      query: z.string().describe('The question to answer from the vault.'),
+      focusPath: z
+        .string()
+        .optional()
+        .describe('A note to center the answer on; adds it and its backlinks as neighbor context.'),
+      budget: z
+        .number()
+        .optional()
+        .describe('Approximate token budget for the gathered passages (default ~2000).'),
+    },
+    tool(
+      async ({
+        query,
+        focusPath,
+        budget,
+      }: {
+        query: string;
+        focusPath?: string;
+        budget?: number;
+      }) => {
+        const params = new URLSearchParams({ q: query });
+        if (focusPath) params.set('path', focusPath);
+        if (budget) params.set('budget', String(budget));
+        return apiRequest<AnswerKit>(`/api/think?${params.toString()}`);
       },
     ),
   );

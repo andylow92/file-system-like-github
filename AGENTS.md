@@ -98,10 +98,10 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 19 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 20 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
-  `semantic_search`, `hybrid_search`, `get_context`, `get_backlinks`,
+  `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `recent_activity`, `create_folder`, `move_path`, `delete_path`,
   `propose_edit`, `list_proposals`). It runs
   the storage API **in-process** by default, so it is a single
@@ -145,6 +145,17 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   helpers are pure (`@repo/shared` `context.ts`) and the ranking engine is
   swappable for real embeddings later behind the same `documents → ranked`
   contract.
+- **Brain layer — `think` (cited answers + offline gap analysis)** — turns a
+  question into a **grounded answer kit** instead of raw pages. `GET /api/think`
+  (and the `think` MCP tool) runs hybrid retrieval, assembles a context bundle,
+  and returns numbered **citations** (`[1]`, `[2]`…) mapped to source passages
+  (path + heading + `^block` anchor), the passages, and a deterministic,
+  **offline gap analysis** (`weakCoverage` + `uncoveredTerms` — "what the vault
+  doesn't yet cover"), computed from retrieval scores with **no model**. The
+  kit-shaping is pure (`@repo/shared` `think.ts` — `assembleAnswerKit`). Offline
+  by default: the calling agent is the LLM and composes the final cited answer
+  from the kit; a server-side `OPENROUTER_API_KEY` + `?synthesize=1` optionally
+  adds a synthesized prose `answer`.
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
 semantic search (the cached index + context bundle endpoint above are the seam

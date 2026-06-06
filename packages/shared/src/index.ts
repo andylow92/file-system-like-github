@@ -149,3 +149,4 @@ export * from './noteId.js';
 export * from './patch.js';
 export * from './search.js';
 export * from './semantic.js';
+export * from './think.js';

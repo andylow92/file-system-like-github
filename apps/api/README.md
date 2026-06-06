@@ -365,6 +365,71 @@ The bundle-shaping (token estimation, de-dupe, budget packing) lives as pure,
 tested helpers in `@repo/shared` (`context.ts`); the ranking engine is swappable
 for real vector embeddings later behind the same `documents → ranked` contract.
 
+### `GET /api/think?q=...&path=...&budget=...&synthesize=...`
+
+The **brain layer**: turns a question into a grounded, cited **answer kit**
+instead of raw pages. It runs hybrid retrieval (fuse lexical + semantic by RRF),
+assembles a token-budgeted context bundle from the fused passages, and returns
+numbered citations + an **offline gap analysis** via the pure `assembleAnswerKit`
+(`@repo/shared` `think.ts`). `q` is required (`422` otherwise). Reads through the
+cached index — no extra vault read.
+
+- `q` (required): the question to answer.
+- `path` (optional): a focus note. When given, the bundle also includes that
+  note's chunks and its backlinks as **neighbor** context (also citable).
+- `budget` (optional): approximate token budget for the gathered passages
+  (default `2000`).
+- `synthesize` (optional): `1`/`true` to also return a synthesized prose
+  `answer`. **Stays fully offline by default** — the answer is only produced when
+  an OpenRouter key is configured **server-side** (`OPENROUTER_API_KEY`; model via
+  `OPENROUTER_MODEL`, default `anthropic/claude-3.5-sonnet`). With no key, this
+  flag is ignored and the request never fails; the agent calling the MCP tool is
+  itself the LLM and composes the final cited answer from the kit.
+
+Returns an `AnswerKit` (from `@repo/shared`), optionally with `answer`:
+
+```json
+{
+  "query": "how do backups work",
+  "passages": [
+    {
+      "path": "ops/backups.md",
+      "heading": "Strategy",
+      "text": "Snapshots run nightly…",
+      "score": 0.42,
+      "kind": "match"
+    }
+  ],
+  "citations": [
+    {
+      "n": 1,
+      "path": "ops/backups.md",
+      "heading": "Strategy",
+      "block": "claim-1",
+      "score": 0.42,
+      "kind": "match",
+      "excerpt": "Snapshots run nightly…"
+    }
+  ],
+  "gaps": {
+    "weakCoverage": false,
+    "topScore": 0.42,
+    "threshold": 0.1,
+    "uncoveredTerms": ["offsite"]
+  },
+  "coverage": { "citations": 1, "notes": 1, "topScore": 0.42 }
+}
+```
+
+The gap analysis is deterministic and computed with **no model**: `weakCoverage`
+is true when the best match score is below `threshold` (or nothing matched), and
+`uncoveredTerms` lists query terms (stem-compared) that no passage supports.
+
+```bash
+curl "http://localhost:3001/api/think?q=how%20do%20backups%20work"
+curl "http://localhost:3001/api/think?q=restore&path=ops/backups.md&synthesize=1"
+```
+
 ### `GET /api/audit?path=...&limit=...`
 
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally

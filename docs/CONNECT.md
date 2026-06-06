@@ -24,7 +24,7 @@ npm run start:agent      # launches fsbrain-mcp on stdio (Ctrl-C to stop)
 The server prints a readiness banner on stderr, e.g.:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=19 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=20 · actor=agent:mcp
 ```
 
 Then point your agent host at it — copy one of the snippets below.

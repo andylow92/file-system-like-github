@@ -5,6 +5,7 @@ import path from 'node:path';
 import { URL } from 'node:url';
 
 import type {
+  AnswerKit,
   ApiResponse,
   AuditEntry,
   Backlink,
@@ -24,6 +25,7 @@ import {
   PATCH_OP_TYPES,
   SectionNotFoundError,
   applyPatchOp,
+  assembleAnswerKit,
   assembleContextBundle,
   buildGraph,
   chunkNote,
@@ -47,6 +49,7 @@ import type { IdempotencyCache } from '../storage/idempotencyCache.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
 import type { ProposalStore } from '../storage/proposalStore.js';
+import { loadSynthesisConfig, synthesizeAnswer } from '../think/synthesize.js';
 
 interface RouteResult {
   handled: boolean;
@@ -1023,6 +1026,116 @@ async function handleGetContext({ res, url, vaultIndex }: RequestContext): Promi
   sendJson(res, 200, { success: true, data: bundle });
 }
 
+const DEFAULT_THINK_BUDGET = 2000;
+// How many top fused notes feed the answer kit as cited passages.
+const THINK_MATCH_LIMIT = 8;
+// Oversample semantic chunks so collapsing to one-per-note still fills the pool.
+const THINK_CHUNK_OVERSAMPLE = 4;
+
+/**
+ * `think` — a grounded, cited answer kit. Runs **hybrid retrieval** (fuse the
+ * lexical + semantic rankings by RRF so neither exact keyword nor conceptual
+ * matches are missed), assembles a token-budgeted context bundle from the fused
+ * passages, and returns numbered citations + an **offline gap analysis** via the
+ * pure `assembleAnswerKit`. Stays fully offline by default; only when an
+ * OpenRouter key is configured server-side *and* the request opts in
+ * (`synthesize=1`) does it also include a synthesized prose `answer` — and a
+ * synthesis failure never fails the offline kit.
+ */
+async function handleThink(context: RequestContext): Promise<void> {
+  const { res, url, vaultIndex } = context;
+  const query = (url.searchParams.get('q') ?? '').trim();
+  if (!query) {
+    throw new Error('"q" is required');
+  }
+
+  const focusPath = (url.searchParams.get('path') ?? '').trim();
+  const budgetParam = Number(url.searchParams.get('budget'));
+  const tokenBudget =
+    Number.isFinite(budgetParam) && budgetParam > 0
+      ? Math.floor(budgetParam)
+      : DEFAULT_THINK_BUDGET;
+
+  const documents = await vaultIndex.getDocuments();
+
+  // Hybrid match selection: fuse lexical + semantic by rank, then bring in each
+  // fused note's full passage text (the semantic chunk, or — for a lexical-only
+  // note — its leading chunk, so a keyword-only hit is never dropped).
+  const lexical = rankByText(documents, query).slice(0, HYBRID_CANDIDATE_LIMIT);
+  const ranked = await vaultIndex.rankedChunks(query, {
+    limit: THINK_MATCH_LIMIT * THINK_CHUNK_OVERSAMPLE,
+  });
+  const bestChunk = new Map<string, RankedChunk>();
+  for (const chunk of ranked) {
+    if (!bestChunk.has(chunk.path)) {
+      bestChunk.set(chunk.path, chunk);
+    }
+  }
+
+  const fused = reciprocalRankFusion([
+    { keys: lexical.map((match) => match.path), label: 'text' },
+    { keys: [...bestChunk.keys()], label: 'semantic' },
+  ]);
+
+  const contentByPath = new Map(documents.map((doc) => [doc.path, doc.content]));
+  const matches: ContextCandidate[] = [];
+  for (const item of fused.slice(0, THINK_MATCH_LIMIT)) {
+    const sem = bestChunk.get(item.key);
+    if (sem) {
+      matches.push({
+        path: sem.path,
+        ...(sem.heading ? { heading: sem.heading } : {}),
+        text: sem.text,
+        score: sem.score,
+      });
+      continue;
+    }
+    // Lexical-only note: include its leading chunk (score 0 — no relevance signal).
+    const lead = chunkNote(item.key, contentByPath.get(item.key) ?? '')[0];
+    if (lead?.text) {
+      matches.push({
+        path: item.key,
+        ...(lead.heading ? { heading: lead.heading } : {}),
+        text: lead.text,
+        score: 0,
+      });
+    }
+  }
+
+  // When focused on a note, add it + its backlinks as neighbor context.
+  const neighbors = focusPath ? buildContextNeighbors(documents, focusPath) : undefined;
+
+  const bundle = assembleContextBundle({
+    query,
+    ...(focusPath ? { focusPath } : {}),
+    tokenBudget,
+    matches,
+    neighbors,
+  });
+
+  const kit = assembleAnswerKit(query, bundle);
+
+  // Optional, opt-in, offline-by-default synthesis (only with a server-side key).
+  let answer: string | undefined;
+  const synthesizeParam = (url.searchParams.get('synthesize') ?? '').toLowerCase();
+  if (synthesizeParam === '1' || synthesizeParam === 'true') {
+    const config = loadSynthesisConfig();
+    if (config) {
+      try {
+        answer = await synthesizeAnswer({ config, kit });
+      } catch {
+        // A synthesis failure must never fail the offline answer kit.
+        answer = undefined;
+      }
+    }
+  }
+
+  sendJson<AnswerKit & { answer?: string }>(res, 200, {
+    success: true,
+    data: { ...kit, ...(answer ? { answer } : {}) },
+  });
+}
+
 async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<void> {
   const pathFilter = url.searchParams.get('path')?.trim() || undefined;
   const limitParam = Number(url.searchParams.get('limit'));
@@ -1282,6 +1395,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/context') {
     await executeHandler(context, handleGetContext);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/think') {
+    await executeHandler(context, handleThink);
     return { handled: true };
   }
 

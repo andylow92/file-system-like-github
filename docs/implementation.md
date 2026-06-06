@@ -5,7 +5,31 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-06 (hybrid retrieval — RRF fusion of lexical + semantic)_
+_Last updated: 2026-06-06 (`think` — cited answer kit + offline gap analysis)_
+
+> **Latest change.** The vault now has a **`think`** brain layer: "search gives
+> raw pages, the brain gives the answer." `GET /api/think` (and the 20th MCP tool,
+> `think`) runs **hybrid retrieval** (fuse lexical + semantic by RRF so neither
+> exact-keyword nor conceptual matches are missed), assembles a token-budgeted
+> context bundle from the fused passages, and returns a **grounded answer kit**:
+> numbered **citations** (`[1]`, `[2]`…) mapped to each source passage (path +
+> heading + `^block` anchor when present), the passages themselves, and a
+> deterministic, **offline gap analysis** — `weakCoverage` (the best match score
+> fell below a threshold, or nothing matched) plus `uncoveredTerms` ("what the
+> vault doesn't yet cover"), computed from retrieval scores + stem-aware term
+> coverage with **no model**. The kit-shaping is a pure, dependency-free helper in
+> `@repo/shared` (`think.ts` — `assembleAnswerKit`, `AnswerKit`). The endpoint
+> stays **fully offline by default**: the agent calling the MCP tool is itself the
+> LLM and composes the final cited answer from the kit. Only when an OpenRouter
+> key is configured **server-side** (`OPENROUTER_API_KEY`, mirroring the web
+> app's wiring) *and* the request opts in (`?synthesize=1`) does it also include a
+> synthesized prose `answer` that cites the numbered sources — and a synthesis
+> failure never fails the offline kit. Covered by `apps/api` `__tests__/think.test.ts`
+> (pure: multi-citation mapping, weak-coverage flag, stem-aware uncovered-term
+> detection, empty corpus) and `routes/think.test.ts` (endpoint: 422 on empty
+> `q`, grounded citations, gap reporting, focus-note neighbors, offline gate); the
+> fresh-clone + smoke MCP tests now assert the 20-tool surface and exercise
+> `think`. This is the second gbrain-inspired enhancement (item #16; see _Next up_).
 
 > **Latest change.** Retrieval is now **hybrid**. The two engines that already
 > existed — lexical full-text (`search.ts`, exact keyword/filename) and semantic
@@ -153,10 +177,10 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 19 tools) — exposes the vault to agents: list/read/
-  create/update/patch/search/semantic_search/hybrid_search/get_context/backlinks/
-  get_graph/recent_activity/move/delete plus read_block, get_block_anchors,
-  propose_edit + list_proposals. When
+apps/mcp (MCP stdio server, 20 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/hybrid_search/get_context/think/
+  backlinks/get_graph/recent_activity/move/delete plus read_block,
+  get_block_anchors, propose_edit + list_proposals. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -200,6 +224,7 @@ Key facts an agent must know:
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                           |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                          |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
+| `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)            |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                    |
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                        |
 | Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                    |
@@ -207,7 +232,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (19 tools) — writes as `agent:mcp`                           |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (20 tools) — writes as `agent:mcp`                           |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |
@@ -430,11 +455,18 @@ into infrastructure we already have rather than adding a new subsystem.
     `__tests__/hybrid.test.ts` (pure RRF) and `routes/hybridSearch.test.ts`
     (endpoint). _gbrain parallel: its biggest measured win came from fusing
     vector + keyword + RRF rather than vector-only retrieval._
-16. **`think` — synthesized, cited answers + gap analysis.** Build on
-    `GET /api/context` (token-budgeted bundles) + the existing OpenRouter wiring
-    to return a **cited answer** plus an explicit _"what the vault doesn't yet
-    cover"_ section. Keep it opt-in (needs a key); the offline retrieval stays
-    the default. _gbrain parallel: `gbrain think` — "search gives raw pages, the
+16. **`think` — synthesized, cited answers + gap analysis.** ✅ **Done.** Builds
+    on hybrid retrieval + the token-budgeted context bundle to return a **cited
+    answer kit**: numbered citations (`[1]`, `[2]`…) mapped to each source passage
+    (path + heading + `^block` anchor), the passages, and a deterministic,
+    **offline gap analysis** (`weakCoverage` + `uncoveredTerms` — "what the vault
+    doesn't yet cover"), all computed with **no model**. Pure helper in
+    `@repo/shared` (`think.ts` — `assembleAnswerKit`); `GET /api/think` + the
+    `think` MCP tool. Offline by default — the calling agent is the LLM and
+    composes the final answer from the kit; a server-side `OPENROUTER_API_KEY`
+    plus `?synthesize=1` optionally adds a synthesized prose `answer`. Tests:
+    `apps/api` `__tests__/think.test.ts` (pure) + `routes/think.test.ts`
+    (endpoint). _gbrain parallel: `gbrain think` — "search gives raw pages, the
     brain gives the answer," with built-in gap analysis._
 17. **Dream-cycle maintenance → proposals.** A scheduled scan that flags
     near-duplicate notes, broken wikilinks, orphans, and contradictory
