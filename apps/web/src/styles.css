@@ -2688,10 +2688,19 @@ textarea:focus-visible {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--color-bg-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  /* A soft warm glow at the centre over a darkened surround gives the canvas
+     depth — a constellation backdrop rather than a flat fill. */
+  background:
+    radial-gradient(
+      ellipse 80% 70% at 50% 38%,
+      color-mix(in oklab, var(--color-accent) 7%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(ellipse 130% 130% at 50% 45%, var(--color-bg-raised), var(--color-bg));
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.35);
 }
 
 .graph-svg {
@@ -2706,78 +2715,160 @@ textarea:focus-visible {
   cursor: grabbing;
 }
 
+/* Zoom controls — a compact glassy pill. */
 .graph-controls {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 12px;
+  right: 12px;
   display: flex;
-  gap: 6px;
+  gap: 2px;
+  padding: 3px;
   z-index: 1;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-surface) 80%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .graph-control-btn {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
+  min-width: 26px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
+  line-height: 1;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .graph-control-btn:hover {
   background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
+/* Edges — soft curves, coloured by a per-edge source→target gradient (set via
+   the `stroke` attribute), that brighten to the accent when an endpoint is
+   focused. No base `stroke` here so the gradient attribute isn't overridden. */
 .graph-edge {
-  stroke: var(--color-border-strong);
-  stroke-width: 1;
+  fill: none;
+  stroke-width: 1.2;
+  stroke-opacity: 0.55;
+  stroke-linecap: round;
+  transition:
+    stroke 0.18s ease,
+    stroke-opacity 0.18s ease,
+    stroke-width 0.18s ease;
 }
 
 .graph-edge--typed {
   stroke: var(--color-accent-ring);
-  stroke-dasharray: 4 3;
+  stroke-dasharray: 5 4;
+}
+
+.graph-edge--active {
+  stroke: var(--color-accent);
+  stroke-opacity: 0.9;
+  stroke-width: 1.8;
 }
 
 .graph-edge--dim {
-  stroke-opacity: 0.15;
+  stroke-opacity: 0.07;
 }
 
+/* Nodes — a soft coloured halo behind a crisp dot, label below. The position
+   transform transitions so live graph updates glide instead of snapping. */
 .graph-node {
-  transition: opacity 0.12s ease;
+  transition:
+    transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.2s ease;
+}
+
+.graph-node__halo {
+  pointer-events: none;
+  opacity: 0.18;
+  filter: blur(4px);
+  transition: opacity 0.18s ease;
 }
 
 .graph-node__dot {
-  stroke: var(--color-bg);
-  stroke-width: 1.5;
+  pointer-events: auto;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transition:
+    stroke 0.15s ease,
+    fill-opacity 0.15s ease;
 }
 
-.graph-node--selected .graph-node__dot {
+.graph-node__ring {
+  fill: none;
   stroke: var(--color-text);
-  stroke-width: 2;
+  stroke-width: 1.6;
+  stroke-opacity: 0.85;
+  pointer-events: none;
+  /* A slow, quiet pulse to draw the eye to the currently-open note. */
+  animation: graph-ring-pulse 2.4s ease-in-out infinite;
 }
 
-.graph-node--unresolved .graph-node__dot {
-  stroke-dasharray: 2 2;
-  fill-opacity: 0.55;
+@keyframes graph-ring-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.85;
+  }
+  50% {
+    stroke-opacity: 0.3;
+  }
 }
 
 .graph-node__label {
   fill: var(--color-text-muted);
   font-size: 11px;
+  font-weight: 500;
+  text-anchor: middle;
   pointer-events: none;
   user-select: none;
+  /* Halo around the glyphs so labels stay legible over edges and nodes. */
+  paint-order: stroke;
+  stroke: var(--color-bg-raised);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  transition: fill 0.15s ease;
+}
+
+.graph-node:hover .graph-node__halo,
+.graph-node--active .graph-node__halo {
+  opacity: 0.4;
+}
+
+.graph-node:hover .graph-node__dot,
+.graph-node--active .graph-node__dot {
+  stroke: rgba(255, 255, 255, 0.55);
 }
 
 .graph-node:hover .graph-node__label,
+.graph-node--active .graph-node__label,
 .graph-node--selected .graph-node__label {
   fill: var(--color-text);
 }
 
+.graph-node--unresolved .graph-node__dot {
+  stroke-dasharray: 2 2;
+  fill-opacity: 0.45;
+}
+
+.graph-node--unresolved .graph-node__label {
+  fill: var(--color-text-dim);
+  font-style: italic;
+}
+
 .graph-node--dim {
-  opacity: 0.25;
+  opacity: 0.16;
 }
 
 .graph-node:focus {
@@ -2787,4 +2878,55 @@ textarea:focus-visible {
 .graph-node:focus .graph-node__dot {
   stroke: var(--color-accent);
   stroke-width: 2;
+}
+
+/* Legend — a quiet key for the tag colours + the unresolved marker. */
+.graph-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  max-width: 60%;
+  padding: 8px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-surface) 80%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.graph-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graph-legend__swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.graph-legend__swatch--unresolved {
+  background: var(--color-danger);
+  box-shadow: none;
+  opacity: 0.75;
+  outline: 1.5px dashed var(--color-danger);
+  outline-offset: 1px;
+}
+
+/* Respect a reduced-motion preference: no pulse, no glide. */
+@media (prefers-reduced-motion: reduce) {
+  .graph-node {
+    transition: none;
+  }
+  .graph-node__ring {
+    animation: none;
+  }
 }
