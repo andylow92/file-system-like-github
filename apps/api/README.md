@@ -297,6 +297,21 @@ in-memory cached index (chunks + IDF computed once, reused across queries and
 rebuilt when a note changes), so retrieval no longer re-reads the whole vault
 per request. Ranking is identical to reading the vault fresh each time.
 
+### `GET /api/hybrid-search?q=...&limit=...`
+
+**Hybrid retrieval.** Runs both the lexical (`/api/search`) and semantic
+(`/api/semantic-search`) engines and fuses their rankings by **Reciprocal Rank
+Fusion** (`hybrid.ts`), so a note found by either — or modestly by both — ranks
+well without normalizing the engines' non-comparable scores. `q` is required.
+Returns `HybridHit[]` (`{ path, name, score, snippet, heading?, line, tags,
+sources }`, where `sources` is a subset of `["text","semantic"]`) sorted by the
+fused score; the exact lexical line is preferred as the display snippet. Reads
+through the same cached index, and runs locally with no API key.
+
+```bash
+curl "http://localhost:3001/api/hybrid-search?q=backup%20restore%20procedure"
+```
+
 ### `GET /api/context?q=...&path=...&budget=...`
 
 Assembles a token-budgeted **context bundle** — the passages an agent should

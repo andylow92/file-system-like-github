@@ -69,6 +69,7 @@ describe('mcp server (self-contained)', () => {
           'get_block_anchors',
           'get_context',
           'get_graph',
+          'hybrid_search',
           'list_notes',
           'list_proposals',
           'move_path',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { getErrorMessage, searchNotes, semanticSearch } from '../api/files';
+import { getErrorMessage, hybridSearch, searchNotes, semanticSearch } from '../api/files';
 
 interface SearchDialogProps {
   open: boolean;
@@ -7,7 +7,7 @@ interface SearchDialogProps {
   onSelectFile: (path: string) => void;
 }
 
-type SearchMode = 'text' | 'semantic';
+type SearchMode = 'text' | 'semantic' | 'hybrid';
 
 interface DisplayItem {
   key: string;
@@ -24,9 +24,10 @@ function basename(path: string): string {
 }
 
 /**
- * Quick-switcher / search overlay (Ctrl/Cmd-K). Two modes:
+ * Quick-switcher / search overlay (Ctrl/Cmd-K). Three modes:
  * - Text: full-text + tag search (a leading `#` searches a tag).
  * - Semantic: relevance-ranked retrieval across note passages.
+ * - Hybrid: fuses Text + Semantic via Reciprocal Rank Fusion (best of both).
  */
 export function SearchDialog({ open, onClose, onSelectFile }: SearchDialogProps) {
   const [mode, setMode] = useState<SearchMode>('text');
@@ -110,9 +111,9 @@ export function SearchDialog({ open, onClose, onSelectFile }: SearchDialogProps)
   }
 
   const placeholder =
-    mode === 'semantic'
-      ? 'Describe what you’re looking for…'
-      : 'Search notes…  (prefix with # to search a tag)';
+    mode === 'text'
+      ? 'Search notes…  (prefix with # to search a tag)'
+      : 'Describe what you’re looking for…';
 
   return (
     <div
@@ -145,6 +146,15 @@ export function SearchDialog({ open, onClose, onSelectFile }: SearchDialogProps)
             onClick={() => setMode('semantic')}
           >
             Semantic
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'hybrid'}
+            className={mode === 'hybrid' ? 'search-dialog__mode is-active' : 'search-dialog__mode'}
+            onClick={() => setMode('hybrid')}
+          >
+            Hybrid
           </button>
         </div>
         <input
@@ -203,6 +213,19 @@ export function SearchDialog({ open, onClose, onSelectFile }: SearchDialogProps)
 }
 
 async function runSearch(mode: SearchMode, trimmed: string): Promise<DisplayItem[]> {
+  if (mode === 'hybrid') {
+    const hits = await hybridSearch({ query: trimmed, limit: 20 });
+    return hits.map((hit) => ({
+      key: hit.path,
+      path: hit.path,
+      title: hit.name,
+      subtitle: hit.heading ? `${hit.path} › ${hit.heading}` : hit.path,
+      snippet: hit.snippet,
+      tags: hit.tags,
+      score: hit.score,
+    }));
+  }
+
   if (mode === 'semantic') {
     const hits = await semanticSearch({ query: trimmed, limit: 20 });
     // Hits are per-chunk and sorted by score; collapse to the best chunk per

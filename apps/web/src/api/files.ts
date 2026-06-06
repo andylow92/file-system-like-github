@@ -5,6 +5,7 @@ import type {
   EditProposal,
   FileNode,
   GraphData,
+  HybridHit,
   ProposalStatus,
   SearchMatch,
   SemanticHit,
@@ -123,6 +124,21 @@ export async function semanticSearch(params: {
   }
 
   return requestJson<SemanticHit[]>(`/api/semantic-search?${search.toString()}`, {
+    method: 'GET',
+    headers: {},
+  });
+}
+
+export async function hybridSearch(params: {
+  query: string;
+  limit?: number;
+}): Promise<HybridHit[]> {
+  const search = new URLSearchParams({ q: params.query });
+  if (params.limit) {
+    search.set('limit', String(params.limit));
+  }
+
+  return requestJson<HybridHit[]>(`/api/hybrid-search?${search.toString()}`, {
     method: 'GET',
     headers: {},
   });

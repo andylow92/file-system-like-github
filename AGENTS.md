@@ -50,11 +50,14 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `rehype-katex` (math), and highlight.js for fenced code (with a copy button).
   Frontmatter is stripped and tags render as chips. Wikilinks are a remark
   plugin (`apps/web/src/markdown/remarkWikilinks.ts`).
-- **Search** — full-text + tag search (`GET /api/search`) and **semantic
+- **Search** — full-text + tag search (`GET /api/search`), **semantic
   (relevance) search** (`GET /api/semantic-search`, TF-IDF cosine over chunked
-  notes; `semantic.ts`). The Ctrl/Cmd-K quick-switcher has a Text|Semantic
-  toggle (prefix `#` for tags in Text mode). Semantic runs offline, no API key;
-  the ranking engine is swappable for real embeddings later.
+  notes; `semantic.ts`), and **hybrid retrieval** (`GET /api/hybrid-search`)
+  that fuses the two by Reciprocal Rank Fusion (`hybrid.ts`,
+  `reciprocalRankFusion`) so neither exact keyword nor conceptual matches are
+  missed. The Ctrl/Cmd-K quick-switcher has a Text|Semantic|Hybrid toggle
+  (prefix `#` for tags in Text mode). All three run offline, no API key; the
+  ranking engine is swappable for real embeddings later.
 - **Provenance** — mutations read an `X-Actor` header (default `human`) and are
   appended to an audit log (`CONTENT_ROOT/.fsbrain/audit.jsonl`), exposed via
   `GET /api/audit` and a web **Activity** tab with human-vs-agent badges.
@@ -95,11 +98,11 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 18 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 19 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
-  `semantic_search`, `get_context`, `get_backlinks`, `get_graph`,
-  `recent_activity`, `create_folder`, `move_path`, `delete_path`,
+  `semantic_search`, `hybrid_search`, `get_context`, `get_backlinks`,
+  `get_graph`, `recent_activity`, `create_folder`, `move_path`, `delete_path`,
   `propose_edit`, `list_proposals`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude

@@ -12,8 +12,10 @@ import type {
   ContextCandidate,
   EditProposal,
   FileNode,
+  HybridHit,
   PatchOp,
   ProposalAction,
+  RankedChunk,
   SearchMatch,
   VaultEvent,
 } from '@repo/shared';
@@ -33,6 +35,7 @@ import {
   findTextMatch,
   parseFrontmatter,
   parseNote,
+  reciprocalRankFusion,
   resolveWikilink,
 } from '@repo/shared';
 
@@ -812,6 +815,101 @@ async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): P
   sendJson(res, 200, { success: true, data: hits });
 }
 
+const DEFAULT_HYBRID_LIMIT = 10;
+// How many candidates each engine contributes to the fusion. A wider pool than
+// the returned `limit` lets RRF reorder across engines before we truncate.
+const HYBRID_CANDIDATE_LIMIT = 50;
+
+/**
+ * The lexical engine: rank notes by full-text (body) + filename substring match,
+ * highest occurrence count first. Shares the scoring of `handleSearch`'s query
+ * branch but returns the ranked list for fusion rather than serializing it.
+ */
+function collectTextMatches(
+  documents: readonly { path: string; content: string }[],
+  query: string,
+): SearchMatch[] {
+  const matches: SearchMatch[] = [];
+  for (const { path: filePath, content } of documents) {
+    const note = parseNote(content);
+    const name = filePath.split('/').pop() ?? filePath;
+    const textMatch = findTextMatch(note.body, query);
+    const nameMatches = name.toLowerCase().includes(query.toLowerCase());
+    if (!textMatch && !nameMatches) {
+      continue;
+    }
+    matches.push({
+      path: filePath,
+      name,
+      score: (textMatch?.count ?? 0) + (nameMatches ? 1 : 0),
+      snippet: textMatch?.snippet ?? '',
+      line: textMatch?.line ?? 0,
+      tags: note.tags,
+    });
+  }
+  matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  return matches;
+}
+
+/**
+ * Hybrid retrieval: fuse the lexical (keyword) and semantic (relevance) rankings
+ * with Reciprocal Rank Fusion. Each engine ranks notes by a non-comparable
+ * score, so we fuse by rank position and keep the best snippet from whichever
+ * engine matched (preferring the exact lexical line for legibility).
+ */
+async function handleHybridSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_HYBRID_LIMIT;
+
+  if (!query) {
+    throw new Error('"q" is required');
+  }
+
+  const documents = await vaultIndex.getDocuments();
+
+  // Lexical ranking: notes ordered by full-text + filename match.
+  const lexical = collectTextMatches(documents, query).slice(0, HYBRID_CANDIDATE_LIMIT);
+
+  // Semantic ranking: collapse the per-chunk ranking to the best chunk per note,
+  // preserving order (the index returns chunks already sorted by score).
+  const ranked = await vaultIndex.rankedChunks(query, { limit: HYBRID_CANDIDATE_LIMIT });
+  const bestChunk = new Map<string, RankedChunk>();
+  for (const chunk of ranked) {
+    if (!bestChunk.has(chunk.path)) {
+      bestChunk.set(chunk.path, chunk);
+    }
+  }
+
+  // Fuse by rank (scales aren't comparable across engines).
+  const fused = reciprocalRankFusion([
+    { keys: lexical.map((match) => match.path), label: 'text' },
+    { keys: [...bestChunk.keys()], label: 'semantic' },
+  ]);
+
+  const lexicalByPath = new Map(lexical.map((match) => [match.path, match]));
+  const contentByPath = new Map(documents.map((doc) => [doc.path, doc.content]));
+
+  const hits: HybridHit[] = fused.slice(0, limit).map((item) => {
+    const lex = lexicalByPath.get(item.key);
+    const sem = bestChunk.get(item.key);
+    const semSnippet = sem ? sem.text.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    const useLexicalSnippet = Boolean(lex?.snippet);
+    return {
+      path: item.key,
+      name: item.key.split('/').pop() ?? item.key,
+      score: Number(item.score.toFixed(4)),
+      snippet: useLexicalSnippet ? lex!.snippet : semSnippet,
+      ...(!useLexicalSnippet && sem?.heading ? { heading: sem.heading } : {}),
+      line: lex?.line ?? 0,
+      tags: lex?.tags ?? parseNote(contentByPath.get(item.key) ?? '').tags,
+      sources: item.sources as ('text' | 'semantic')[],
+    };
+  });
+
+  sendJson(res, 200, { success: true, data: hits });
+}
+
 const DEFAULT_CONTEXT_BUDGET = 2000;
 const CONTEXT_MATCH_LIMIT = 12;
 const FOCUS_CHUNK_LIMIT = 4;
@@ -1151,6 +1249,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/semantic-search') {
     await executeHandler(context, handleSemanticSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/hybrid-search') {
+    await executeHandler(context, handleHybridSearch);
     return { handled: true };
   }
 

@@ -5,7 +5,27 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-04 (visual knowledge graph — roadmap complete)_
+_Last updated: 2026-06-06 (hybrid retrieval — RRF fusion of lexical + semantic)_
+
+> **Latest change.** Retrieval is now **hybrid**. The two engines that already
+> existed — lexical full-text (`search.ts`, exact keyword/filename) and semantic
+> TF-IDF cosine (`semantic.ts`, relevance) — are fused by **Reciprocal Rank
+> Fusion** so a note found by either, or modestly by both, ranks well. The fusion
+> is a pure, dependency-free, deterministic helper in `@repo/shared`
+> (`hybrid.ts` — `reciprocalRankFusion`, `HybridHit`); it combines lists by rank
+> position, so the engines' non-comparable scores never need normalizing. A new
+> `GET /api/hybrid-search` (and the 19th MCP tool, `hybrid_search`) returns
+> `HybridHit[]` (`path`, `name`, `score`, `snippet`, `heading?`, `line`, `tags`,
+> `sources: ("text"|"semantic")[]`), reading both engines through the cached
+> `VaultIndex` (no extra vault re-read) and preferring the exact lexical line as
+> the display snippet. The web Ctrl/Cmd-K switcher gains a **Hybrid** mode
+> alongside Text|Semantic. Stays fully local/offline — no model or API key.
+> Covered by `apps/api` `hybrid.test.ts` (pure RRF: multi-list reward, weights,
+> tie-break determinism, deduped ranks) and `routes/hybridSearch.test.ts`
+> (endpoint: keyword+semantic fusion, semantic-only tags, limit, no-stale-after-
+> write); the fresh-clone + smoke MCP tests now assert the 19-tool surface and
+> exercise `hybrid_search`. This is the first of the gbrain-inspired enhancements
+> (see _Next up_).
 
 > **Latest change.** The vault's `[[wikilink]]` **knowledge graph** is now
 > visible to the human and traversable by agents — the last human-facing item on
@@ -133,10 +153,10 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 18 tools) — exposes the vault to agents: list/read/
-  create/update/patch/search/semantic_search/get_context/backlinks/get_graph/
-  recent_activity/move/delete plus read_block, get_block_anchors, propose_edit +
-  list_proposals. When
+apps/mcp (MCP stdio server, 19 tools) — exposes the vault to agents: list/read/
+  create/update/patch/search/semantic_search/hybrid_search/get_context/backlinks/
+  get_graph/recent_activity/move/delete plus read_block, get_block_anchors,
+  propose_edit + list_proposals. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -179,6 +199,7 @@ Key facts an agent must know:
 | Rich renderer (GFM, math, highlight)        |   ✅   | `react-markdown` + remark-gfm/math, rehype-katex                        |
 | Full-text + tag search (Ctrl/Cmd-K)         |   ✅   | `/api/search`, `SearchDialog`                                           |
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                          |
+| Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                    |
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                        |
 | Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                    |
@@ -186,7 +207,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (18 tools) — writes as `agent:mcp`                           |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (19 tools) — writes as `agent:mcp`                           |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |
@@ -390,6 +411,48 @@ not part of the original plan:
     scored. Persist the index across restarts as a follow-on.
 14. **Mermaid diagrams** — render fenced ` ```mermaid ` blocks in the preview
     (the last renderer follow-up; the wikilink graph view above is done).
+
+#### Brain ideas (inspired by gbrain)
+
+A backlog of enhancements adapted from [gbrain](https://github.com/garrytan/gbrain),
+an AI-agent memory system, but cut to fit this repo's design constraints
+(**local-first, offline, no API key, pure + deterministic helpers in
+`@repo/shared`, every agent write audited**). Listed in build order; each plugs
+into infrastructure we already have rather than adding a new subsystem.
+
+15. **Hybrid retrieval (RRF).** ✅ **Done.** Fuse the existing lexical
+    (`search.ts`) and semantic (`semantic.ts`) rankings with Reciprocal Rank
+    Fusion so neither exact keyword hits nor conceptually-related passages are
+    missed. Pure fusion helper in `@repo/shared` (`hybrid.ts` —
+    `reciprocalRankFusion`, `HybridHit`); `GET /api/hybrid-search` + the
+    `hybrid_search` MCP tool + a **Hybrid** mode in the Ctrl/Cmd-K switcher. Both
+    engines read through the cached `VaultIndex`. Tests: `apps/api`
+    `__tests__/hybrid.test.ts` (pure RRF) and `routes/hybridSearch.test.ts`
+    (endpoint). _gbrain parallel: its biggest measured win came from fusing
+    vector + keyword + RRF rather than vector-only retrieval._
+16. **`think` — synthesized, cited answers + gap analysis.** Build on
+    `GET /api/context` (token-budgeted bundles) + the existing OpenRouter wiring
+    to return a **cited answer** plus an explicit _"what the vault doesn't yet
+    cover"_ section. Keep it opt-in (needs a key); the offline retrieval stays
+    the default. _gbrain parallel: `gbrain think` — "search gives raw pages, the
+    brain gives the answer," with built-in gap analysis._
+17. **Dream-cycle maintenance → proposals.** A scheduled scan that flags
+    near-duplicate notes, broken wikilinks, orphans, and contradictory
+    statements, then files each as a **proposal** a human approves in the Review
+    tab — reusing the `ProposalStore` + `EventBus` we already ship. _gbrain
+    parallel: its 24/7 "dream cycle" that dedupes, fixes citations, and finds
+    contradictions overnight._
+18. **Self-wiring typed graph edges.** Derive typed edges from frontmatter
+    (e.g. `related:`, `type:`) so the knowledge graph wires itself without manual
+    `[[Target|rel:type]]` discipline. _gbrain parallel: typed edges
+    (`works_at`, `attended`) auto-extracted on write, zero LLM calls._
+19. **Schema packs / typed page types.** Canonical frontmatter `type:` values
+    (person, meeting, idea…) with allowed relationships — powers graph node
+    colouring, validation, and retrieval boosting. _gbrain parallel:
+    `gbrain-base-v2` with 15 canonical types._
+20. **Retrieval eval harness.** A small fixture of `query → expected-note`
+    pairs so ranking changes can't silently regress recall. _gbrain parallel:
+    its LongMemEval / NamedThingBench regression suite._
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
