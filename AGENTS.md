@@ -98,12 +98,12 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 20 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 21 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `recent_activity`, `create_folder`, `move_path`, `delete_path`,
-  `propose_edit`, `list_proposals`). It runs
+  `propose_edit`, `list_proposals`, `run_maintenance`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -156,6 +156,17 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   by default: the calling agent is the LLM and composes the final cited answer
   from the kit; a server-side `OPENROUTER_API_KEY` + `?synthesize=1` optionally
   adds a synthesized prose `answer`.
+- **Dream-cycle maintenance** — a deterministic, offline scan
+  (`@repo/shared` `maintenance.ts`, `scanVault`) finds vault-hygiene problems —
+  **broken `[[wikilinks]]`**, **orphan notes**, and **near-duplicate notes**
+  (note-level TF-IDF cosine) — and files each actionable one as an **edit
+  proposal** the human approves in the Review tab (reusing the `ProposalStore` +
+  `EventBus`). `GET /api/maintenance` previews; `POST /api/maintenance/scan` (and
+  the `run_maintenance` MCP tool) files suggestions as a distinct
+  `agent:maintenance` actor and is **idempotent** — it dedupes against open
+  proposals, so re-running never spams the queue. On-demand by default (optional
+  `MAINTENANCE_INTERVAL_MS` timer). Resolution stays human-only; contradiction
+  detection is a deferred follow-up (it needs an LLM, out of the offline scope).
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
 semantic search (the cached index + context bundle endpoint above are the seam

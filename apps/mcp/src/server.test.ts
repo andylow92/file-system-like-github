@@ -78,6 +78,7 @@ describe('mcp server (self-contained)', () => {
           'read_block',
           'read_note',
           'recent_activity',
+          'run_maintenance',
           'search_notes',
           'semantic_search',
           'think',

@@ -5,7 +5,39 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-06 (`think` — cited answer kit + offline gap analysis)_
+_Last updated: 2026-06-06 (dream-cycle maintenance scan → review proposals)_
+
+> **Latest change.** The vault now runs a **dream-cycle maintenance** scan that
+> finds hygiene problems and files each actionable one as a **proposal** the
+> human approves in the Review tab — reusing the `ProposalStore` + `EventBus` we
+> already ship, no new subsystem. A pure, deterministic helper in `@repo/shared`
+> (`maintenance.ts` — `scanVault`, `MaintenanceFinding`) detects, **fully
+> offline** (no model, no API key): **broken links** (a `[[wikilink]]` resolving
+> to no note → suggest a `create` stub of the missing target), **orphans** (a
+> note with no inbound/outbound *resolved* links → report-only, no auto-edit),
+> and **near-duplicates** (a pair of notes whose note-level TF-IDF cosine ≥ a
+> threshold → suggest an `update` that appends a conservative
+> `> See also [[other]]` cross-link, never a merge). Each suggestion is a safe,
+> reversible `{ action, path, content?, note }` that maps 1:1 onto a proposal.
+> `GET /api/maintenance` is a dry preview (scan the cached `VaultIndex`, file
+> nothing); `POST /api/maintenance/scan` (and the 21st MCP tool,
+> `run_maintenance`) files each suggestion as a proposal attributed to a distinct
+> `agent:maintenance` actor and returns `{ findings, proposalsFiled }`. It
+> **dedupes against already-open proposals** (match on action+path) so re-running
+> is idempotent and never spams the Review queue. Scheduling is on-demand by
+> default; an optional `MAINTENANCE_INTERVAL_MS` timer in `createServer` runs it
+> periodically when set. **Resolution stays human-only** — there is no agent
+> approval path. A light **Maintenance** action sits atop the web Review tab (run
+> a scan, see findings grouped by kind; filed fixes appear as proposals just
+> below). Contradiction detection is intentionally **out of scope for v1** (it
+> needs an LLM, which breaks the offline guarantee) and is left as a follow-up
+> behind the same server-side `OPENROUTER_API_KEY` gate as `think`'s synthesis.
+> Covered by `apps/api` `__tests__/maintenance.test.ts` (pure: each finding kind,
+> threshold boundary, clean vault → [], determinism, empty corpus) and
+> `routes/maintenance.test.ts` (dry preview files nothing, scan files as
+> `agent:maintenance`, idempotent re-run, duplicate cross-link); the fresh-clone
+> MCP test now asserts the 21-tool surface and exercises `run_maintenance`. This
+> is the third gbrain-inspired enhancement (item #17; see _Next up_).
 
 > **Latest change.** The vault now has a **`think`** brain layer: "search gives
 > raw pages, the brain gives the answer." `GET /api/think` (and the 20th MCP tool,
@@ -177,10 +209,10 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 20 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 21 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
-  get_block_anchors, propose_edit + list_proposals. When
+  get_block_anchors, propose_edit + list_proposals + run_maintenance. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -225,6 +257,7 @@ Key facts an agent must know:
 | Semantic (relevance) search                 |   ✅   | `/api/semantic-search`, `semantic.ts` (TF-IDF)                          |
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
 | `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)            |
+| Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`) |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                    |
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                        |
 | Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                    |
@@ -232,7 +265,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                        |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                          |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph` |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (20 tools) — writes as `agent:mcp`                           |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (21 tools) — writes as `agent:mcp`                           |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md               |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                             |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`    |
@@ -468,12 +501,25 @@ into infrastructure we already have rather than adding a new subsystem.
     `apps/api` `__tests__/think.test.ts` (pure) + `routes/think.test.ts`
     (endpoint). _gbrain parallel: `gbrain think` — "search gives raw pages, the
     brain gives the answer," with built-in gap analysis._
-17. **Dream-cycle maintenance → proposals.** A scheduled scan that flags
-    near-duplicate notes, broken wikilinks, orphans, and contradictory
-    statements, then files each as a **proposal** a human approves in the Review
-    tab — reusing the `ProposalStore` + `EventBus` we already ship. _gbrain
-    parallel: its 24/7 "dream cycle" that dedupes, fixes citations, and finds
-    contradictions overnight._
+17. **Dream-cycle maintenance → proposals.** ✅ **Done.** A scan
+    (`@repo/shared` `maintenance.ts` — `scanVault`) flags **broken
+    `[[wikilinks]]`**, **orphan notes**, and **near-duplicate notes** (note-level
+    TF-IDF cosine ≥ threshold), then files each actionable one as a **proposal** a
+    human approves in the Review tab — reusing the `ProposalStore` + `EventBus`,
+    no new subsystem. Each finding carries a safe, reversible suggestion that maps
+    1:1 onto a proposal (broken link → `create` a stub; duplicate → `update`
+    appending a `> See also [[other]]` cross-link, never a merge; orphan is
+    report-only). `GET /api/maintenance` previews (files nothing);
+    `POST /api/maintenance/scan` + the `run_maintenance` MCP tool (21st) file each
+    suggestion as `agent:maintenance`, **deduped against open proposals** so
+    re-runs are idempotent and never spam the Review queue. On-demand by default;
+    optional `MAINTENANCE_INTERVAL_MS` timer in `createServer`. Resolution stays
+    **human-only**. A light Maintenance action sits atop the web Review tab.
+    **Contradiction detection is deferred** (it needs an LLM, which breaks the
+    offline guarantee) behind the same `OPENROUTER_API_KEY` gate as `think`
+    synthesis. Tests: `apps/api` `__tests__/maintenance.test.ts` (pure) +
+    `routes/maintenance.test.ts` (endpoint). _gbrain parallel: its 24/7 "dream
+    cycle" that dedupes, fixes citations, and finds contradictions overnight._
 18. **Self-wiring typed graph edges.** Derive typed edges from frontmatter
     (e.g. `related:`, `type:`) so the knowledge graph wires itself without manual
     `[[Target|rel:type]]` discipline. _gbrain parallel: typed edges

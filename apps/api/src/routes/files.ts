@@ -14,9 +14,11 @@ import type {
   EditProposal,
   FileNode,
   HybridHit,
+  MaintenanceFinding,
   PatchOp,
   ProposalAction,
   RankedChunk,
+  ScanVaultOptions,
   SearchMatch,
   VaultEvent,
 } from '@repo/shared';
@@ -39,6 +41,7 @@ import {
   parseNote,
   reciprocalRankFusion,
   resolveWikilink,
+  scanVault,
 } from '@repo/shared';
 
 import type { EventBus } from '../events/eventBus.js';
@@ -1322,6 +1325,93 @@ async function handleResolveProposal(context: RequestContext): Promise<void> {
   sendJson(res, 200, { success: true, data: resolved });
 }
 
+/** The actor every maintenance-filed proposal is attributed to. */
+const MAINTENANCE_ACTOR = 'agent:maintenance';
+
+export interface MaintenanceScanResult {
+  findings: MaintenanceFinding[];
+  proposalsFiled: EditProposal[];
+}
+
+/** Broadcast a `proposal_created` event for a maintenance-filed proposal. */
+function publishMaintenanceProposal(eventBus: EventBus, logicalPath: string): void {
+  try {
+    eventBus.publish({
+      type: 'proposal_created',
+      path: logicalPath,
+      actor: MAINTENANCE_ACTOR,
+      ts: new Date().toISOString(),
+      source: 'api',
+    });
+  } catch {
+    // The proposal already persisted; a broadcast failure is non-fatal.
+  }
+}
+
+/**
+ * Run the dream-cycle maintenance scan over the cached corpus and file each
+ * actionable finding's suggestion as an edit proposal (attributed to
+ * `agent:maintenance`) for human review in the Review tab. Resolution stays
+ * human-only — nothing here applies an edit.
+ *
+ * Idempotent: a suggestion whose `action`+`path` already matches an **open
+ * (pending)** proposal is skipped, so re-running the scan never spams the Review
+ * queue. Shared by `POST /api/maintenance/scan` and the optional
+ * `MAINTENANCE_INTERVAL_MS` scheduler in `createServer`.
+ */
+export async function runMaintenanceScan(deps: {
+  vaultIndex: VaultIndex;
+  proposalStore: ProposalStore;
+  eventBus: EventBus;
+  options?: ScanVaultOptions;
+}): Promise<MaintenanceScanResult> {
+  const documents = await deps.vaultIndex.getDocuments();
+  const findings = scanVault(documents, deps.options);
+
+  const pending = await deps.proposalStore.list({ status: 'pending' });
+  const openKeys = new Set(pending.map((proposal) => `${proposal.action}:${proposal.path}`));
+
+  const proposalsFiled: EditProposal[] = [];
+  for (const finding of findings) {
+    const { suggestion } = finding;
+    if (!suggestion) {
+      continue;
+    }
+    const key = `${suggestion.action}:${suggestion.path}`;
+    if (openKeys.has(key)) {
+      continue;
+    }
+    // Guard against two findings suggesting the same action+path within one scan.
+    openKeys.add(key);
+
+    const proposal = await deps.proposalStore.create({
+      actor: MAINTENANCE_ACTOR,
+      action: suggestion.action,
+      path: suggestion.path,
+      ...(suggestion.content !== undefined ? { content: suggestion.content } : {}),
+      note: suggestion.note,
+    });
+    publishMaintenanceProposal(deps.eventBus, suggestion.path);
+    proposalsFiled.push(proposal);
+  }
+
+  return { findings, proposalsFiled };
+}
+
+/** GET /api/maintenance — a dry preview: scan the cached corpus, file nothing. */
+async function handleMaintenancePreview({ res, vaultIndex }: RequestContext): Promise<void> {
+  const documents = await vaultIndex.getDocuments();
+  const findings = scanVault(documents);
+  sendJson<{ findings: MaintenanceFinding[] }>(res, 200, { success: true, data: { findings } });
+}
+
+/** POST /api/maintenance/scan — scan and file each actionable finding as a proposal. */
+async function handleMaintenanceScan(context: RequestContext): Promise<void> {
+  const { res, vaultIndex, proposalStore, eventBus } = context;
+  const result = await runMaintenanceScan({ vaultIndex, proposalStore, eventBus });
+  sendJson<MaintenanceScanResult>(res, 200, { success: true, data: result });
+}
+
 async function executeHandler(
   context: RequestContext,
   handler: (ctx: RequestContext) => Promise<void>,
@@ -1413,6 +1503,16 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/audit') {
     await executeHandler(context, handleGetAudit);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/maintenance') {
+    await executeHandler(context, handleMaintenancePreview);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/maintenance/scan') {
+    await executeHandler(context, handleMaintenanceScan);
     return { handled: true };
   }
 

@@ -6,6 +6,7 @@ import type {
   FileNode,
   GraphData,
   HybridHit,
+  MaintenanceFinding,
   ProposalStatus,
   SearchMatch,
   SemanticHit,
@@ -175,6 +176,20 @@ export async function resolveProposal(
     method: 'POST',
     body: JSON.stringify({ id, decision }),
   });
+}
+
+export interface MaintenanceScanResult {
+  findings: MaintenanceFinding[];
+  proposalsFiled: EditProposal[];
+}
+
+/**
+ * Kick the dream-cycle maintenance scan: it finds vault-hygiene problems and
+ * files each actionable one as a proposal (actor `agent:maintenance`) for human
+ * review. Idempotent — re-running never re-files an already-open proposal.
+ */
+export async function runMaintenance(): Promise<MaintenanceScanResult> {
+  return requestJson<MaintenanceScanResult>('/api/maintenance/scan', { method: 'POST' });
 }
 
 export async function updateFile(params: {

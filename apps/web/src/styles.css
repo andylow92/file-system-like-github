@@ -2676,6 +2676,68 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+/* Dream-cycle maintenance scanner (top of the Review tab). */
+.maintenance-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--color-surface);
+}
+
+.maintenance-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.maintenance-panel__title {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.maintenance-panel__hint {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption, 0.75rem);
+  max-width: 48ch;
+}
+
+.maintenance-panel__summary {
+  margin: var(--space-3) 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption, 0.75rem);
+}
+
+.maintenance-groups,
+.maintenance-group__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-group {
+  margin-top: var(--space-3);
+}
+
+.maintenance-group__kind {
+  display: block;
+  font-size: var(--type-caption, 0.75rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-dim);
+  margin-bottom: 4px;
+}
+
+.maintenance-finding {
+  padding: 4px 0;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  border-top: 1px solid var(--color-border);
+}
+
 /* Knowledge graph (Graph tab) — force-directed wikilink view. */
 .graph-view {
   height: 100%;
