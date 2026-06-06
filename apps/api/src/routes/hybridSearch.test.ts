@@ -129,4 +129,20 @@ describe('hybrid search (RRF fusion of lexical + semantic)', () => {
     const all = await api<HybridHit[]>('GET', '/api/hybrid-search?q=alpha');
     expect(all.body.data!.map((hit) => hit.path)).toContain('b.md');
   });
+
+  it('falls back to the first body line when only the filename matches', async () => {
+    // The query "glossary" matches the filename but appears nowhere in the body,
+    // and the body shares no tokens with it — so it is a lexical name-only hit
+    // the semantic engine does not surface. The snippet must still be non-empty.
+    await api('POST', '/api/file', {
+      body: { path: 'glossary.md', content: '# Terms\nAlpha beta gamma definitions.' },
+    });
+
+    const result = await api<HybridHit[]>('GET', '/api/hybrid-search?q=glossary');
+    const hit = result.body.data!.find((h) => h.path === 'glossary.md');
+    expect(hit).toBeDefined();
+    expect(hit!.sources).toEqual(['text']);
+    expect(hit!.line).toBe(0); // filename match, not a body line
+    expect(hit!.snippet).toBe('Terms'); // first body line, heading marker stripped
+  });
 });
