@@ -37,11 +37,15 @@ This repo bridges both worlds:
 
 - Browse markdown content in a GitHub-like file tree
 - Open files and switch between **Preview** and **Edit** tabs
-- Create files and folders
-- Rename or move files/folders
-- Delete files/folders
+- Create, rename/move, and delete files and folders
 - Save with optimistic concurrency metadata (`etag` / `lastModified`)
-- Keep your content under a configurable `CONTENT_ROOT`
+- Keep your content under a configurable `CONTENT_ROOT` (the "vault")
+- Search across notes — **full-text**, **semantic**, and **hybrid** (Ctrl/Cmd-K)
+- Link notes with `[[wikilinks]]`, browse **backlinks**, and explore an
+  interactive **knowledge graph**
+- Hand the vault to an AI agent through a built-in **MCP server**
+  (read / search / patch / propose), with every agent write attributed in an
+  audit log so the human can see what changed
 
 ---
 
@@ -59,28 +63,36 @@ This repo bridges both worlds:
 
 ```txt
 apps/web (React + Vite)
-   ├─ File tree + editor/preview UI
-   └─ Calls API over HTTP/JSON
+   ├─ File tree + editor / preview / graph / activity UI
+   └─ Calls the API over HTTP/JSON (live updates over SSE)
 
 apps/api (Node HTTP server)
-   ├─ Validates and resolves logical paths
-   ├─ Performs markdown-focused file CRUD
-   └─ Enforces safe access inside CONTENT_ROOT
+   ├─ Validates and resolves logical paths (sandboxed to CONTENT_ROOT)
+   ├─ Markdown-focused file CRUD + optimistic concurrency
+   └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
+
+apps/mcp (MCP stdio server)
+   ├─ Exposes the vault to AI agents as 21 tools
+   └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
-   └─ Shared TypeScript contracts and response shapes
+   └─ Shared TypeScript contracts + pure helpers (markdown, search, graph, …)
 ```
 
 Repository structure:
 
 ```txt
 apps/
-  api/      # Backend server + filesystem storage
-  web/      # Frontend UI
+  api/      # Backend HTTP server + filesystem storage (CONTENT_ROOT)
+  web/      # Frontend UI (React + Vite)
+  mcp/      # MCP stdio server — the vault as agent tools (embeds the API)
 packages/
-  shared/   # Shared types/contracts
+  shared/   # Shared types/contracts + pure helpers
 docs/
-  integration-test-plan.md
+  implementation.md         # Source of truth for project state
+  CONNECT.md                # Connect an MCP host (OpenClaw / Claude / Cursor)
+  integration-test-plan.md  # Manual integration checks
+AGENTS.md   # Start here if you are an AI agent working in this repo
 ```
 
 ---
@@ -156,31 +168,53 @@ vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 For `apps/api`:
 
 - `CONTENT_ROOT`
-  - Base directory for markdown files/directories.
-  - If unset, defaults to `<repo>/content`.
+  - Base directory (the "vault") for markdown files/directories.
+  - If unset, defaults to `~/.fsbrain/vault` (auto-created on first run).
+  - Set `CONTENT_ROOT=./content` to keep an older clone's location.
 - `PORT`
   - API server port (default: `3001`).
 
 Example:
 
 ```bash
-CONTENT_ROOT=/absolute/path/to/content PORT=3001 npm run dev:api
+CONTENT_ROOT=/absolute/path/to/vault PORT=3001 npm run dev:api
 ```
 
 ---
 
 ## API snapshot
 
+**Files & tree**
+
 - `GET /health`
 - `GET /api/tree?path=...`
-- `GET /api/file?path=...`
-- `POST /api/file`
-- `PUT /api/file`
+- `GET /api/file?path=...` (or `?id=...`)
+- `POST /api/file` · `PUT /api/file` · `PATCH /api/file` (granular ops)
 - `POST /api/dir`
-- `PATCH /api/path`
-- `DELETE /api/path?path=...&recursive=true|false`
+- `PATCH /api/path` (move/rename) · `DELETE /api/path?path=...&recursive=true|false`
+
+**Links, graph & blocks**
+
+- `GET /api/backlinks` · `GET /api/graph`
+- `GET /api/block` · `GET /api/block-anchors`
+
+**Search & retrieval**
+
+- `GET /api/search` · `GET /api/semantic-search` · `GET /api/hybrid-search`
+- `GET /api/context` (RAG bundle) · `GET /api/think` (cited answer kit)
+
+**Provenance, review & maintenance**
+
+- `GET /api/audit`
+- `GET /api/proposals` · `POST /api/proposals` · `POST /api/proposals/resolve` (human-only)
+- `GET /api/maintenance` · `POST /api/maintenance/scan`
+
+**Live**
+
+- `GET /api/events` (Server-Sent Events)
 
 For endpoint details and request/response examples, see [`apps/api/README.md`](apps/api/README.md).
+Agents typically reach these via the MCP tools — see [`apps/mcp/README.md`](apps/mcp/README.md).
 
 ---
 
@@ -215,6 +249,10 @@ See the full deployment examples in this README’s history and backend docs.
 ## Roadmap ideas
 
 - ✅ Search across markdown files (full-text, semantic, and **hybrid** RRF)
+- ✅ Interactive knowledge graph + backlinks
+- ✅ Built-in MCP server — use the vault as an agent's brain
+- ✅ Cited answers + offline gap analysis (`think`) and dream-cycle maintenance
+- Mermaid diagrams + real vector embeddings (the cached index is the seam)
 - Git sync workflows
 - Multi-user auth + permissions
 - Real-time collaborative editing
@@ -234,7 +272,12 @@ PRs are welcome. If you want to contribute:
 
 ## Extra docs
 
+- **AI agents start here:** [`AGENTS.md`](AGENTS.md) — repo entry point + a
+  tool/endpoint quick-reference
+- Project state / roadmap (source of truth): [`docs/implementation.md`](docs/implementation.md)
 - Backend API details: [`apps/api/README.md`](apps/api/README.md)
+- Agent tools (MCP) + write attribution: [`apps/mcp/README.md`](apps/mcp/README.md)
+- Connect an MCP host (OpenClaw / Claude / Cursor): [`docs/CONNECT.md`](docs/CONNECT.md)
 - Manual integration validation: [`docs/integration-test-plan.md`](docs/integration-test-plan.md)
 
 ---

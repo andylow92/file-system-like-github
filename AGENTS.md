@@ -35,6 +35,46 @@ finish a unit of work, update it (see _Goal-driven execution_ below).
 
 ---
 
+## Agent quick-reference (intent → MCP tool → HTTP endpoint)
+
+The MCP server (`apps/mcp`) is your surface; each tool maps 1:1 to an endpoint on
+the in-process API. Pick the tool that matches your intent:
+
+| I want to…                                             | MCP tool            | HTTP endpoint                |
+| ------------------------------------------------------ | ------------------- | ---------------------------- |
+| List notes (optionally under a subtree)                | `list_notes`        | `GET /api/tree`              |
+| Read a note (by `path` **or** `id`)                    | `read_note`         | `GET /api/file`              |
+| Read one `^block` (+ surrounding context)              | `read_block`        | `GET /api/block`             |
+| List a note's `^block` anchors                         | `get_block_anchors` | `GET /api/block-anchors`     |
+| Create a note                                          | `create_note`       | `POST /api/file`             |
+| Overwrite a note (pass `etag`)                         | `update_note`       | `PUT /api/file`              |
+| Surgical edit (append/replace section/block, `dryRun`) | `patch_note`        | `PATCH /api/file`            |
+| Full-text / `#tag` search                              | `search_notes`      | `GET /api/search`            |
+| Semantic (TF-IDF) search                               | `semantic_search`   | `GET /api/semantic-search`   |
+| Hybrid (RRF) search                                    | `hybrid_search`     | `GET /api/hybrid-search`     |
+| RAG context bundle (matches + focus-note neighbors)    | `get_context`       | `GET /api/context`           |
+| Cited answer kit + offline gap analysis                | `think`             | `GET /api/think`             |
+| Backlinks (incl. `rel:` type)                          | `get_backlinks`     | `GET /api/backlinks`         |
+| Whole vault wikilink graph                             | `get_graph`         | `GET /api/graph`             |
+| Recent provenance / audit trail                        | `recent_activity`   | `GET /api/audit`             |
+| Create a folder                                        | `create_folder`     | `POST /api/dir`              |
+| Move / rename a note or folder                         | `move_path`         | `PATCH /api/path`            |
+| Delete a note or folder                                | `delete_path`       | `DELETE /api/path`           |
+| Propose a create/update/delete for human review        | `propose_edit`      | `POST /api/proposals`        |
+| List proposals + their status                          | `list_proposals`    | `GET /api/proposals`         |
+| Run the dream-cycle maintenance scan                   | `run_maintenance`   | `POST /api/maintenance/scan` |
+
+**Human-only (no MCP tool):** resolving a proposal — `POST /api/proposals/resolve`
+(an `agent:` resolver is rejected `403`). **Live stream:** `GET /api/events` (SSE).
+**Preview maintenance without filing:** `GET /api/maintenance`.
+
+Rules of thumb: **read/search before writing**; prefer `patch_note` over a full
+`update_note`; and **propose** (don't write directly) anything a human should sign
+off on. Tool arg shapes are in [`apps/mcp/README.md`](apps/mcp/README.md); endpoint
+request/response shapes in [`apps/api/README.md`](apps/api/README.md).
+
+---
+
 ## What's built (current surface)
 
 Done and on `main`-track (details + status tables in `docs/implementation.md`):
