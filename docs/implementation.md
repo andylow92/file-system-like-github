@@ -276,6 +276,8 @@ Key facts an agent must know:
 | Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic             |
 | Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)              |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                                        |
+| Retrieval eval harness (recall floors)      |   ✅   | `retrievalEval.ts`, fixture + `routes/retrievalEval.test.ts` (in `npm test`)     |
+| CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                      |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -556,7 +558,7 @@ review-queue tuning, a question log, implicit relevance feedback, freshness
 scoring) lives in [`improvement-ideas.md`](improvement-ideas.md).
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
-CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
+non-markdown attachments, editor ergonomics (palette/outline/daily
 notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
 follow-ups also deferred: settled-proposal retention/pruning, a computed
 line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.

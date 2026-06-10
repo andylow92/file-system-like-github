@@ -79,9 +79,10 @@ and makes the dream cycle feel genuinely alive.
 
 ## Quick wins that unlock the above
 
-- **CI pipeline.** The test suite (including the fresh-clone MCP e2e) runs
-  only locally. A single GitHub Actions workflow running
-  `npm test && npm run lint && npm run build` protects everything else.
+- **CI pipeline.** ✅ Done — `.github/workflows/ci.yml` runs
+  `npm test`, `npm run lint`, `npm run build`, and `npm run format` on every
+  PR and push to `main`, so the eval harness and the fresh-clone MCP e2e
+  gate every change.
 - **Git-backed version history for the vault.** Auto-commit on writes (or
   snapshot per proposal approval) gives undo for agent writes — a trust
   unlock that makes the loops above safe to run more autonomously.
@@ -96,4 +97,5 @@ and makes the dream cycle feel genuinely alive.
 **CI → eval harness (#20) → skill notes (#1) → question log (#3) →
 review-queue tuning (#2).** Every self-improvement mechanism lands on top of
 a safety net, and each reuses the proposal/audit/think plumbing — no new
-subsystems.
+subsystems. _CI and the eval harness have shipped; skill notes (#1) are
+next._
