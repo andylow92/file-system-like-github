@@ -5,7 +5,30 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-10 (skill notes — procedural memory + `list_skills`)_
+_Last updated: 2026-06-10 (question log — demand-driven gaps + `recent_questions`)_
+
+> **Latest change.** The vault now keeps a **question log** — it learns what it
+> gets asked but cannot answer (the second self-improvement loop from
+> [`improvement-ideas.md`](improvement-ideas.md), #3). Every `GET /api/think`
+> query is persisted with its offline gap signal (`weakCoverage` +
+> `uncoveredTerms`, attributed via `X-Actor`; the MCP `think` tool now sends its
+> actor) to `CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log — a
+> `QuestionLog` store mirroring `AuditLog`. Logging is **best-effort**: a log
+> failure never fails the answer. A pure helper in `@repo/shared`
+> (`questions.ts` — `findKnowledgeGaps`, `QuestionEntry`, `KnowledgeGap`)
+> distills the log into **recurring knowledge gaps**: terms left uncovered by ≥
+> `minCount` questions (default 2; repeats of the same question count — asking
+> twice is demand), sorted by frequency with de-duplicated example queries.
+> `GET /api/questions?limit&minCount` (and the 23rd MCP tool,
+> `recent_questions`) returns `{ entries, gaps }` — entries newest-first, gaps
+> computed over the whole log regardless of the page size. The tool description
+> closes the loop: a recurring gap is a demand-driven prompt to `propose_edit` a
+> note that fills it (human-approved, as always). Covered by `apps/api`
+> `__tests__/questions.test.ts` (pure: grouping, repeat-demand, per-entry term
+> dedupe, minCount/sort, example cap, empty log) and `routes/questions.test.ts`
+> (endpoint: persistence + actor attribution, gap distillation, limit vs.
+> whole-log recurrence); the MCP smoke + fresh-clone tests assert the 23-tool
+> surface.
 
 > **Latest change.** The vault now has **skill notes** — procedural memory the
 > agent grows itself (the first self-improvement loop from
@@ -232,7 +255,7 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 22 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 23 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
   get_block_anchors, propose_edit + list_proposals + run_maintenance. When
@@ -288,7 +311,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (22 tools) — writes as `agent:mcp`                                    |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (23 tools) — writes as `agent:mcp`                                    |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |
@@ -298,6 +321,7 @@ Key facts an agent must know:
 | Retrieval eval harness (recall floors)      |   ✅   | `retrievalEval.ts`, fixture + `routes/retrievalEval.test.ts` (in `npm test`)     |
 | CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                      |
 | Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals         |
+| Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`      |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -583,11 +607,24 @@ into infrastructure we already have rather than adding a new subsystem.
     new ones after — the first self-improvement loop from
     [`improvement-ideas.md`](improvement-ideas.md). Tests: `apps/api`
     `__tests__/skills.test.ts` (pure) + `routes/skills.test.ts` (endpoint).
+22. **Question log — demand-driven gaps.** ✅ **Done.** Every `think` query is
+    persisted with its gap signal (`weakCoverage` + `uncoveredTerms`, actor
+    from `X-Actor`) to `.fsbrain/questions.jsonl` (`QuestionLog`, mirroring
+    `AuditLog`; best-effort — never fails the answer). Pure
+    `findKnowledgeGaps` (`@repo/shared` `questions.ts`) distills recurring
+    uncovered terms (≥ `minCount` questions, repeats count as demand);
+    `GET /api/questions` + the `recent_questions` MCP tool (23rd) return
+    `{ entries, gaps }`, with the tool description nudging the agent to
+    `propose_edit` notes that fill recurring gaps — the second
+    self-improvement loop from [`improvement-ideas.md`](improvement-ideas.md)
+    (#3). Tests: `apps/api` `__tests__/questions.test.ts` (pure) +
+    `routes/questions.test.ts` (endpoint).
 
 A broader brainstorm of follow-on **self-improvement loops** (skill notes,
 review-queue tuning, a question log, implicit relevance feedback, freshness
 scoring) lives in [`improvement-ideas.md`](improvement-ideas.md) — skill notes
-(#1 there) have shipped; the question log (#3) is next in its sequence.
+(#1) and the question log (#3) have shipped; review-queue tuning (#2) is next
+in its sequence.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 non-markdown attachments, editor ergonomics (palette/outline/daily

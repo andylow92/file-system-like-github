@@ -13,6 +13,7 @@ import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
 import { createPathResolver } from './storage/pathResolver.js';
 import { createProposalStore } from './storage/proposalStore.js';
+import { createQuestionLog } from './storage/questionLog.js';
 
 export { loadConfig, ensureContentRoot, defaultContentRoot } from './config.js';
 export type { ServerConfig } from './config.js';
@@ -23,6 +24,7 @@ export function createServer(config = loadConfig()): http.Server {
   const repository = createFileRepository(pathResolver);
   const auditLog = createAuditLog(config.contentRoot);
   const proposalStore = createProposalStore(config.contentRoot);
+  const questionLog = createQuestionLog(config.contentRoot);
   const patchIdempotency = createIdempotencyCache<PatchFileResponse>();
   const eventBus = createEventBus();
   // Surface out-of-band edits (direct file writes, git, another process) so the
@@ -84,6 +86,7 @@ export function createServer(config = loadConfig()): http.Server {
       pathResolver,
       auditLog,
       proposalStore,
+      questionLog,
       patchIdempotency,
       eventBus,
       vaultIndex,

@@ -26,6 +26,7 @@ describe('PATCH /api/path', () => {
     const { createFileRepository } = await import('../storage/fileRepository.js');
     const { createAuditLog } = await import('../storage/auditLog.js');
     const { createProposalStore } = await import('../storage/proposalStore.js');
+    const { createQuestionLog } = await import('../storage/questionLog.js');
     const { createIdempotencyCache } = await import('../storage/idempotencyCache.js');
     const { createEventBus } = await import('../events/eventBus.js');
     const { createVaultIndex } = await import('../index/vaultIndex.js');
@@ -33,6 +34,7 @@ describe('PATCH /api/path', () => {
     const repository = createFileRepository(pathResolver);
     const auditLog = createAuditLog(rootPath);
     const proposalStore = createProposalStore(rootPath);
+    const questionLog = createQuestionLog(rootPath);
     const patchIdempotency = createIdempotencyCache<import('./files.js').PatchFileResponse>();
     const eventBus = createEventBus();
     const vaultIndex = createVaultIndex({ repository, eventBus });
@@ -41,6 +43,7 @@ describe('PATCH /api/path', () => {
       pathResolver,
       auditLog,
       proposalStore,
+      questionLog,
       patchIdempotency,
       eventBus,
       vaultIndex,

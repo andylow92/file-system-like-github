@@ -455,6 +455,23 @@ curl "http://localhost:3001/api/think?q=restore&path=ops/backups.md&synthesize=1
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
 filtered to a single `path`.
 
+### `GET /api/questions?limit=...&minCount=...`
+
+The **question log**: every `/api/think` query is persisted with its offline
+gap signal (`weakCoverage` + `uncoveredTerms`, attributed via `X-Actor`) to
+`CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log. Returns
+`{ entries, gaps }`: the most recent `QuestionEntry[]` (newest first, default
+limit 50) and the recurring `KnowledgeGap[]` distilled from the **whole** log —
+terms left uncovered by at least `minCount` questions (default 2), sorted by
+frequency (`{ term, count, queries, lastTs }`). A recurring gap is a
+demand-driven prompt for what note to write next. Logging is best-effort and
+never fails the `think` call itself.
+
+```bash
+curl "http://localhost:3001/api/questions"
+curl "http://localhost:3001/api/questions?limit=10&minCount=3"
+```
+
 ### `GET /api/events`
 
 A [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events)

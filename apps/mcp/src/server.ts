@@ -35,7 +35,9 @@ import type {
   FileNode,
   GraphData,
   HybridHit,
+  KnowledgeGap,
   MaintenanceFinding,
+  QuestionEntry,
   SearchMatch,
   SemanticHit,
   SkillSummary,
@@ -425,7 +427,8 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
         const params = new URLSearchParams({ q: query });
         if (focusPath) params.set('path', focusPath);
         if (budget) params.set('budget', String(budget));
-        return apiRequest<AnswerKit>(`/api/think?${params.toString()}`);
+        // `actor` so the question log attributes the query to this agent.
+        return apiRequest<AnswerKit>(`/api/think?${params.toString()}`, { actor: true });
       },
     ),
   );
@@ -463,6 +466,32 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       if (limit) params.set('limit', String(limit));
       const query = params.toString();
       return apiRequest<AuditEntry[]>(`/api/audit${query ? `?${query}` : ''}`);
+    }),
+  );
+
+  register(
+    'recent_questions',
+    'Read the **question log**: recent `think` questions with their offline gap ' +
+      'signal, plus the recurring **knowledge gaps** distilled from the whole ' +
+      'log — terms that keep going uncovered across questions. A recurring gap ' +
+      'means the vault keeps being asked something it cannot answer: if you ' +
+      'know the missing material, `propose_edit` a note that fills the gap (or ' +
+      'ask the human for it) — that is how usage grows the vault.',
+    {
+      limit: z.number().optional().describe('Max recent entries to return (default 50).'),
+      minCount: z
+        .number()
+        .optional()
+        .describe('Questions that must share an uncovered term to count as a gap (default 2).'),
+    },
+    tool(async ({ limit, minCount }: { limit?: number; minCount?: number }) => {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', String(limit));
+      if (minCount) params.set('minCount', String(minCount));
+      const query = params.toString();
+      return apiRequest<{ entries: QuestionEntry[]; gaps: KnowledgeGap[] }>(
+        `/api/questions${query ? `?${query}` : ''}`,
+      );
     }),
   );
 

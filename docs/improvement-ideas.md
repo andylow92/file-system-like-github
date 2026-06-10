@@ -52,13 +52,26 @@ constraint.
 
 ## 3. Question log → gap-driven growth
 
-`think` computes `uncoveredTerms` and `weakCoverage` per query, then throws
-them away. Persist them (e.g. `.fsbrain/questions.jsonl`, beside the audit
-log). That answers: _what does the vault keep getting asked that it can't
-answer?_ Recurring gaps become maintenance findings — "3 queries this week
-hit weak coverage on 'deployment rollback'; propose a stub note?" The vault
-learns what knowledge it's missing from actual usage rather than static
-analysis.
+✅ **Done** — backlog item #22 in
+[`implementation.md`](implementation.md). `think` used to compute
+`uncoveredTerms` and `weakCoverage` per query, then throw them away; now
+every `think` query is persisted with its gap signal (and `X-Actor`
+attribution) to `.fsbrain/questions.jsonl`, beside the audit log.
+
+- Shipped as a `QuestionLog` store (mirrors `AuditLog`), pure
+  `findKnowledgeGaps` in `@repo/shared` `questions.ts`,
+  `GET /api/questions?limit&minCount`, and the `recent_questions` MCP tool
+  (23rd) returning `{ entries, gaps }`.
+- A **recurring gap** is a term left uncovered by ≥ `minCount` questions
+  (default 2; asking the same thing twice counts — repetition is demand).
+  The tool description nudges the agent to `propose_edit` a note filling a
+  recurring gap, closing the loop with human review.
+- Deferred from v1: surfacing gaps as maintenance findings in the web Review
+  tab (needs a new `MaintenanceFinding` kind + UI work; the agent-facing
+  loop above already works without it).
+
+The vault learns what knowledge it's missing from actual usage rather than
+static analysis.
 
 ## 4. Implicit relevance feedback for ranking
 
@@ -101,5 +114,5 @@ and makes the dream cycle feel genuinely alive.
 **CI → eval harness (#20) → skill notes (#1) → question log (#3) →
 review-queue tuning (#2).** Every self-improvement mechanism lands on top of
 a safety net, and each reuses the proposal/audit/think plumbing — no new
-subsystems. _CI, the eval harness, and skill notes (#1) have shipped; the
-question log (#3) is next._
+subsystems. _CI, the eval harness, skill notes (#1), and the question log
+(#3) have shipped; review-queue tuning (#2) is next._
