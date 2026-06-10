@@ -208,6 +208,14 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   declined fix. On-demand by default (optional `MAINTENANCE_INTERVAL_MS` timer).
   Resolution stays human-only; contradiction
   detection is a deferred follow-up (it needs an LLM, out of the offline scope).
+- **Retrieval eval harness** — a golden `query → expected-note` fixture
+  (`apps/api/src/__tests__/fixtures/retrievalCorpus.ts`) is run against the
+  real `/api/search`, `/api/semantic-search`, and `/api/hybrid-search` stacks
+  in `npm test`, with pinned per-engine recall floors (hybrid must retrieve
+  every expected note). Pure metric helpers (recall@k, MRR@k) live in
+  `@repo/shared` (`retrievalEval.ts`). A ranking change that regresses recall
+  fails the suite and names the broken queries — extend the fixture when you
+  add ranking behavior; never lower a floor to ship.
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
 semantic search (the cached index + context bundle endpoint above are the seam

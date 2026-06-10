@@ -534,9 +534,26 @@ into infrastructure we already have rather than adding a new subsystem.
     (person, meeting, idea…) with allowed relationships — powers graph node
     colouring, validation, and retrieval boosting. _gbrain parallel:
     `gbrain-base-v2` with 15 canonical types._
-20. **Retrieval eval harness.** A small fixture of `query → expected-note`
-    pairs so ranking changes can't silently regress recall. _gbrain parallel:
-    its LongMemEval / NamedThingBench regression suite._
+20. **Retrieval eval harness.** ✅ **Done.** A golden fixture of
+    `query → expected-note` pairs (`apps/api`
+    `__tests__/fixtures/retrievalCorpus.ts` — 12 notes, 9 judged queries
+    covering exact phrases, filename-only hits, paraphrases, and stemming) is
+    run against the three **real** ranking stacks — `/api/search`,
+    `/api/semantic-search`, `/api/hybrid-search` — through a live server +
+    cached `VaultIndex` (`routes/retrievalEval.test.ts`), with per-engine
+    recall floors pinned just below measured scores (lexical ≥ 0.4, measured
+    0.44; semantic ≥ 0.85, measured 0.89; **hybrid must retrieve every
+    expected note**, and must be ≥ either engine alone). The metric side is
+    pure in `@repo/shared` (`retrievalEval.ts` — `scoreEvalCase`,
+    `summarizeEval`, `formatEvalReport`: recall@k + MRR@k over a de-duplicated
+    top-k). Runs in `npm test`, so a ranking change (tokenizer, chunking, or a
+    future embedding engine behind the same seam — item #13) cannot silently
+    regress recall; a broken floor prints the exact failing queries. _gbrain
+    parallel: its LongMemEval / NamedThingBench regression suite._
+
+A broader brainstorm of follow-on **self-improvement loops** (skill notes,
+review-queue tuning, a question log, implicit relevance feedback, freshness
+scoring) lives in [`improvement-ideas.md`](improvement-ideas.md).
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily

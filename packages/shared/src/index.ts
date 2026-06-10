@@ -148,6 +148,7 @@ export * from './maintenance.js';
 export * from './markdown.js';
 export * from './noteId.js';
 export * from './patch.js';
+export * from './retrievalEval.js';
 export * from './search.js';
 export * from './semantic.js';
 export * from './think.js';
