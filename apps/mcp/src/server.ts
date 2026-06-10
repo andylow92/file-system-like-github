@@ -38,6 +38,7 @@ import type {
   MaintenanceFinding,
   SearchMatch,
   SemanticHit,
+  SkillSummary,
 } from '@repo/shared';
 
 // Empty string also counts as "not set" — that's what the fresh-clone e2e test
@@ -619,6 +620,30 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       if (status) params.set('status', status);
       const query = params.toString();
       return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
+    }),
+  );
+
+  register(
+    'list_skills',
+    "List the vault's **skill notes** — reusable procedural playbooks (notes " +
+      'with frontmatter `type: skill`) describing how to perform a task: the ' +
+      'goal, the steps, the gotchas. Check here before starting a non-trivial ' +
+      'task and `read_note` a matching skill to follow it. After finishing a ' +
+      'task where you learned a reusable procedure, distill it into a skill ' +
+      'note via `propose_edit` (create or update a note whose frontmatter has ' +
+      '`type: skill`, plus optional `name:` and `description:`) so the human ' +
+      "can review and approve it — that is how the vault's skills grow.",
+    {
+      query: z
+        .string()
+        .optional()
+        .describe('Case-insensitive filter over skill names, descriptions, paths, and tags.'),
+    },
+    tool(async ({ query }: { query?: string }) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      const search = params.toString();
+      return apiRequest<SkillSummary[]>(`/api/skills${search ? `?${search}` : ''}`);
     }),
   );
 

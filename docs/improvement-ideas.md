@@ -16,20 +16,24 @@ These ideas close those loops, in rough order of leverage.
 
 ## 1. Skill notes — procedural memory the agent grows itself
 
-The vault stores **declarative** knowledge (facts, notes). Add a convention
-for **procedural** knowledge: notes with `type: skill` frontmatter containing
-a goal, steps, and gotchas.
+✅ **Done** — backlog item #21 in
+[`implementation.md`](implementation.md). The vault stores **declarative**
+knowledge (facts, notes); this added a convention for **procedural**
+knowledge: notes with `type: skill` frontmatter (optional `name:` /
+`description:`) containing a goal, steps, and gotchas.
 
-- Expose `list_skills` / `get_skill` MCP tools (thin reads over the existing
-  tree + frontmatter parsing).
-- Nudge the agent (via tool descriptions) to `propose_edit` a new or updated
-  skill note after completing a task — "write down what worked."
-- The human approves it in the Review tab like any proposal.
+- Shipped as `@repo/shared` `skills.ts` (`parseSkill`, `listSkills`),
+  `GET /api/skills?q=...`, and the `list_skills` MCP tool (22nd).
+- Reading a skill is a plain `read_note`; `get_skill` was dropped as
+  redundant with it — one new read surface is enough.
+- The `list_skills` tool description nudges the agent to check for a skill
+  before a non-trivial task and to `propose_edit` a new/updated skill after
+  completing one — "write down what worked." The human approves it in the
+  Review tab like any proposal.
 
 Over time the agent distills its own successful workflows into reusable,
-human-audited playbooks. Needs almost no new infrastructure: a frontmatter
-convention + two thin read tools + a prompt nudge. Pairs naturally with
-backlog #19 (schema packs) — `skill` becomes one of the canonical types.
+human-audited playbooks. Pairs naturally with backlog #19 (schema packs) —
+`skill` becomes one of the canonical types.
 
 ## 2. Learn from the review queue
 
@@ -97,5 +101,5 @@ and makes the dream cycle feel genuinely alive.
 **CI → eval harness (#20) → skill notes (#1) → question log (#3) →
 review-queue tuning (#2).** Every self-improvement mechanism lands on top of
 a safety net, and each reuses the proposal/audit/think plumbing — no new
-subsystems. _CI and the eval harness have shipped; skill notes (#1) are
-next._
+subsystems. _CI, the eval harness, and skill notes (#1) have shipped; the
+question log (#3) is next._

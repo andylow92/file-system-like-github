@@ -37,6 +37,7 @@ import {
   findBlock,
   findNoteId,
   findTextMatch,
+  listSkills,
   parseFrontmatter,
   parseNote,
   reciprocalRankFusion,
@@ -799,6 +800,19 @@ async function handleSearch({ res, url, vaultIndex }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: matches.slice(0, limit) });
 }
 
+/**
+ * List the vault's **skill notes** (frontmatter `type: skill`) — procedural
+ * playbooks an agent checks before starting a task. Reading one is a plain
+ * `GET /api/file`; creating/updating one goes through the proposal queue, so
+ * the skill library grows only with human sign-off.
+ */
+async function handleListSkills({ res, url, vaultIndex }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const documents = await vaultIndex.getDocuments();
+  const skills = listSkills(documents, query || undefined);
+  sendJson(res, 200, { success: true, data: skills });
+}
+
 async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
   const query = (url.searchParams.get('q') ?? '').trim();
   const limitParam = Number(url.searchParams.get('limit'));
@@ -1525,6 +1539,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/search') {
     await executeHandler(context, handleSearch);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/skills') {
+    await executeHandler(context, handleListSkills);
     return { handled: true };
   }
 

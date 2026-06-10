@@ -72,6 +72,7 @@ describe('mcp server (self-contained)', () => {
           'hybrid_search',
           'list_notes',
           'list_proposals',
+          'list_skills',
           'move_path',
           'patch_note',
           'propose_edit',

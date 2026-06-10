@@ -151,4 +151,5 @@ export * from './patch.js';
 export * from './retrievalEval.js';
 export * from './search.js';
 export * from './semantic.js';
+export * from './skills.js';
 export * from './think.js';

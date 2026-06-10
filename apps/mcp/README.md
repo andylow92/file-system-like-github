@@ -34,11 +34,19 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 | `delete_path`       | Delete a note or folder.                                                        |
 | `propose_edit`      | Propose a create/update/delete for human review.                                |
 | `list_proposals`    | List proposals + review status (resolve is human).                              |
+| `list_skills`       | List skill notes (`type: skill`) — reusable procedural playbooks.               |
 | `run_maintenance`   | Run the dream-cycle scan; file broken-link/orphan/duplicate fixes as proposals. |
 
 `update_note` and `move_path` reject stale writes via the API's optimistic
 concurrency check. There is **no** `resolve` tool: edit-proposal resolution is
 human-only by design.
+
+**Skill notes (procedural memory).** A note whose frontmatter declares
+`type: skill` (plus optional `name:` / `description:`) is a reusable playbook —
+goal, steps, gotchas. `list_skills` finds them; read one with `read_note`.
+After completing a task that taught you a reusable procedure, contribute it
+back with `propose_edit` (a `type: skill` note) so the human approves it — the
+skill library grows from real work, with review.
 
 Build once, then launch:
 
@@ -51,7 +59,7 @@ npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
 The server prints a one-line readiness banner on stderr:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=21 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=22 · actor=agent:mcp
 ```
 
 For active development with auto-reload:
@@ -92,7 +100,7 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 `src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
 against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
-It asserts `tools/list` returns all 21 expected names, round-trips
+It asserts `tools/list` returns all 22 expected names, round-trips
 `create_note` → `read_note` → `search_notes` → `semantic_search` →
 `hybrid_search` → `think` → `propose_edit` → `list_proposals` → `recent_activity`
 → `run_maintenance`, and confirms the write landed both on disk and in
