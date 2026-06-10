@@ -56,9 +56,7 @@ export function ModalDialog({
         return;
       }
 
-      const nodes = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      );
+      const nodes = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
       if (!nodes.length) {
         event.preventDefault();
         return;
