@@ -57,11 +57,13 @@ the in-process API. Pick the tool that matches your intent:
 | Backlinks (incl. `rel:` type)                          | `get_backlinks`     | `GET /api/backlinks`         |
 | Whole vault wikilink graph                             | `get_graph`         | `GET /api/graph`             |
 | Recent provenance / audit trail                        | `recent_activity`   | `GET /api/audit`             |
+| Question log + recurring knowledge gaps                | `recent_questions`  | `GET /api/questions`         |
 | Create a folder                                        | `create_folder`     | `POST /api/dir`              |
 | Move / rename a note or folder                         | `move_path`         | `PATCH /api/path`            |
 | Delete a note or folder                                | `delete_path`       | `DELETE /api/path`           |
 | Propose a create/update/delete for human review        | `propose_edit`      | `POST /api/proposals`        |
 | List proposals + their status                          | `list_proposals`    | `GET /api/proposals`         |
+| List skill notes (procedural playbooks)                | `list_skills`       | `GET /api/skills`            |
 | Run the dream-cycle maintenance scan                   | `run_maintenance`   | `POST /api/maintenance/scan` |
 
 **Human-only (no MCP tool):** resolving a proposal — `POST /api/proposals/resolve`
@@ -138,12 +140,13 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 21 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 23 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
-  `get_graph`, `recent_activity`, `create_folder`, `move_path`, `delete_path`,
-  `propose_edit`, `list_proposals`, `run_maintenance`). It runs
+  `get_graph`, `recent_activity`, `recent_questions`, `create_folder`,
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`, `list_skills`,
+  `run_maintenance`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -208,6 +211,34 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   declined fix. On-demand by default (optional `MAINTENANCE_INTERVAL_MS` timer).
   Resolution stays human-only; contradiction
   detection is a deferred follow-up (it needs an LLM, out of the offline scope).
+- **Retrieval eval harness** — a golden `query → expected-note` fixture
+  (`apps/api/src/__tests__/fixtures/retrievalCorpus.ts`) is run against the
+  real `/api/search`, `/api/semantic-search`, and `/api/hybrid-search` stacks
+  in `npm test`, with pinned per-engine recall floors (hybrid must retrieve
+  every expected note). Pure metric helpers (recall@k, MRR@k) live in
+  `@repo/shared` (`retrievalEval.ts`). A ranking change that regresses recall
+  fails the suite and names the broken queries — extend the fixture when you
+  add ranking behavior; never lower a floor to ship.
+- **Skill notes — procedural memory** — a note with frontmatter `type: skill`
+  (plus optional `name:` / `description:`) is a reusable playbook: goal,
+  steps, gotchas. `GET /api/skills` (and the `list_skills` MCP tool, with an
+  optional `query` filter) lists them from the cached index; reading one is a
+  plain `read_note`, and contributing one is a `propose_edit` the human
+  approves — so the skill library grows from real agent work, with review.
+  If you are an agent working in this vault: **check `list_skills` before a
+  non-trivial task, and propose a skill note after learning a reusable
+  procedure.** Pure helpers in `@repo/shared` (`skills.ts` — `parseSkill`,
+  `listSkills`).
+- **Question log — demand-driven gaps** — every `think` query is persisted
+  with its offline gap signal (`weakCoverage` + `uncoveredTerms`) to
+  `CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log.
+  `GET /api/questions` (and the `recent_questions` MCP tool) returns the
+  recent entries plus **recurring knowledge gaps** — terms that keep going
+  uncovered across questions (pure `findKnowledgeGaps` in `@repo/shared`
+  `questions.ts`). A recurring gap means the vault keeps being asked
+  something it can't answer: if you are an agent and know the missing
+  material, `propose_edit` a note that fills it. Logging is best-effort and
+  never fails the `think` call.
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
 semantic search (the cached index + context bundle endpoint above are the seam

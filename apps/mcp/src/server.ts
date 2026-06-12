@@ -35,9 +35,12 @@ import type {
   FileNode,
   GraphData,
   HybridHit,
+  KnowledgeGap,
   MaintenanceFinding,
+  QuestionEntry,
   SearchMatch,
   SemanticHit,
+  SkillSummary,
 } from '@repo/shared';
 
 // Empty string also counts as "not set" — that's what the fresh-clone e2e test
@@ -424,7 +427,8 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
         const params = new URLSearchParams({ q: query });
         if (focusPath) params.set('path', focusPath);
         if (budget) params.set('budget', String(budget));
-        return apiRequest<AnswerKit>(`/api/think?${params.toString()}`);
+        // `actor` so the question log attributes the query to this agent.
+        return apiRequest<AnswerKit>(`/api/think?${params.toString()}`, { actor: true });
       },
     ),
   );
@@ -462,6 +466,32 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       if (limit) params.set('limit', String(limit));
       const query = params.toString();
       return apiRequest<AuditEntry[]>(`/api/audit${query ? `?${query}` : ''}`);
+    }),
+  );
+
+  register(
+    'recent_questions',
+    'Read the **question log**: recent `think` questions with their offline gap ' +
+      'signal, plus the recurring **knowledge gaps** distilled from the whole ' +
+      'log — terms that keep going uncovered across questions. A recurring gap ' +
+      'means the vault keeps being asked something it cannot answer: if you ' +
+      'know the missing material, `propose_edit` a note that fills the gap (or ' +
+      'ask the human for it) — that is how usage grows the vault.',
+    {
+      limit: z.number().optional().describe('Max recent entries to return (default 50).'),
+      minCount: z
+        .number()
+        .optional()
+        .describe('Questions that must share an uncovered term to count as a gap (default 2).'),
+    },
+    tool(async ({ limit, minCount }: { limit?: number; minCount?: number }) => {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', String(limit));
+      if (minCount) params.set('minCount', String(minCount));
+      const query = params.toString();
+      return apiRequest<{ entries: QuestionEntry[]; gaps: KnowledgeGap[] }>(
+        `/api/questions${query ? `?${query}` : ''}`,
+      );
     }),
   );
 
@@ -619,6 +649,30 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       if (status) params.set('status', status);
       const query = params.toString();
       return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
+    }),
+  );
+
+  register(
+    'list_skills',
+    "List the vault's **skill notes** — reusable procedural playbooks (notes " +
+      'with frontmatter `type: skill`) describing how to perform a task: the ' +
+      'goal, the steps, the gotchas. Check here before starting a non-trivial ' +
+      'task and `read_note` a matching skill to follow it. After finishing a ' +
+      'task where you learned a reusable procedure, distill it into a skill ' +
+      'note via `propose_edit` (create or update a note whose frontmatter has ' +
+      '`type: skill`, plus optional `name:` and `description:`) so the human ' +
+      "can review and approve it — that is how the vault's skills grow.",
+    {
+      query: z
+        .string()
+        .optional()
+        .describe('Case-insensitive filter over skill names, descriptions, paths, and tags.'),
+    },
+    tool(async ({ query }: { query?: string }) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      const search = params.toString();
+      return apiRequest<SkillSummary[]>(`/api/skills${search ? `?${search}` : ''}`);
     }),
   );
 

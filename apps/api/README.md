@@ -280,6 +280,22 @@ curl "http://localhost:3001/api/search?q=roadmap"
 curl "http://localhost:3001/api/search?tag=project"
 ```
 
+### `GET /api/skills?q=...`
+
+List the vault's **skill notes** — procedural playbooks marked with frontmatter
+`type: skill`. `name` comes from frontmatter `name:`, else the first heading,
+else the filename; `description` from frontmatter `description:`, else the
+first body paragraph line. Optional `q` filters by a case-insensitive substring
+over name, description, path, and tags. Returns `SkillSummary[]`
+(`{ path, name, description, tags }`) sorted by name. Reading a skill is a
+plain `GET /api/file`; creating or updating one should go through the proposal
+queue so a human signs off.
+
+```bash
+curl "http://localhost:3001/api/skills"
+curl "http://localhost:3001/api/skills?q=release"
+```
+
 ### `GET /api/semantic-search?q=...&limit=...`
 
 Relevance-ranked retrieval. Chunks every note (frontmatter stripped) and ranks
@@ -438,6 +454,23 @@ curl "http://localhost:3001/api/think?q=restore&path=ops/backups.md&synthesize=1
 
 Returns the provenance/audit trail (`AuditEntry[]`, newest first), optionally
 filtered to a single `path`.
+
+### `GET /api/questions?limit=...&minCount=...`
+
+The **question log**: every `/api/think` query is persisted with its offline
+gap signal (`weakCoverage` + `uncoveredTerms`, attributed via `X-Actor`) to
+`CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log. Returns
+`{ entries, gaps }`: the most recent `QuestionEntry[]` (newest first, default
+limit 50) and the recurring `KnowledgeGap[]` distilled from the **whole** log —
+terms left uncovered by at least `minCount` questions (default 2), sorted by
+frequency (`{ term, count, queries, lastTs }`). A recurring gap is a
+demand-driven prompt for what note to write next. Logging is best-effort and
+never fails the `think` call itself.
+
+```bash
+curl "http://localhost:3001/api/questions"
+curl "http://localhost:3001/api/questions?limit=10&minCount=3"
+```
 
 ### `GET /api/events`
 

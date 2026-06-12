@@ -5,7 +5,49 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-06 (dream-cycle maintenance scan → review proposals)_
+_Last updated: 2026-06-10 (question log — demand-driven gaps + `recent_questions`)_
+
+> **Latest change.** The vault now keeps a **question log** — it learns what it
+> gets asked but cannot answer (the second self-improvement loop from
+> [`improvement-ideas.md`](improvement-ideas.md), #3). Every `GET /api/think`
+> query is persisted with its offline gap signal (`weakCoverage` +
+> `uncoveredTerms`, attributed via `X-Actor`; the MCP `think` tool now sends its
+> actor) to `CONTENT_ROOT/.fsbrain/questions.jsonl`, beside the audit log — a
+> `QuestionLog` store mirroring `AuditLog`. Logging is **best-effort**: a log
+> failure never fails the answer. A pure helper in `@repo/shared`
+> (`questions.ts` — `findKnowledgeGaps`, `QuestionEntry`, `KnowledgeGap`)
+> distills the log into **recurring knowledge gaps**: terms left uncovered by ≥
+> `minCount` questions (default 2; repeats of the same question count — asking
+> twice is demand), sorted by frequency with de-duplicated example queries.
+> `GET /api/questions?limit&minCount` (and the 23rd MCP tool,
+> `recent_questions`) returns `{ entries, gaps }` — entries newest-first, gaps
+> computed over the whole log regardless of the page size. The tool description
+> closes the loop: a recurring gap is a demand-driven prompt to `propose_edit` a
+> note that fills it (human-approved, as always). Covered by `apps/api`
+> `__tests__/questions.test.ts` (pure: grouping, repeat-demand, per-entry term
+> dedupe, minCount/sort, example cap, empty log) and `routes/questions.test.ts`
+> (endpoint: persistence + actor attribution, gap distillation, limit vs.
+> whole-log recurrence); the MCP smoke + fresh-clone tests assert the 23-tool
+> surface.
+
+> **Latest change.** The vault now has **skill notes** — procedural memory the
+> agent grows itself (the first self-improvement loop from
+> [`improvement-ideas.md`](improvement-ideas.md)). A note whose frontmatter
+> declares `type: skill` (plus optional `name:` / `description:`) is a reusable
+> playbook: goal, steps, gotchas. A pure helper in `@repo/shared` (`skills.ts`
+> — `parseSkill`, `listSkills`, `SkillSummary`) recognizes and summarizes them
+> (name falls back to the first heading then the filename; description to the
+> first body paragraph line). `GET /api/skills?q=...` (and the 22nd MCP tool,
+> `list_skills`, with an optional `query` filter) lists them from the cached
+> `VaultIndex`. Deliberately **no new write path**: reading a skill is
+> `read_note`, and contributing one is a `propose_edit` the human approves in
+> the Review tab — the tool description nudges the agent to check for a skill
+> before a non-trivial task and to distill a new one after learning a reusable
+> procedure, so the playbook library grows from real work, with review.
+> Covered by `apps/api` `__tests__/skills.test.ts` (pure: type marker,
+> fallbacks, filtering) and `routes/skills.test.ts` (endpoint: skill-only
+> listing, `q` filter, no-stale-after-write); the fresh-clone MCP test asserts
+> the 22-tool surface.
 
 > **Latest change.** The vault now runs a **dream-cycle maintenance** scan that
 > finds hygiene problems and files each actionable one as a **proposal** the
@@ -20,8 +62,8 @@ _Last updated: 2026-06-06 (dream-cycle maintenance scan → review proposals)_
 > `> See also [[other]]` cross-link, never a merge). Each suggestion is a safe,
 > reversible `{ action, path, content?, note }` that maps 1:1 onto a proposal.
 > `GET /api/maintenance` is a dry preview (scan the cached `VaultIndex`, file
-> nothing); `POST /api/maintenance/scan` (and the 21st MCP tool,
-> `run_maintenance`) files each suggestion as a proposal attributed to a distinct
+> nothing); `POST /api/maintenance/scan` (and the `run_maintenance` MCP tool —
+> see below) files each suggestion as a proposal attributed to a distinct
 > `agent:maintenance` actor and returns `{ findings, proposalsFiled }`. It
 > **dedupes against pending _and_ rejected proposals** (match on action+path) so
 > re-running is idempotent — it never spams the Review queue nor re-surfaces a fix
@@ -213,7 +255,7 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 21 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 23 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
   get_block_anchors, propose_edit + list_proposals + run_maintenance. When
@@ -269,13 +311,17 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (21 tools) — writes as `agent:mcp`                                    |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (23 tools) — writes as `agent:mcp`                                    |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |
 | Cached retrieval index (chunks+IDF, reused) |   ✅   | `index/vaultIndex.ts`, EventBus-invalidated; backs search + semantic             |
 | Context bundles (token-budgeted RAG)        |   ✅   | `GET /api/context`, `get_context` tool, `context.ts` (pure packing)              |
 | `npm run build` green (all workspaces)      |   ✅   | NodeNext `.js` imports + shared `rootDir`                                        |
+| Retrieval eval harness (recall floors)      |   ✅   | `retrievalEval.ts`, fixture + `routes/retrievalEval.test.ts` (in `npm test`)     |
+| CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                      |
+| Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals         |
+| Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`      |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -514,7 +560,7 @@ into infrastructure we already have rather than adding a new subsystem.
     1:1 onto a proposal (broken link → `create` a stub; duplicate → `update`
     appending a `> See also [[other]]` cross-link, never a merge; orphan is
     report-only). `GET /api/maintenance` previews (files nothing);
-    `POST /api/maintenance/scan` + the `run_maintenance` MCP tool (21st) file each
+    `POST /api/maintenance/scan` + the `run_maintenance` MCP tool file each
     suggestion as `agent:maintenance`, **deduped against pending + rejected
     proposals** so re-runs are idempotent and never re-surface a declined fix; an
     `update` (cross-link) carries the target's `baseEtag` so a stale approval
@@ -534,15 +580,60 @@ into infrastructure we already have rather than adding a new subsystem.
     (person, meeting, idea…) with allowed relationships — powers graph node
     colouring, validation, and retrieval boosting. _gbrain parallel:
     `gbrain-base-v2` with 15 canonical types._
-20. **Retrieval eval harness.** A small fixture of `query → expected-note`
-    pairs so ranking changes can't silently regress recall. _gbrain parallel:
-    its LongMemEval / NamedThingBench regression suite._
+20. **Retrieval eval harness.** ✅ **Done.** A golden fixture of
+    `query → expected-note` pairs (`apps/api`
+    `__tests__/fixtures/retrievalCorpus.ts` — 12 notes, 9 judged queries
+    covering exact phrases, filename-only hits, paraphrases, and stemming) is
+    run against the three **real** ranking stacks — `/api/search`,
+    `/api/semantic-search`, `/api/hybrid-search` — through a live server +
+    cached `VaultIndex` (`routes/retrievalEval.test.ts`), with per-engine
+    recall floors pinned just below measured scores (lexical ≥ 0.4, measured
+    0.44; semantic ≥ 0.85, measured 0.89; **hybrid must retrieve every
+    expected note**, and must be ≥ either engine alone). The metric side is
+    pure in `@repo/shared` (`retrievalEval.ts` — `scoreEvalCase`,
+    `summarizeEval`, `formatEvalReport`: recall@k + MRR@k over a de-duplicated
+    top-k). Runs in `npm test`, so a ranking change (tokenizer, chunking, or a
+    future embedding engine behind the same seam — item #13) cannot silently
+    regress recall; a broken floor prints the exact failing queries. _gbrain
+    parallel: its LongMemEval / NamedThingBench regression suite._
+
+21. **Skill notes — procedural memory.** ✅ **Done.** A frontmatter convention
+    (`type: skill`, optional `name:` / `description:`) marks a note as a
+    reusable playbook; `@repo/shared` `skills.ts` (`parseSkill`, `listSkills`)
+    summarizes them, `GET /api/skills?q=...` + the `list_skills` MCP tool
+    (22nd) list them from the cached `VaultIndex`. No new write path: read via
+    `read_note`, contribute via `propose_edit` (human-approved), with the tool
+    description nudging the agent to consult skills before a task and distill
+    new ones after — the first self-improvement loop from
+    [`improvement-ideas.md`](improvement-ideas.md). Tests: `apps/api`
+    `__tests__/skills.test.ts` (pure) + `routes/skills.test.ts` (endpoint).
+22. **Question log — demand-driven gaps.** ✅ **Done.** Every `think` query is
+    persisted with its gap signal (`weakCoverage` + `uncoveredTerms`, actor
+    from `X-Actor`) to `.fsbrain/questions.jsonl` (`QuestionLog`, mirroring
+    `AuditLog`; best-effort — never fails the answer). Pure
+    `findKnowledgeGaps` (`@repo/shared` `questions.ts`) distills recurring
+    uncovered terms (≥ `minCount` questions, repeats count as demand);
+    `GET /api/questions` + the `recent_questions` MCP tool (23rd) return
+    `{ entries, gaps }`, with the tool description nudging the agent to
+    `propose_edit` notes that fill recurring gaps — the second
+    self-improvement loop from [`improvement-ideas.md`](improvement-ideas.md)
+    (#3). Tests: `apps/api` `__tests__/questions.test.ts` (pure) +
+    `routes/questions.test.ts` (endpoint).
+
+A broader brainstorm of follow-on **self-improvement loops** (skill notes,
+review-queue tuning, a question log, implicit relevance feedback, freshness
+scoring) lives in [`improvement-ideas.md`](improvement-ideas.md) — skill notes
+(#1) and the question log (#3) have shipped; review-queue tuning (#2) is next
+in its sequence.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
-CI pipeline, non-markdown attachments, editor ergonomics (palette/outline/daily
+non-markdown attachments, editor ergonomics (palette/outline/daily
 notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
 follow-ups also deferred: settled-proposal retention/pruning, a computed
 line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
+Likewise deferred: rotation/pruning for the append-only `.fsbrain` logs
+(`audit.jsonl`, `questions.jsonl`) — both are re-read whole per request, fine
+for a personal vault but worth bounding once they grow.
 
 The vault is now natively an agent's brain _and_ auditable by the human, and the
 human can finally _see_ how it all connects via the graph — completing the

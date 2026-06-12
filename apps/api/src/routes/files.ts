@@ -35,8 +35,10 @@ import {
   extractBlockAnchors,
   extractWikilinks,
   findBlock,
+  findKnowledgeGaps,
   findNoteId,
   findTextMatch,
+  listSkills,
   parseFrontmatter,
   parseNote,
   reciprocalRankFusion,
@@ -52,6 +54,7 @@ import type { IdempotencyCache } from '../storage/idempotencyCache.js';
 import type { PathResolver } from '../storage/pathResolver.js';
 import { StoragePathError } from '../storage/pathResolver.js';
 import type { ProposalStore } from '../storage/proposalStore.js';
+import type { QuestionLog } from '../storage/questionLog.js';
 import { loadSynthesisConfig, synthesizeAnswer } from '../think/synthesize.js';
 
 interface RouteResult {
@@ -66,6 +69,7 @@ interface RequestContext {
   pathResolver: PathResolver;
   auditLog: AuditLog;
   proposalStore: ProposalStore;
+  questionLog: QuestionLog;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
   eventBus: EventBus;
   vaultIndex: VaultIndex;
@@ -108,6 +112,7 @@ export interface FileRouteDependencies {
   pathResolver: PathResolver;
   auditLog: AuditLog;
   proposalStore: ProposalStore;
+  questionLog: QuestionLog;
   patchIdempotency: IdempotencyCache<PatchFileResponse>;
   eventBus: EventBus;
   vaultIndex: VaultIndex;
@@ -799,6 +804,19 @@ async function handleSearch({ res, url, vaultIndex }: RequestContext): Promise<v
   sendJson(res, 200, { success: true, data: matches.slice(0, limit) });
 }
 
+/**
+ * List the vault's **skill notes** (frontmatter `type: skill`) — procedural
+ * playbooks an agent checks before starting a task. Reading one is a plain
+ * `GET /api/file`; creating/updating one goes through the proposal queue, so
+ * the skill library grows only with human sign-off.
+ */
+async function handleListSkills({ res, url, vaultIndex }: RequestContext): Promise<void> {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  const documents = await vaultIndex.getDocuments();
+  const skills = listSkills(documents, query || undefined);
+  sendJson(res, 200, { success: true, data: skills });
+}
+
 async function handleSemanticSearch({ res, url, vaultIndex }: RequestContext): Promise<void> {
   const query = (url.searchParams.get('q') ?? '').trim();
   const limitParam = Number(url.searchParams.get('limit'));
@@ -1046,7 +1064,7 @@ const THINK_CHUNK_OVERSAMPLE = 4;
  * synthesis failure never fails the offline kit.
  */
 async function handleThink(context: RequestContext): Promise<void> {
-  const { res, url, vaultIndex } = context;
+  const { res, url, vaultIndex, questionLog, actor } = context;
   const query = (url.searchParams.get('q') ?? '').trim();
   if (!query) {
     throw new Error('"q" is required');
@@ -1126,6 +1144,20 @@ async function handleThink(context: RequestContext): Promise<void> {
 
   const kit = assembleAnswerKit(query, bundle);
 
+  // Persist the question + its gap signal to the question log so recurring
+  // unanswerable questions become visible (`GET /api/questions`). Best-effort:
+  // a logging failure must never fail the answer.
+  try {
+    await questionLog.record({
+      actor,
+      query,
+      weakCoverage: kit.gaps.weakCoverage,
+      uncoveredTerms: kit.gaps.uncoveredTerms,
+    });
+  } catch {
+    // Ignore — the kit is the deliverable, the log is telemetry.
+  }
+
   // Optional, opt-in, offline-by-default synthesis (only with a server-side key).
   let answer: string | undefined;
   const synthesizeParam = (url.searchParams.get('synthesize') ?? '').toLowerCase();
@@ -1145,6 +1177,29 @@ async function handleThink(context: RequestContext): Promise<void> {
     success: true,
     data: { ...kit, ...(answer ? { answer } : {}) },
   });
+}
+
+const DEFAULT_QUESTIONS_LIMIT = 50;
+
+/**
+ * The question log: recent `think` questions with their gap signal, plus the
+ * **recurring knowledge gaps** distilled from the whole log — terms that keep
+ * going uncovered across questions. A recurring gap is a demand-driven prompt
+ * for what note to write (or propose) next.
+ */
+async function handleGetQuestions({ res, url, questionLog }: RequestContext): Promise<void> {
+  const limitParam = Number(url.searchParams.get('limit'));
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_QUESTIONS_LIMIT;
+  const minCountParam = Number(url.searchParams.get('minCount'));
+  const minCount = Number.isFinite(minCountParam) && minCountParam > 0 ? minCountParam : undefined;
+
+  // Gaps are distilled from the *whole* log (chronological), independent of the
+  // entry-list limit — recurrence shouldn't vanish because the page is short.
+  const all = await questionLog.list();
+  const gaps = findKnowledgeGaps([...all].reverse(), minCount ? { minCount } : {});
+
+  sendJson(res, 200, { success: true, data: { entries: all.slice(0, limit), gaps } });
 }
 
 async function handleGetAudit({ res, url, auditLog }: RequestContext): Promise<void> {
@@ -1528,6 +1583,11 @@ export async function handleFileRoutes(
     return { handled: true };
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/skills') {
+    await executeHandler(context, handleListSkills);
+    return { handled: true };
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/semantic-search') {
     await executeHandler(context, handleSemanticSearch);
     return { handled: true };
@@ -1550,6 +1610,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'GET' && url.pathname === '/api/audit') {
     await executeHandler(context, handleGetAudit);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/questions') {
+    await executeHandler(context, handleGetQuestions);
     return { handled: true };
   }
 

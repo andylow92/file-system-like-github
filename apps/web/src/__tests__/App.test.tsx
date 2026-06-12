@@ -65,7 +65,9 @@ describe('App', () => {
       expect(filesApi.fetchFile).toHaveBeenCalledWith('README.md');
     });
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Loaded from API' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Loaded from API' }),
+    ).toBeInTheDocument();
   });
 
   it('renames a directory and remaps the selected nested file before refreshing file content', async () => {

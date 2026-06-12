@@ -72,7 +72,7 @@ apps/api (Node HTTP server)
    └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
 
 apps/mcp (MCP stdio server)
-   ├─ Exposes the vault to AI agents as 21 tools
+   ├─ Exposes the vault to AI agents as 23 tools
    └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
@@ -145,10 +145,10 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 21
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 23
 vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 `semantic_search`, `hybrid_search`, `think`, `get_graph`, `propose_edit`,
-`run_maintenance`, …) and records every agent write to
+`run_maintenance`, `list_skills`, …) and records every agent write to
 `<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
 
 **Copy-paste config snippets** for OpenClaw / Claude Desktop / Claude Code

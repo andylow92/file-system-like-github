@@ -59,8 +59,20 @@ function IconNewFile() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M9.5 1.25v3.25h3.25" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="M8 7.75v3.5M6.25 9.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M9.5 1.25v3.25h3.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 7.75v3.5M6.25 9.5h3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -75,7 +87,13 @@ function IconNewFolder() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M8 7.5v3M6.5 9h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M8 7.5v3M6.5 9h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -90,7 +108,13 @@ function IconRename() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M9.4 3.6 12 6.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M9.4 3.6 12 6.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -98,7 +122,13 @@ function IconRename() {
 function IconTrash() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2.75 4.25h10.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M2.75 4.25h10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
       <path
         d="M6.25 4.25V3a.75.75 0 0 1 .75-.75h2a.75.75 0 0 1 .75.75v1.25"
         fill="none"
@@ -113,7 +143,14 @@ function IconTrash() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <path d="M6.75 7v4.5M9.25 7v4.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
+      <path
+        d="M6.75 7v4.5M9.25 7v4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
     </svg>
   );
 }
@@ -138,9 +175,7 @@ function sortTree(nodes: FileNode[]): FileNode[] {
         sensitivity: 'base',
       });
     })
-    .map((node) =>
-      node.children ? { ...node, children: sortTree(node.children) } : node,
-    );
+    .map((node) => (node.children ? { ...node, children: sortTree(node.children) } : node));
 }
 
 const DEFAULT_COLLAPSE_DEPTH = 3;
@@ -318,11 +353,15 @@ export function GlobalLayout({
     }
   }
 
-  function resolveDraggedPath(event: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): string {
+  function resolveDraggedPath(
+    event: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>,
+  ): string {
     return draggedPathRef.current ?? event.dataTransfer?.getData('text/plain') ?? '';
   }
 
-  function isOwnDrag(event?: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>): boolean {
+  function isOwnDrag(
+    event?: DragEvent<HTMLElement> | DragEvent<HTMLDivElement> | DragEvent<HTMLUListElement>,
+  ): boolean {
     if (draggedPathRef.current) return true;
     if (!event) return false;
     return Boolean(event.dataTransfer?.getData('text/plain'));
@@ -965,9 +1004,7 @@ export function GlobalLayout({
                           : 'new-name.md'
                     }
                   />
-                  {validationMessage ? (
-                    <p className="validation-msg">{validationMessage}</p>
-                  ) : null}
+                  {validationMessage ? <p className="validation-msg">{validationMessage}</p> : null}
                   <div className="inline-form-actions">
                     <button type="button" onClick={() => void submitCurrentMode()}>
                       Confirm
@@ -1183,7 +1220,9 @@ export function GlobalLayout({
       <ModalDialog
         open={Boolean(pendingDeleteNode)}
         title="Delete item"
-        description={pendingDeleteNode ? `Delete ${pendingDeleteNode.name}? This action cannot be undone.` : ''}
+        description={
+          pendingDeleteNode ? `Delete ${pendingDeleteNode.name}? This action cannot be undone.` : ''
+        }
         variant="destructive"
         confirmLabel="Delete"
         cancelLabel="Cancel"

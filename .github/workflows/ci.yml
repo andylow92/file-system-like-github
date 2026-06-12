@@ -1,0 +1,42 @@
+# The repo's quality gate, mirroring the local commands in AGENTS.md:
+# `npm test` (all workspaces, incl. the fresh-clone MCP e2e and the retrieval
+# eval harness), `npm run lint`, `npm run build`, and `npm run format`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # This repo deliberately does not track package-lock.json (see
+      # .gitignore), so `npm ci` / setup-node's npm cache can't be used.
+      # If a lockfile is ever committed, switch to `npm ci` + `cache: npm`.
+      - name: Install
+        run: npm install
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Format check
+        run: npm run format
