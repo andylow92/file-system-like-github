@@ -32,6 +32,7 @@ import type {
   BlockAnchor,
   ContextBundle,
   EditProposal,
+  FeedbackFinding,
   FileNode,
   GraphData,
   HybridHit,
@@ -688,6 +689,27 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
     tool(async () =>
       apiRequest<{ findings: MaintenanceFinding[]; proposalsFiled: EditProposal[] }>(
         '/api/maintenance/scan',
+        { method: 'POST' },
+      ),
+    ),
+  );
+
+  register(
+    'run_feedback',
+    'Run the outreach feedback loop: compare reviewed draft→final pairs (notes ' +
+      'with frontmatter `type: feedback` linking a `draftPath`, a `finalPath`, ' +
+      'and a `channel` of x|linkedin|email) and file each distilled lesson as an ' +
+      'edit proposal that grows a channel playbook, for human review (actor ' +
+      '`agent:feedback-loop`). The lesson is a deterministic diff summary (what ' +
+      'the human removed/added, how much shorter it got, and any recorded ' +
+      'reason) — never a posted or sent message. Idempotent: re-running will not ' +
+      're-file an open proposal nor a lesson already approved into the playbook, ' +
+      'so it is safe to call repeatedly. Resolution stays human-only in the ' +
+      'Review tab. Returns { findings, proposalsFiled }.',
+    {},
+    tool(async () =>
+      apiRequest<{ findings: FeedbackFinding[]; proposalsFiled: EditProposal[] }>(
+        '/api/feedback/scan',
         { method: 'POST' },
       ),
     ),

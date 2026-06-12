@@ -12,12 +12,14 @@ import type {
   BlockAnchor,
   ContextCandidate,
   EditProposal,
+  FeedbackFinding,
   FileNode,
   HybridHit,
   MaintenanceFinding,
   PatchOp,
   ProposalAction,
   RankedChunk,
+  ScanFeedbackOptions,
   ScanVaultOptions,
   SearchMatch,
   VaultEvent,
@@ -43,6 +45,7 @@ import {
   parseNote,
   reciprocalRankFusion,
   resolveWikilink,
+  scanFeedback,
   scanVault,
 } from '@repo/shared';
 
@@ -1514,6 +1517,112 @@ async function handleMaintenanceScan(context: RequestContext): Promise<void> {
   sendJson<MaintenanceScanResult>(res, 200, { success: true, data: result });
 }
 
+const FEEDBACK_ACTOR = 'agent:feedback-loop';
+
+export interface FeedbackScanResult {
+  findings: FeedbackFinding[];
+  proposalsFiled: EditProposal[];
+}
+
+/** Broadcast a `proposal_created` event for a feedback-loop-filed proposal. */
+function publishFeedbackProposal(eventBus: EventBus, logicalPath: string): void {
+  try {
+    eventBus.publish({
+      type: 'proposal_created',
+      path: logicalPath,
+      actor: FEEDBACK_ACTOR,
+      ts: new Date().toISOString(),
+      source: 'api',
+    });
+  } catch {
+    // The proposal already persisted; a broadcast failure is non-fatal.
+  }
+}
+
+/**
+ * Run the outreach feedback scan over the cached corpus and file each distilled
+ * lesson as an edit proposal (attributed to `agent:feedback-loop`) that grows a
+ * channel playbook, for human review in the Review tab. Resolution stays
+ * human-only — nothing here applies an edit, and no draft is ever posted or sent.
+ *
+ * Idempotent on two levels: a suggestion whose `action`+`path` already matches a
+ * still-relevant proposal (**pending** or **rejected**) is skipped, and
+ * `scanFeedback` itself omits any pairing whose lesson marker is already present
+ * in the target playbook — so re-running never spams the queue nor re-files a
+ * lesson the human already approved. An `update` carries the target's current
+ * `baseEtag`, so approving it after the playbook changed is rejected
+ * (`409 stale_write`) by `applyProposal` rather than silently overwriting the
+ * edit. Shared by `POST /api/feedback/scan` and the optional `FEEDBACK_INTERVAL_MS`
+ * scheduler in `createServer`.
+ */
+export async function runFeedbackScan(deps: {
+  vaultIndex: VaultIndex;
+  proposalStore: ProposalStore;
+  eventBus: EventBus;
+  pathResolver: PathResolver;
+  options?: ScanFeedbackOptions;
+}): Promise<FeedbackScanResult> {
+  const documents = await deps.vaultIndex.getDocuments();
+  const findings = scanFeedback(documents, deps.options);
+
+  // Block re-filing against pending + rejected proposals (approved ones already
+  // landed; the lesson's marker then suppresses the finding on its own).
+  const existing = await deps.proposalStore.list();
+  const blockedKeys = new Set(
+    existing
+      .filter((proposal) => proposal.status === 'pending' || proposal.status === 'rejected')
+      .map((proposal) => `${proposal.action}:${proposal.path}`),
+  );
+
+  const proposalsFiled: EditProposal[] = [];
+  for (const finding of findings) {
+    const { suggestion } = finding;
+    if (!suggestion) {
+      continue;
+    }
+    const key = `${suggestion.action}:${suggestion.path}`;
+    if (blockedKeys.has(key)) {
+      continue;
+    }
+    // Guard against two findings targeting the same playbook within one scan.
+    blockedKeys.add(key);
+
+    // Stamp an `update` with the target's current etag so a stale approval is
+    // rejected instead of clobbering edits. (A `create` 409s on "already exists".)
+    const baseEtag =
+      suggestion.action === 'update'
+        ? await currentNoteEtag(deps.pathResolver, suggestion.path)
+        : undefined;
+
+    const proposal = await deps.proposalStore.create({
+      actor: FEEDBACK_ACTOR,
+      action: suggestion.action,
+      path: suggestion.path,
+      content: suggestion.content,
+      ...(baseEtag ? { baseEtag } : {}),
+      note: suggestion.note,
+    });
+    publishFeedbackProposal(deps.eventBus, suggestion.path);
+    proposalsFiled.push(proposal);
+  }
+
+  return { findings, proposalsFiled };
+}
+
+/** GET /api/feedback — a dry preview: scan the cached corpus, file nothing. */
+async function handleFeedbackPreview({ res, vaultIndex }: RequestContext): Promise<void> {
+  const documents = await vaultIndex.getDocuments();
+  const findings = scanFeedback(documents);
+  sendJson<{ findings: FeedbackFinding[] }>(res, 200, { success: true, data: { findings } });
+}
+
+/** POST /api/feedback/scan — scan and file each lesson as a review proposal. */
+async function handleFeedbackScan(context: RequestContext): Promise<void> {
+  const { res, vaultIndex, proposalStore, eventBus, pathResolver } = context;
+  const result = await runFeedbackScan({ vaultIndex, proposalStore, eventBus, pathResolver });
+  sendJson<FeedbackScanResult>(res, 200, { success: true, data: result });
+}
+
 async function executeHandler(
   context: RequestContext,
   handler: (ctx: RequestContext) => Promise<void>,
@@ -1625,6 +1734,16 @@ export async function handleFileRoutes(
 
   if (req.method === 'POST' && url.pathname === '/api/maintenance/scan') {
     await executeHandler(context, handleMaintenanceScan);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/feedback') {
+    await executeHandler(context, handleFeedbackPreview);
+    return { handled: true };
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/feedback/scan') {
+    await executeHandler(context, handleFeedbackScan);
     return { handled: true };
   }
 
