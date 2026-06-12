@@ -64,7 +64,7 @@ in your notes goes through a **review queue you approve**.
   can't fully answer, so you know what's missing.
 - **🔌 Plug in any AI agent (MCP).** A built-in
   [MCP](https://modelcontextprotocol.io) server hands the whole vault to agents
-  like Claude, Cursor, or OpenClaw as **22 tools** (read, search, patch,
+  like Claude, Cursor, or OpenClaw as **24 tools** (read, search, patch,
   propose…). **Every agent write is logged** to an audit trail, and edits land as
   **proposals you approve** — the agent suggests, only you commit.
 - **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
