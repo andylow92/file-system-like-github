@@ -7,7 +7,12 @@ import { createEventBus } from './events/eventBus.js';
 import { handleEventStream } from './events/sse.js';
 import { createVaultWatcher } from './events/watcher.js';
 import { createVaultIndex } from './index/vaultIndex.js';
-import { handleFileRoutes, runMaintenanceScan, type PatchFileResponse } from './routes/files.js';
+import {
+  handleFileRoutes,
+  runFeedbackScan,
+  runMaintenanceScan,
+  type PatchFileResponse,
+} from './routes/files.js';
 import { createAuditLog } from './storage/auditLog.js';
 import { createFileRepository } from './storage/fileRepository.js';
 import { createIdempotencyCache } from './storage/idempotencyCache.js';
@@ -49,6 +54,21 @@ export function createServer(config = loadConfig()): http.Server {
     }, maintenanceIntervalMs);
     // Don't keep the process (or a test's event loop) alive just for the scan.
     maintenanceTimer.unref?.();
+  }
+
+  // Optional outreach feedback loop: when FEEDBACK_INTERVAL_MS is a positive
+  // number, periodically compare reviewed draft→final pairs and file each
+  // distilled lesson as a proposal for human review. Off by default; on-demand
+  // scanning is always available via `POST /api/feedback/scan`.
+  const feedbackIntervalMs = Number(process.env.FEEDBACK_INTERVAL_MS);
+  let feedbackTimer: NodeJS.Timeout | undefined;
+  if (Number.isFinite(feedbackIntervalMs) && feedbackIntervalMs > 0) {
+    feedbackTimer = setInterval(() => {
+      void runFeedbackScan({ vaultIndex, proposalStore, eventBus, pathResolver }).catch(() => {
+        // Best-effort: a scheduled scan must never crash the server.
+      });
+    }, feedbackIntervalMs);
+    feedbackTimer.unref?.();
   }
 
   function sendJson<T>(res: http.ServerResponse, statusCode: number, body: ApiResponse<T>) {
@@ -108,6 +128,9 @@ export function createServer(config = loadConfig()): http.Server {
     vaultIndex.close();
     if (maintenanceTimer) {
       clearInterval(maintenanceTimer);
+    }
+    if (feedbackTimer) {
+      clearInterval(feedbackTimer);
     }
   });
   return server;

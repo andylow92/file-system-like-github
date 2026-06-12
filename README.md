@@ -49,6 +49,52 @@ This repo bridges both worlds:
 
 ---
 
+## 🤖 AI & agent features
+
+This isn't just a file browser — the vault is built to double as **an AI agent's
+brain**, with a human always in control. Everything below runs **locally and
+offline by default** (no API key needed), and anything an agent wants to change
+in your notes goes through a **review queue you approve**.
+
+- **🔎 Smart search.** Find notes by **meaning**, not just exact words —
+  `semantic` search ranks by relevance and `hybrid` search fuses keyword +
+  semantic results. Great for _"I know I wrote this somewhere…"_.
+- **💬 Ask your notes (`think`).** Ask a question and get a **cited answer**
+  assembled from your own notes — plus an honest list of **gaps** when the vault
+  can't fully answer, so you know what's missing.
+- **🔌 Plug in any AI agent (MCP).** A built-in
+  [MCP](https://modelcontextprotocol.io) server hands the whole vault to agents
+  like Claude, Cursor, or OpenClaw as **24 tools** (read, search, patch,
+  propose…). **Every agent write is logged** to an audit trail, and edits land as
+  **proposals you approve** — the agent suggests, only you commit.
+- **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
+  links, orphaned notes, and near-duplicates** and files each fix as a proposal.
+  Re-running is safe — it never spams your review queue.
+- **🪄 NEW — Learns from your edits (feedback loop).** When an agent drafts
+  outreach — an **X post, LinkedIn message, or email** — and you rewrite it
+  before sending, that edit is valuable signal. A scan compares the **draft vs.
+  your final version**, distills _what you changed (and why)_ into a reusable
+  **playbook lesson**, and files it as a proposal. Over time the vault writes
+  more like _you_. **Nothing is ever auto-posted or sent** — it only proposes
+  notes for your review.
+
+> **The throughline: agents propose, you decide.** Risky or outward-facing
+> changes are never applied automatically — they become reviewable proposals
+> attributed to a named actor (e.g. `agent:maintenance`, `agent:feedback-loop`),
+> so you always see who suggested what.
+
+**The feedback loop in 30 seconds:**
+
+1. An agent drafts a post at `social/x/drafts/launch.md`.
+2. You edit it and save what you actually shipped to `social/x/old-posts/launch.md`.
+3. You add a tiny "pairing" note linking the two (frontmatter: `type: feedback`,
+   `channel: x`, `draftPath`, `finalPath`, and an optional `reviewReason`).
+4. Run the `run_feedback` agent tool (or `POST /api/feedback/scan`). It compares
+   the two, distills the lesson into a channel **playbook**, and files it as a
+   **proposal** you approve in the Review tab.
+
+---
+
 ## Built for real-world use cases
 
 - Personal knowledge management (PKM)
@@ -72,7 +118,7 @@ apps/api (Node HTTP server)
    └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
 
 apps/mcp (MCP stdio server)
-   ├─ Exposes the vault to AI agents as 23 tools
+   ├─ Exposes the vault to AI agents as 24 tools
    └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
@@ -145,10 +191,10 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 23
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 24
 vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 `semantic_search`, `hybrid_search`, `think`, `get_graph`, `propose_edit`,
-`run_maintenance`, `list_skills`, …) and records every agent write to
+`run_maintenance`, `list_skills`, `run_feedback`, …) and records every agent write to
 `<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
 
 **Copy-paste config snippets** for OpenClaw / Claude Desktop / Claude Code
@@ -208,6 +254,7 @@ CONTENT_ROOT=/absolute/path/to/vault PORT=3001 npm run dev:api
 - `GET /api/audit`
 - `GET /api/proposals` · `POST /api/proposals` · `POST /api/proposals/resolve` (human-only)
 - `GET /api/maintenance` · `POST /api/maintenance/scan`
+- `GET /api/feedback` · `POST /api/feedback/scan`
 
 **Live**
 
@@ -252,6 +299,7 @@ See the full deployment examples in this README’s history and backend docs.
 - ✅ Interactive knowledge graph + backlinks
 - ✅ Built-in MCP server — use the vault as an agent's brain
 - ✅ Cited answers + offline gap analysis (`think`) and dream-cycle maintenance
+- ✅ Self-improving outreach **feedback loop** — learns your voice from draft→final edits
 - Mermaid diagrams + real vector embeddings (the cached index is the seam)
 - Git sync workflows
 - Multi-user auth + permissions

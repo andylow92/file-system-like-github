@@ -591,6 +591,57 @@ curl "http://localhost:3001/api/maintenance"                  # preview, files n
 curl -X POST "http://localhost:3001/api/maintenance/scan"     # scan + file proposals
 ```
 
+### Outreach feedback loop (learn from human review)
+
+Closes the "learn from human review" loop: when an agent drafts outreach (an X
+post, a LinkedIn message, an email) and a human edits it before it ships, the
+**diff between draft and final** is high-value procedural signal that today
+evaporates. This scan captures it as a growing, human-audited playbook — reusing
+the same proposal queue, fully offline. The detector is a pure, deterministic
+helper in `@repo/shared` (`feedback.ts`, `scanFeedback`).
+
+A **feedback pairing** is an ordinary note whose frontmatter declares
+`type: feedback` plus a `channel` (`x` | `linkedin` | `email`), a `draftPath`,
+and a `finalPath` (optionally a `targetPath` playbook and a free-text
+`reviewReason`):
+
+```yaml
+---
+type: feedback
+channel: x
+draftPath: social/x/drafts/launch.md
+finalPath: social/x/old-posts/launch.md
+targetPath: social/x/post-patterns.md # optional; default feedback/<channel>.md
+reviewReason: Avoid claiming we make customers compliant; say audit evidence map.
+---
+```
+
+For each pairing the scan distills a deterministic **lesson** — words trimmed,
+phrases the human removed/added, and any `reviewReason` — and suggests growing
+the target playbook. When the target does not exist yet it is proposed as a new
+`type: skill` note at `feedback/<channel>.md`.
+
+- `GET /api/feedback` — a **dry preview**: returns `{ findings }`; files nothing.
+- `POST /api/feedback/scan` — files each lesson as a proposal (attributed to the
+  `agent:feedback-loop` actor) and returns `{ findings, proposalsFiled }`.
+  **Idempotent** on two levels: a suggestion whose `action`+`path` already matches
+  a `pending`/`rejected` proposal is skipped, and each lesson carries a hidden
+  marker so an already-approved lesson is never re-filed. An `update` is stamped
+  with the target's `baseEtag` (`409 stale_write` on a stale approval). Resolution
+  stays human-only, and **no draft is ever posted or sent** — the loop only
+  proposes notes.
+
+Scheduling is on-demand by default; setting `FEEDBACK_INTERVAL_MS` to a positive
+number makes `createServer` also run the scan on that interval (the timer is
+`unref`'d). The lesson is a mechanical diff summary, not an LLM-written rule — a
+model-backed paraphrase would sit behind the same key gate `think`'s synthesis
+uses.
+
+```bash
+curl "http://localhost:3001/api/feedback"                  # preview, files nothing
+curl -X POST "http://localhost:3001/api/feedback/scan"     # scan + file proposals
+```
+
 ## Provenance: the `X-Actor` header
 
 Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) may send an `X-Actor` header

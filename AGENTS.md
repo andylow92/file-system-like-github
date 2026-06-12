@@ -65,10 +65,12 @@ the in-process API. Pick the tool that matches your intent:
 | List proposals + their status                          | `list_proposals`    | `GET /api/proposals`         |
 | List skill notes (procedural playbooks)                | `list_skills`       | `GET /api/skills`            |
 | Run the dream-cycle maintenance scan                   | `run_maintenance`   | `POST /api/maintenance/scan` |
+| Learn from reviewed draft→final outreach pairs         | `run_feedback`      | `POST /api/feedback/scan`    |
 
 **Human-only (no MCP tool):** resolving a proposal — `POST /api/proposals/resolve`
 (an `agent:` resolver is rejected `403`). **Live stream:** `GET /api/events` (SSE).
 **Preview maintenance without filing:** `GET /api/maintenance`.
+**Preview the feedback loop without filing:** `GET /api/feedback`.
 
 Rules of thumb: **read/search before writing**; prefer `patch_note` over a full
 `update_note`; and **propose** (don't write directly) anything a human should sign
@@ -140,13 +142,13 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 23 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 24 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `recent_activity`, `recent_questions`, `create_folder`,
   `move_path`, `delete_path`, `propose_edit`, `list_proposals`, `list_skills`,
-  `run_maintenance`). It runs
+  `run_maintenance`, `run_feedback`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or
@@ -239,6 +241,18 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   something it can't answer: if you are an agent and know the missing
   material, `propose_edit` a note that fills it. Logging is best-effort and
   never fails the `think` call.
+- **Outreach feedback loop** (`@repo/shared` `feedback.ts`, `scanFeedback`) closes
+  the "learn from human review" loop: a note with frontmatter `type: feedback`
+  links an agent `draftPath` to the approved `finalPath` for a `channel`
+  (`x` / `linkedin` / `email`), and the scan distills the **diff** (what the human
+  removed/added, how much shorter, plus any `reviewReason`) into a deterministic
+  lesson, filed as an **edit proposal** that grows a channel playbook (default
+  `feedback/<channel>.md`, a `type: skill` note). `GET /api/feedback` previews;
+  `POST /api/feedback/scan` (and the `run_feedback` MCP tool) files as a distinct
+  `agent:feedback-loop` actor. **Idempotent** — dedupes against pending/rejected
+  proposals, and a per-pair marker keeps an approved lesson from re-filing. No
+  draft is ever posted or sent; the lesson is a mechanical summary, not an
+  LLM-written rule (on-demand by default, optional `FEEDBACK_INTERVAL_MS` timer).
 
 **Not yet built (next):** Mermaid diagrams and real vector embeddings to back
 semantic search (the cached index + context bundle endpoint above are the seam

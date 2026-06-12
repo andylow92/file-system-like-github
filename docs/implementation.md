@@ -5,7 +5,30 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-10 (question log — demand-driven gaps + `recent_questions`)_
+_Last updated: 2026-06-12 (outreach feedback loop → review proposals)_
+
+> **Latest change.** The vault now runs an **outreach feedback loop** — it learns
+> from human review of its own drafts. A note with frontmatter `type: feedback`
+> links an agent `draftPath` to the approved `finalPath` for a `channel`
+> (`x` / `linkedin` / `email`), optionally with a `targetPath` playbook and a
+> free-text `reviewReason`. A pure helper in `@repo/shared` (`feedback.ts` —
+> `scanFeedback`, `parseFeedbackPairing`, `diffDraftFinal`) distills the
+> draft→final **diff** (words trimmed, phrases removed/added, the reason) into a
+> deterministic lesson and suggests growing the playbook (default
+> `feedback/<channel>.md`, created as a `type: skill` note). `GET /api/feedback`
+> previews; `POST /api/feedback/scan` (and the 24th MCP tool, `run_feedback`)
+> files each lesson as a proposal attributed to a distinct `agent:feedback-loop`
+> actor, returning `{ findings, proposalsFiled }`. **Idempotent** — it dedupes
+> against pending _and_ rejected proposals, and a per-pair marker keeps an
+> approved lesson from re-filing; an `update` carries the target's `baseEtag`. No
+> draft is ever posted or sent, and the lesson is a mechanical summary rather than
+> an LLM-written rule (on-demand by default, optional `FEEDBACK_INTERVAL_MS`
+> timer). The third self-improvement loop after skill notes and the question log.
+> Covered by `apps/api` `__tests__/feedback.test.ts` (pure: pairing parse, diff,
+> create/update/missing/no-change/already-learned, multi-channel ordering) and
+> `routes/feedback.test.ts` (endpoint: preview vs file, attribution, idempotent
+> re-scan, x/linkedin/email); the MCP smoke + fresh-clone tests assert the
+> 24-tool surface.
 
 > **Latest change.** The vault now keeps a **question log** — it learns what it
 > gets asked but cannot answer (the second self-improvement loop from
@@ -255,10 +278,11 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 23 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 24 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
-  get_block_anchors, propose_edit + list_proposals + run_maintenance. When
+  get_block_anchors, propose_edit + list_proposals + run_maintenance +
+  run_feedback. When
   API_BASE_URL is unset, runs the storage API in-process on 127.0.0.1 (ephemeral
   port), auto-creates CONTENT_ROOT, and seeds a welcome.md on an empty vault, so
   an MCP host (OpenClaw, Claude Desktop, Claude Code, Cursor) can spawn it with
@@ -304,6 +328,7 @@ Key facts an agent must know:
 | Hybrid retrieval (RRF fusion)               |   ✅   | `/api/hybrid-search`, `hybrid_search` tool, `hybrid.ts` (`reciprocalRankFusion`) |
 | `think` (cited answers + offline gaps)      |   ✅   | `/api/think`, `think` tool, `think.ts` (`assembleAnswerKit`)                     |
 | Dream-cycle maintenance → proposals         |   ✅   | `/api/maintenance[/scan]`, `run_maintenance`, `maintenance.ts` (`scanVault`)     |
+| Outreach feedback loop → proposals          |   ✅   | `/api/feedback[/scan]`, `run_feedback`, `feedback.ts` (`scanFeedback`)           |
 | Provenance / audit feed (Activity tab)      |   ✅   | `X-Actor`, `AuditLog`, `/api/audit`, `ActivityPanel`                             |
 | Agent-edit review/approval queue            |   ✅   | `/api/proposals`, `ProposalStore`, `ReviewPanel`                                 |
 | Granular agent writes (append/prepend/      |   ✅   | `PATCH /api/file`, `patch.ts`, `patch_note` MCP tool                             |
@@ -311,7 +336,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (23 tools) — writes as `agent:mcp`                                    |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (24 tools) — writes as `agent:mcp`                                    |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |

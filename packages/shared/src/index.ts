@@ -142,6 +142,7 @@ export interface EditProposal {
 
 export * from './blocks.js';
 export * from './context.js';
+export * from './feedback.js';
 export * from './graph.js';
 export * from './hybrid.js';
 export * from './maintenance.js';

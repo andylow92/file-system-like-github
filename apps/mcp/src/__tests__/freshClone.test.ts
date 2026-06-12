@@ -113,6 +113,7 @@ describe('fresh-clone MCP end-to-end', () => {
         'read_note',
         'recent_activity',
         'recent_questions',
+        'run_feedback',
         'run_maintenance',
         'search_notes',
         'semantic_search',
@@ -292,7 +293,7 @@ describe('fresh-clone MCP end-to-end', () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(23);
+    expect(tools.length).toBe(24);
     expect(tools.map((tool) => tool.name)).toContain('create_note');
     expect(tools.map((tool) => tool.name)).toContain('think');
 
