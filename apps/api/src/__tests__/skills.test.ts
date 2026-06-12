@@ -55,6 +55,25 @@ describe('parseSkill', () => {
   it('matches the type marker case-insensitively', () => {
     expect(parseSkill('s.md', '---\ntype: Skill\n---\n# S')).not.toBeNull();
   });
+
+  it('skips fenced code blocks when deriving name and description', () => {
+    const skill = parseSkill(
+      'skills/deploy.md',
+      [
+        '---',
+        'type: skill',
+        '---',
+        '```bash',
+        '# not a heading, just a comment in code',
+        'kubectl apply -f deploy.yaml',
+        '```',
+        '# Deploy the service',
+        'Apply the manifest, then watch the rollout.',
+      ].join('\n'),
+    )!;
+    expect(skill.name).toBe('Deploy the service');
+    expect(skill.description).toBe('Apply the manifest, then watch the rollout.');
+  });
 });
 
 describe('listSkills', () => {

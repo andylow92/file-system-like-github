@@ -30,8 +30,25 @@ export interface SkillSummary {
   tags: string[];
 }
 
-function firstHeading(body: string): string | undefined {
+/** Body lines outside fenced code blocks, so a leading fence can't become a
+ * skill's name or description. */
+function visibleLines(body: string): string[] {
+  const lines: string[] = [];
+  let inFence = false;
   for (const line of body.split('\n')) {
+    if (/^(```|~~~)/.test(line.trim())) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence) {
+      lines.push(line);
+    }
+  }
+  return lines;
+}
+
+function firstHeading(body: string): string | undefined {
+  for (const line of visibleLines(body)) {
     const match = /^#{1,6}\s+(.+)$/.exec(line);
     if (match) {
       return match[1].trim();
@@ -41,7 +58,7 @@ function firstHeading(body: string): string | undefined {
 }
 
 function firstParagraphLine(body: string): string {
-  for (const raw of body.split('\n')) {
+  for (const raw of visibleLines(body)) {
     const line = raw.trim();
     if (line && !line.startsWith('#')) {
       return line.replace(/\s+/g, ' ').slice(0, 200);

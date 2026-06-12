@@ -631,6 +631,9 @@ non-markdown attachments, editor ergonomics (palette/outline/daily
 notes/WYSIWYG), version history/Git sync, plugins/themes/mobile/sync. Proposal
 follow-ups also deferred: settled-proposal retention/pruning, a computed
 line-level diff in the Review UI, and closing the no-`baseEtag` update TOCTOU.
+Likewise deferred: rotation/pruning for the append-only `.fsbrain` logs
+(`audit.jsonl`, `questions.jsonl`) — both are re-read whole per request, fine
+for a personal vault but worth bounding once they grow.
 
 The vault is now natively an agent's brain _and_ auditable by the human, and the
 human can finally _see_ how it all connects via the graph — completing the

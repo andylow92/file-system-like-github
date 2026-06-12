@@ -60,7 +60,10 @@ export function findKnowledgeGaps(
   const minCount = options.minCount ?? 2;
   const maxQueries = options.maxQueries ?? 5;
 
-  const byTerm = new Map<string, { count: number; queries: string[]; lastTs: string }>();
+  const byTerm = new Map<
+    string,
+    { count: number; queries: string[]; querySet: Set<string>; lastTs: string; lastMs: number }
+  >();
 
   for (const entry of entries) {
     const seenInEntry = new Set<string>();
@@ -71,13 +74,28 @@ export function findKnowledgeGaps(
       }
       seenInEntry.add(term);
 
-      const gap = byTerm.get(term) ?? { count: 0, queries: [], lastTs: entry.ts };
+      const gap = byTerm.get(term) ?? {
+        count: 0,
+        queries: [],
+        querySet: new Set<string>(),
+        lastTs: entry.ts,
+        lastMs: Date.parse(entry.ts),
+      };
       gap.count += 1;
-      if (entry.ts > gap.lastTs) {
+      // Compare parsed timestamps, not strings — lexicographic order breaks on
+      // mixed precision or non-UTC offsets.
+      const entryMs = Date.parse(entry.ts);
+      if (entryMs > gap.lastMs) {
+        gap.lastMs = entryMs;
         gap.lastTs = entry.ts;
       }
-      if (!gap.queries.includes(entry.query)) {
+      if (!gap.querySet.has(entry.query)) {
+        gap.querySet.add(entry.query);
         gap.queries.push(entry.query);
+        // Keep only the most recent `maxQueries` examples, in capture order.
+        if (gap.queries.length > maxQueries) {
+          gap.queries.shift();
+        }
       }
       byTerm.set(term, gap);
     }
@@ -89,7 +107,7 @@ export function findKnowledgeGaps(
       term,
       count: gap.count,
       // Most recent first: entries arrive oldest-first, so reverse the capture order.
-      queries: gap.queries.slice(-maxQueries).reverse(),
+      queries: [...gap.queries].reverse(),
       lastTs: gap.lastTs,
     }))
     .sort((a, b) => b.count - a.count || a.term.localeCompare(b.term));

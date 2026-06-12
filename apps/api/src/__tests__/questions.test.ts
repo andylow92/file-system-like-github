@@ -77,6 +77,16 @@ describe('findKnowledgeGaps', () => {
     expect(findKnowledgeGaps(entries, { minCount: 3 }).map((gap) => gap.term)).toEqual(['beta']);
   });
 
+  it('compares lastTs by parsed time, not lexicographically', () => {
+    // '12:00+05:00' is 07:00Z — lexicographically larger but chronologically
+    // *earlier* than '08:00Z'. The numeric comparison must pick 08:00Z.
+    const gaps = findKnowledgeGaps([
+      entry({ ts: '2026-06-10T12:00:00+05:00', query: 'q1', uncoveredTerms: ['gap'] }),
+      entry({ ts: '2026-06-10T08:00:00Z', query: 'q2', uncoveredTerms: ['gap'] }),
+    ]);
+    expect(gaps[0].lastTs).toBe('2026-06-10T08:00:00Z');
+  });
+
   it('caps example queries at maxQueries, most recent first', () => {
     const entries = ['q1', 'q2', 'q3'].map((query, i) =>
       entry({ ts: `2026-06-0${i + 1}T00:00:00Z`, query, uncoveredTerms: ['gap'] }),
