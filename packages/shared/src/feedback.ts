@@ -33,6 +33,18 @@
  * it slots straight into the skill library). The body of the pairing note is
  * ignored — the draft and final live in their own notes.
  *
+ * ### Reviewed-copy sections
+ *
+ * Draft and final notes often wrap the actual outreach copy in metadata —
+ * `Status`, `URL`, `Lane`, an `## Intent` block, source-draft links. Diffing the
+ * whole body would learn noise about that wrapper instead of the human's edits to
+ * the copy. So before diffing, each side is narrowed to its **reviewed-copy
+ * section**: the content under the first recognized copy heading (tried in
+ * priority order — drafts prefer `## Final Draft`, finals prefer `## Post`),
+ * stopping at the next same-or-higher markdown heading. When a note has no such
+ * heading the loop falls back to the full body, so plain draft/final notes still
+ * compare exactly as before.
+ *
  * ### Determinism & idempotency
  *
  * Everything here is pure + dependency-free (same documents in, same findings
@@ -230,10 +242,104 @@ function clip(text: string): string {
 }
 
 /**
- * Compute the mechanical diff between a draft and a final note (frontmatter
- * stripped from each). `removed`/`added` are the segments unique to one side,
- * compared case-insensitively but displayed in their original casing and capped
- * to `maxSegments`.
+ * Heading texts whose section holds the reviewed copy in a **draft** note, in
+ * priority order. The first one present in the note wins.
+ */
+export const DRAFT_COPY_HEADINGS: readonly string[] = [
+  'Final Draft',
+  'Draft',
+  'Copy',
+  'Message',
+  'Post',
+];
+
+/**
+ * Heading texts whose section holds the reviewed copy in a **final** note, in
+ * priority order. The first one present in the note wins.
+ */
+export const FINAL_COPY_HEADINGS: readonly string[] = [
+  'Post',
+  'Final',
+  'Final Copy',
+  'Sent Message',
+  'Message',
+  'Copy',
+];
+
+/** An ATX markdown heading found in a body. */
+interface BodyHeading {
+  /** Heading level: 1 for `#`, 2 for `##`, … */
+  level: number;
+  /** Heading text, trimmed and with any trailing `#` markers removed. */
+  text: string;
+  /** Index of the heading line within the split body. */
+  line: number;
+}
+
+const ATX_HEADING = /^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/;
+const CODE_FENCE = /^[ \t]*(?:```|~~~)/;
+
+/** Find ATX headings in body order, skipping fenced (``` / ~~~) code blocks. */
+function findHeadings(lines: string[]): BodyHeading[] {
+  const headings: BodyHeading[] = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (CODE_FENCE.test(lines[i])) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    const match = ATX_HEADING.exec(lines[i]);
+    if (match) {
+      headings.push({ level: match[1].length, text: match[2].trim(), line: i });
+    }
+  }
+  return headings;
+}
+
+/**
+ * Narrow a note body to its **reviewed-copy section**: the content under the
+ * first of the `preferred` headings present (tried in priority order), stopping
+ * at the next heading of the same or higher level. Heading text is matched
+ * case-insensitively. Returns `null` when none of the preferred headings is
+ * found, so callers fall back to the full body.
+ */
+export function extractCopySection(body: string, preferred: readonly string[]): string | null {
+  const lines = body.split('\n');
+  const headings = findHeadings(lines);
+  if (headings.length === 0) {
+    return null;
+  }
+
+  for (const name of preferred) {
+    const wanted = name.toLowerCase();
+    const start = headings.find((heading) => heading.text.toLowerCase() === wanted);
+    if (!start) {
+      continue;
+    }
+    // Stop at the next heading of the same or higher level (level <= start.level).
+    const end = headings.find(
+      (heading) => heading.line > start.line && heading.level <= start.level,
+    );
+    const endLine = end ? end.line : lines.length;
+    return lines
+      .slice(start.line + 1, endLine)
+      .join('\n')
+      .trim();
+  }
+  return null;
+}
+
+/**
+ * Compute the mechanical diff between a draft and a final note. Each side has its
+ * frontmatter stripped and is then narrowed to its reviewed-copy section (see
+ * {@link extractCopySection}) when an explicit copy heading is present, falling
+ * back to the full body otherwise — so metadata around the copy (`Status`, `URL`,
+ * `Lane`, `## Notes`, …) never leaks into the lesson. `removed`/`added` are the
+ * segments unique to one side, compared case-insensitively but displayed in their
+ * original casing and capped to `maxSegments`.
  */
 export function diffDraftFinal(
   draftContent: string,
@@ -243,8 +349,11 @@ export function diffDraftFinal(
   const draftBody = parseFrontmatter(draftContent).body;
   const finalBody = parseFrontmatter(finalContent).body;
 
-  const draftSegments = segment(draftBody);
-  const finalSegments = segment(finalBody);
+  const draftCopy = extractCopySection(draftBody, DRAFT_COPY_HEADINGS) ?? draftBody;
+  const finalCopy = extractCopySection(finalBody, FINAL_COPY_HEADINGS) ?? finalBody;
+
+  const draftSegments = segment(draftCopy);
+  const finalSegments = segment(finalCopy);
   const draftKeys = new Set(draftSegments.map((part) => part.toLowerCase()));
   const finalKeys = new Set(finalSegments.map((part) => part.toLowerCase()));
 
@@ -257,8 +366,8 @@ export function diffDraftFinal(
     .slice(0, maxSegments)
     .map(clip);
 
-  const draftWords = countWords(draftBody);
-  const finalWords = countWords(finalBody);
+  const draftWords = countWords(draftCopy);
+  const finalWords = countWords(finalCopy);
 
   return { draftWords, finalWords, wordDelta: finalWords - draftWords, removed, added };
 }
