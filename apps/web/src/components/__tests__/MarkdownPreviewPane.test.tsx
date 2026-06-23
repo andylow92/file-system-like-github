@@ -112,3 +112,58 @@ describe('MarkdownPreviewPane code block copy button', () => {
     expect(codeEl!.textContent).toBe('const x = "<div>" & 1');
   });
 });
+
+describe('MarkdownPreviewPane file copy button', () => {
+  let writeText: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  const fileMarkdown = [
+    '# Title',
+    '',
+    'Some **bold** paragraph.',
+    '',
+    '- item one',
+    '- item two',
+  ].join('\n');
+
+  it('renders a copy button for the whole file content', () => {
+    render(<MarkdownPreviewPane filePath="README.md" markdown={fileMarkdown} />);
+
+    expect(
+      screen.getByRole('button', { name: /copy file content to clipboard/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('copies the full raw markdown source to the clipboard on click', async () => {
+    render(<MarkdownPreviewPane filePath="README.md" markdown={fileMarkdown} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /copy file content to clipboard/i }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toBe(fileMarkdown);
+  });
+
+  it('flips the file copy button into a "Copied" state after a successful copy', async () => {
+    render(<MarkdownPreviewPane filePath="README.md" markdown={fileMarkdown} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /copy file content to clipboard/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /copied file content to clipboard/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+});

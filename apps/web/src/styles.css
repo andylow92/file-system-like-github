@@ -2481,6 +2481,56 @@ textarea:focus-visible {
 /* Rich markdown rendering (GFM tables, task lists, headings, media)          */
 /* -------------------------------------------------------------------------- */
 
+.markdown-preview__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: var(--space-2);
+  /* Let clicks fall through to the content except on the button itself. */
+  pointer-events: none;
+}
+
+.preview-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 28px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    color var(--motion-feedback-fast) var(--ease-standard),
+    border-color var(--motion-feedback-fast) var(--ease-standard),
+    background-color var(--motion-feedback-fast) var(--ease-standard);
+}
+
+.preview-copy-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.preview-copy-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.preview-copy-btn.is-copied {
+  color: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: var(--color-accent-soft);
+}
+
 .markdown-preview__tags {
   display: flex;
   flex-wrap: wrap;

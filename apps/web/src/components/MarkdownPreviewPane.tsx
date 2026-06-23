@@ -34,6 +34,72 @@ function nodeToText(children: ReactNode): string {
   return '';
 }
 
+/**
+ * Copy `value` to the clipboard, falling back to a hidden textarea +
+ * `execCommand('copy')` when the async Clipboard API is unavailable (older
+ * browsers or insecure contexts). Returns `true` on success.
+ */
+async function copyToClipboard(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Checkmark / clipboard icon pair shared by the copy buttons. */
+function CopyIcon({ copied }: { copied: boolean }) {
+  if (copied) {
+    return (
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M3.5 8.5 6.5 11.5 12.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x="5"
+        y="5"
+        width="8"
+        height="9"
+        rx="1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path
+        d="M3.5 10.5V3.5A1.5 1.5 0 0 1 5 2h6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 interface CodeBlockProps {
   value: string;
   language?: string;
@@ -58,25 +124,11 @@ function CodeBlock({ value, language }: CodeBlockProps) {
   }, [value, language]);
 
   async function handleCopy() {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = value;
-        textarea.setAttribute('readonly', '');
-        textarea.style.position = 'absolute';
-        textarea.style.left = '-9999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
+    if (await copyToClipboard(value)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // The user can still select-and-copy manually.
     }
+    // On failure the user can still select-and-copy manually.
   }
 
   const codeClassName = `hljs${language ? ` language-${language}` : ''}`;
@@ -90,39 +142,7 @@ function CodeBlock({ value, language }: CodeBlockProps) {
         aria-label={copied ? 'Copied to clipboard' : 'Copy code to clipboard'}
         title={copied ? 'Copied' : 'Copy'}
       >
-        {copied ? (
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              d="M3.5 8.5 6.5 11.5 12.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <rect
-              x="5"
-              y="5"
-              width="8"
-              height="9"
-              rx="1.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.3"
-            />
-            <path
-              d="M3.5 10.5V3.5A1.5 1.5 0 0 1 5 2h6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
+        <CopyIcon copied={copied} />
         <span className="code-copy-label">{copied ? 'Copied' : 'Copy'}</span>
       </button>
       <pre>
@@ -133,6 +153,34 @@ function CodeBlock({ value, language }: CodeBlockProps) {
         )}
       </pre>
     </div>
+  );
+}
+
+/**
+ * Copies the entire markdown source of the current file to the clipboard,
+ * so users don't have to manually select the rendered preview.
+ */
+function CopyContentButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    if (await copyToClipboard(value)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className={copied ? 'preview-copy-btn is-copied' : 'preview-copy-btn'}
+      onClick={handleCopy}
+      aria-label={copied ? 'Copied file content to clipboard' : 'Copy file content to clipboard'}
+      title={copied ? 'Copied' : 'Copy file content'}
+    >
+      <CopyIcon copied={copied} />
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
   );
 }
 
@@ -211,6 +259,9 @@ export function MarkdownPreviewPane({
 
   return (
     <article className="markdown-preview github-markdown">
+      <div className="markdown-preview__toolbar">
+        <CopyContentButton value={markdown} />
+      </div>
       {tags.length > 0 ? (
         <div className="markdown-preview__tags">
           {tags.map((tag) => (
