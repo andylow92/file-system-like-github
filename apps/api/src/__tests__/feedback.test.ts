@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   diffDraftFinal,
+  DRAFT_COPY_HEADINGS,
+  extractCopySection,
   feedbackMarker,
+  FINAL_COPY_HEADINGS,
   parseFeedbackPairing,
   scanFeedback,
   type FeedbackDocument,
@@ -63,6 +66,95 @@ describe('parseFeedbackPairing', () => {
   });
 });
 
+describe('extractCopySection', () => {
+  it('extracts the section under a preferred heading, stopping at the next same-level heading', () => {
+    const body = [
+      '# X Draft 2026-06-01',
+      '',
+      'Status: posted',
+      'Created: 2026-06-01',
+      '',
+      '## Final Draft',
+      '',
+      'Lead with the customer pain, not the product.',
+      '',
+      '## Notes',
+      '',
+      'Internal reasoning here.',
+    ].join('\n');
+    expect(extractCopySection(body, DRAFT_COPY_HEADINGS)).toBe(
+      'Lead with the customer pain, not the product.',
+    );
+  });
+
+  it('extracts a final note `## Post` section and leaves the metadata behind', () => {
+    const body = [
+      '# X Post 2026-06-02',
+      '',
+      'Source draft: [[X Draft 2026-06-01]]',
+      'URL: https://x.com/example',
+      'Lane: compliance',
+      '',
+      '## Post',
+      '',
+      'Audit evidence, mapped. Lead with the workflow pain.',
+    ].join('\n');
+    expect(extractCopySection(body, FINAL_COPY_HEADINGS)).toBe(
+      'Audit evidence, mapped. Lead with the workflow pain.',
+    );
+  });
+
+  it('returns null when no preferred heading is present (full-body fallback)', () => {
+    expect(
+      extractCopySection('Just plain copy.\nNo headings here.', DRAFT_COPY_HEADINGS),
+    ).toBeNull();
+    expect(
+      extractCopySection('# Title only\n\nBody under a non-copy heading.', FINAL_COPY_HEADINGS),
+    ).toBeNull();
+  });
+
+  it('respects priority order, not document order', () => {
+    const body = ['## Post', 'Early rough post text.', '', '## Final Draft', 'Polished copy.'].join(
+      '\n',
+    );
+    // `## Post` appears first, but DRAFT priority prefers `## Final Draft`.
+    expect(extractCopySection(body, DRAFT_COPY_HEADINGS)).toBe('Polished copy.');
+  });
+
+  it('keeps deeper subheadings but stops at a higher-level heading', () => {
+    const body = [
+      '## Copy',
+      'Main copy line.',
+      '',
+      '### Variant',
+      'A sub-variant still part of the copy.',
+      '',
+      '# Appendix',
+      'Outside — a higher-level heading ends the section.',
+    ].join('\n');
+    expect(extractCopySection(body, ['Copy'])).toBe(
+      ['Main copy line.', '', '### Variant', 'A sub-variant still part of the copy.'].join('\n'),
+    );
+  });
+
+  it('ignores headings inside fenced code blocks', () => {
+    const body = [
+      '## Post',
+      'Real copy.',
+      '',
+      '```',
+      '## Not a heading inside code',
+      '```',
+      'Still real copy.',
+    ].join('\n');
+    expect(extractCopySection(body, ['Post'])).toBe(
+      ['Real copy.', '', '```', '## Not a heading inside code', '```', 'Still real copy.'].join(
+        '\n',
+      ),
+    );
+  });
+});
+
 describe('diffDraftFinal', () => {
   it('counts words on the body only and collects unique segments', () => {
     const draft =
@@ -89,6 +181,73 @@ describe('diffDraftFinal', () => {
     const draft = 'a. b. c. d.';
     const diff = diffDraftFinal(draft, 'totally different.', 2);
     expect(diff.removed).toHaveLength(2);
+  });
+
+  it('compares only the reviewed-copy section when explicit headings exist', () => {
+    const draft = [
+      '---',
+      'type: x-draft',
+      '---',
+      '# X Draft 2026-06-01',
+      'Status: draft',
+      'Chosen lane: compliance',
+      '',
+      '## Final Draft',
+      '',
+      'Eigenoid makes you compliant today.',
+      '',
+      '## Notes',
+      'Internal reasoning we should ignore entirely.',
+    ].join('\n');
+    const final = [
+      '---',
+      'type: x-post',
+      '---',
+      '# X Post 2026-06-02',
+      'URL: https://x.com/abc',
+      'Lane: compliance',
+      '',
+      '## Post',
+      '',
+      'Audit evidence mapped for compliance teams.',
+    ].join('\n');
+    const diff = diffDraftFinal(draft, final);
+
+    // Word counts reflect the copy sections only — not the title, metadata, or `## Notes`.
+    expect(diff.draftWords).toBe(5);
+    expect(diff.finalWords).toBe(6);
+    expect(diff.removed).toEqual(['Eigenoid makes you compliant today.']);
+    expect(diff.added).toEqual(['Audit evidence mapped for compliance teams.']);
+    // No metadata leaks into the diff.
+    expect(JSON.stringify(diff)).not.toMatch(/Status|URL|Lane|Notes|Internal reasoning/);
+  });
+
+  it('treats metadata-only changes around identical copy as nothing to learn', () => {
+    const draft = [
+      '---',
+      'type: x-draft',
+      '---',
+      'Status: draft',
+      '',
+      '## Draft',
+      '',
+      'Same copy text here.',
+    ].join('\n');
+    const final = [
+      '---',
+      'type: x-post',
+      '---',
+      'Status: posted',
+      'URL: https://x.com/z',
+      '',
+      '## Post',
+      '',
+      'Same copy text here.',
+    ].join('\n');
+    const diff = diffDraftFinal(draft, final);
+    expect(diff.removed).toEqual([]);
+    expect(diff.added).toEqual([]);
+    expect(diff.wordDelta).toBe(0);
   });
 });
 
@@ -151,6 +310,58 @@ describe('scanFeedback', () => {
     expect(finding.suggestion?.path).toBe(target.path);
     expect(finding.suggestion?.content).toContain('Existing guidance.'); // preserved
     expect(finding.suggestion?.content).toContain('### Review feedback'); // appended
+  });
+
+  it('files a lesson from the copy sections only, never the surrounding metadata', () => {
+    const wrappedDraft = {
+      path: 'social/x/drafts/launch.md',
+      content: [
+        '---',
+        'type: x-draft',
+        '---',
+        '# X Draft 2026-06-01',
+        'Status: draft',
+        'Chosen lane: compliance',
+        '',
+        '## Final Draft',
+        '',
+        'Eigenoid makes you compliant today.',
+      ].join('\n'),
+    };
+    const wrappedFinal = {
+      path: 'social/x/old-posts/launch.md',
+      content: [
+        '---',
+        'type: x-post',
+        '---',
+        '# X Post 2026-06-02',
+        'URL: https://x.com/abc',
+        'Lane: compliance',
+        '',
+        '## Post',
+        '',
+        'Audit evidence mapped for compliance teams.',
+      ].join('\n'),
+    };
+    const docs: FeedbackDocument[] = [
+      {
+        path: 'social/x/pair.md',
+        content: pairNote({
+          channel: 'x',
+          draftPath: wrappedDraft.path,
+          finalPath: wrappedFinal.path,
+        }),
+      },
+      wrappedDraft,
+      wrappedFinal,
+    ];
+    const [finding] = scanFeedback(docs);
+    expect(finding.suggestion?.action).toBe('create');
+    const content = finding.suggestion!.content;
+    expect(content).toContain('Eigenoid makes you compliant today.');
+    expect(content).toContain('Audit evidence mapped for compliance teams.');
+    // Wrapper metadata must never reach the proposed lesson.
+    expect(content).not.toMatch(/Status|URL|Lane|Chosen lane/);
   });
 
   it('stays quiet once the lesson marker is already in the target (idempotent)', () => {
