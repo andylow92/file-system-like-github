@@ -1,10 +1,13 @@
 # fsbrain — an AI-native markdown vault (MCP server + second brain)
 
-> **A local-first markdown vault you can hand to an AI agent.** Browse it like a
-> **GitHub file tree**, edit it like **Notion**, and plug it into Claude, Cursor,
-> or any **MCP** host as **24 agent tools** — semantic & hybrid search, RAG
-> context, cited answers, and a **human-in-the-loop review queue** where agents
-> propose and you decide. Plain `.md` files, runs offline, no API key required.
+> **A local-first markdown vault you can hand to an AI agent — and it gets better
+> the more you use it.** Browse it like a **GitHub file tree**, edit it like
+> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **24 agent
+> tools** — semantic & hybrid search, RAG context, and cited answers. The vault
+> **self-improves**: it learns your writing voice from your draft→final edits and
+> self-tidies broken links, orphans, and duplicates — every change lands in a
+> **human-in-the-loop review queue** where agents propose and you decide. Plain
+> `.md` files, runs offline, no API key required.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](#)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=000)](#)
@@ -337,9 +340,10 @@ PRs are welcome. If you want to contribute:
 ## Keywords (for discoverability)
 
 **AI-native:** MCP server, Model Context Protocol, AI agent tools, agent memory,
-agentic RAG, retrieval-augmented generation, semantic search, hybrid search (RRF),
-vector-ready knowledge base, Claude / Cursor / OpenClaw integration, second brain
-for LLMs, human-in-the-loop, agent proposals & audit log, cited answers.
+self-improving knowledge base, learns-from-edits feedback loop, self-healing
+maintenance, agentic RAG, retrieval-augmented generation, semantic search, hybrid
+search (RRF), vector-ready knowledge base, Claude / Cursor / OpenClaw integration,
+second brain for LLMs, human-in-the-loop, agent proposals & audit log, cited answers.
 
 **Markdown workspace:** github-like file tree, notion-style markdown editor,
 local-first markdown vault, filesystem CMS, markdown knowledge base, wikilinks &
