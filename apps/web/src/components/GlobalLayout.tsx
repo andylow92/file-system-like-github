@@ -830,7 +830,7 @@ export function GlobalLayout({
             <IconMenu />
           </button>
           <div className="brand">
-            <img src="/logo.svg" alt="NoteMD" className="brand-logo" />
+            <img src="/logo.svg" alt="fsbrain" className="brand-logo" />
           </div>
         </div>
         <nav className="breadcrumbs" aria-label="Current file">

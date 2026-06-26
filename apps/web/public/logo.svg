@@ -1,23 +1,75 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
-  <!-- Document icon -->
-  <g transform="translate(4, 4)">
-    <!-- Page body -->
-    <path d="M4 0 H52 L68 16 V76 Q68 80 64 80 H4 Q0 80 0 76 V4 Q0 0 4 0Z" fill="white" stroke="#1a2333" stroke-width="3"/>
-    <!-- Folded corner -->
-    <path d="M52 0 L52 16 L68 16" fill="#e8eaed" stroke="#1a2333" stroke-width="3" stroke-linejoin="round"/>
-    <!-- # symbol -->
-    <text x="12" y="30" font-family="monospace" font-size="16" font-weight="700" fill="#47b84b">#</text>
-    <!-- Bullet lines -->
-    <circle cx="15" cy="43" r="2.5" fill="#1a2333"/>
-    <rect x="21" y="41" width="30" height="3" rx="1.5" fill="#1a2333"/>
-    <circle cx="15" cy="53" r="2.5" fill="#1a2333"/>
-    <rect x="21" y="51" width="24" height="3" rx="1.5" fill="#1a2333"/>
-    <circle cx="15" cy="63" r="2.5" fill="#1a2333"/>
-    <rect x="21" y="61" width="27" height="3" rx="1.5" fill="#1a2333"/>
-    <!-- </> tag -->
-    <text x="10" y="78" font-family="monospace" font-size="13" font-weight="700" fill="#47b84b">&lt;/&gt;</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 150" fill="none" role="img" aria-label="fsbrain — AI-native markdown vault">
+  <!-- ============ Icon: markdown doc + folder tree + brain ============ -->
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- Folder tree spine -->
+    <path d="M44 38 H30 Q24 38 24 44 V112 Q24 118 30 118 H44" fill="none" stroke="#3a4254" stroke-width="4"/>
+    <path d="M24 70 H44" stroke="#3a4254" stroke-width="4"/>
+    <path d="M24 94 H44" stroke="#3a4254" stroke-width="4"/>
+
+    <!-- Open (yellow) folder -->
+    <path d="M8 32 h12 l4 5 h12 v16 h-28 z" fill="#f6c84e" stroke="#3a4254" stroke-width="3"/>
+    <!-- Blue folder -->
+    <path d="M18 62 h10 l3 4 h10 v13 h-23 z" fill="#aacdf2" stroke="#3a4254" stroke-width="2.5"/>
+    <!-- Blue folder -->
+    <path d="M18 86 h10 l3 4 h10 v13 h-23 z" fill="#aacdf2" stroke="#3a4254" stroke-width="2.5"/>
+    <!-- "..." box -->
+    <rect x="18" y="110" width="23" height="16" rx="2.5" fill="#eef3fa" stroke="#3a4254" stroke-width="2.5"/>
+    <circle cx="24.5" cy="118" r="1.6" fill="#3a4254"/>
+    <circle cx="29.5" cy="118" r="1.6" fill="#3a4254"/>
+    <circle cx="34.5" cy="118" r="1.6" fill="#3a4254"/>
   </g>
-  <!-- NoteMD text -->
-  <text x="88" y="50" font-family="'Inter Tight', 'Inter', system-ui, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#1a2333">Note</text>
-  <text x="183" y="50" font-family="'Inter Tight', 'Inter', system-ui, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#47b84b">MD</text>
+
+  <!-- Document page with folded corner -->
+  <g>
+    <path d="M58 16 H112 L132 36 V128 Q132 134 126 134 H58 Q52 134 52 128 V22 Q52 16 58 16 Z"
+          fill="#ffffff" stroke="#3a4254" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M112 16 V36 H132" fill="#dce7f5" stroke="#3a4254" stroke-width="4" stroke-linejoin="round"/>
+    <!-- divider rule -->
+    <path d="M70 30 V120" stroke="#3a4254" stroke-width="2.5" opacity="0.55"/>
+  </g>
+
+  <!-- Brain: left = blue circuit, right = yellow lobe -->
+  <g transform="translate(78 50)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- yellow brain lobe -->
+    <path d="M20 2 q16 -2 18 14 q8 4 4 14 q4 10 -6 14 q-2 10 -16 8 V2 Z"
+          fill="#f6c84e" fill-opacity="0.28" stroke="#f6c84e" stroke-width="3"/>
+    <!-- blue circuit traces -->
+    <g stroke="#7eb1ea" stroke-width="2.6" fill="none">
+      <path d="M20 2 V64"/>
+      <path d="M20 16 H6"/>
+      <path d="M20 30 H2 V44"/>
+      <path d="M20 46 H10"/>
+      <path d="M20 56 H6"/>
+    </g>
+    <g fill="#7eb1ea">
+      <circle cx="6" cy="16" r="3.2"/>
+      <circle cx="2" cy="30" r="3.2"/>
+      <circle cx="2" cy="44" r="3.2"/>
+      <circle cx="10" cy="46" r="3.2"/>
+      <circle cx="6" cy="56" r="3.2"/>
+    </g>
+  </g>
+
+  <!-- M↓ markdown badge -->
+  <g>
+    <rect x="90" y="104" width="42" height="26" rx="5" fill="#ffffff" stroke="#3a4254" stroke-width="3.5"/>
+    <text x="96" y="124" font-family="'Inter Tight','Inter',system-ui,sans-serif" font-size="17" font-weight="800" fill="#3a4254">M</text>
+    <path d="M120 110 V122 M115 117 L120 123 L125 117" stroke="#3a4254" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ============ Wordmark: fsbrain ============ -->
+  <g font-family="'Inter Tight','Inter',system-ui,sans-serif" font-weight="700" letter-spacing="-1.5">
+    <text x="172" y="92" font-size="78" fill="#3a4254">fs</text>
+    <text x="248" y="92" font-size="78" fill="#7eb1ea">br</text>
+    <text x="338" y="92" font-size="78" fill="#f6c84e">ain</text>
+    <!-- yellow dot on the i -->
+    <circle cx="392" cy="38" r="9" fill="#f6c84e"/>
+  </g>
+
+  <!-- Tagline -->
+  <g>
+    <line x1="176" y1="122" x2="196" y2="122" stroke="#aacdf2" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="204" y="127" font-family="'Inter','system-ui',sans-serif" font-size="18" font-weight="500" letter-spacing="0.2" fill="#5b6675">AI-native markdown vault</text>
+    <line x1="476" y1="122" x2="496" y2="122" stroke="#aacdf2" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
 </svg>
