@@ -520,10 +520,20 @@ curl -N "http://localhost:3001/api/events"
 Lets agents suggest changes a human approves before they touch the vault.
 
 - `POST /api/proposals` — create a proposal. Body: `{ action: "create"|"update"|"delete",
-path, content?, baseEtag?, note? }`. `content` is required for create/update;
-  `baseEtag` (from a prior read) makes a stale `update` fail on approval. The
-  proposer is the `X-Actor` header. Returns the `EditProposal` (status `pending`).
+path, content?, baseEtag?, note?, category? }`. `content` is required for create/update;
+  `baseEtag` (from a prior read) makes a stale `update` fail on approval; the optional
+  `category` is a grouping key for review-queue stats (see below). The proposer is the
+  `X-Actor` header. Returns the `EditProposal` (status `pending`).
 - `GET /api/proposals?status=pending|approved|rejected` — list proposals (newest first).
+- `GET /api/proposals/stats` — **review-queue learning**: returns
+  `{ categories, recommendations }`. `categories` is the per-category approve/reject
+  tally (`{ category, approved, rejected, pending, resolved, total, approvalRate }`,
+  grouped by each proposal's `category` or, when absent, `actor:action`).
+  `recommendations` are bounded threshold nudges derived from those rates (today: the
+  dream-cycle duplicate-detection cosine, which `/api/maintenance/scan` adopts on its
+  own once enough proposals are resolved). Read-only — it files and resolves nothing.
+  Pure helper: `@repo/shared` `proposalStats.ts` (`summarizeOutcomes`,
+  `recommendThreshold`).
 - `POST /api/proposals/resolve` — body `{ id, decision: "approve"|"reject" }`. Approving
   applies the edit (recorded in the audit log as the **proposing** actor) and marks the
   proposal `approved`; rejecting discards it. Both destructive actions (`update`,
@@ -570,7 +580,14 @@ note }` that maps 1:1 onto a proposal.
   nothing.
 - `POST /api/maintenance/scan` — files each finding's suggestion as a proposal
   (attributed to the `agent:maintenance` actor) and returns
-  `{ findings, proposalsFiled }`. **Idempotent**: a suggestion whose
+  `{ findings, proposalsFiled, tuning? }`. **Self-tuning**: before scanning it
+  reads the review queue's `maintenance:duplicate` approve/reject history (via
+  `proposalStats.ts`) and nudges the duplicate-detection threshold — raising it
+  when the human keeps rejecting cross-links (fewer, more confident matches),
+  lowering it when they keep approving. Below the sample floor it uses the
+  default; the applied nudge (if any) is echoed back as `tuning`. The human
+  stays the gate — only the propensity to propose changes. **Idempotent**: a
+  suggestion whose
   `action`+`path` already matches a still-relevant proposal — `pending` (awaiting
   review) or `rejected` (the human already declined it) — is skipped, so
   re-running never spams the Review queue and never re-surfaces a rejected fix. An

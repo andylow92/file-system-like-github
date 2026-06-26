@@ -30,6 +30,7 @@ import type {
   AuditEntry,
   Backlink,
   BlockAnchor,
+  CategoryStat,
   ContextBundle,
   EditProposal,
   FeedbackFinding,
@@ -42,6 +43,7 @@ import type {
   SearchMatch,
   SemanticHit,
   SkillSummary,
+  ThresholdRecommendation,
 } from '@repo/shared';
 
 // Empty string also counts as "not set" — that's what the fresh-clone e2e test
@@ -651,6 +653,23 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
       const query = params.toString();
       return apiRequest<EditProposal[]>(`/api/proposals${query ? `?${query}` : ''}`);
     }),
+  );
+
+  register(
+    'proposal_stats',
+    'Review-queue learning: per-category approve/reject tallies for the edit ' +
+      'proposals the human has resolved, plus any bounded threshold nudges the ' +
+      "scans derive from them. Use it to learn the human's taste before filing " +
+      'a kind of proposal they routinely reject — categories like ' +
+      '`maintenance:duplicate` or `feedback:x` with a low `approvalRate` mean ' +
+      'back off or raise your bar; a high rate means keep going. Read-only: it ' +
+      'files and resolves nothing. Returns { categories, recommendations }.',
+    {},
+    tool(async () =>
+      apiRequest<{ categories: CategoryStat[]; recommendations: ThresholdRecommendation[] }>(
+        '/api/proposals/stats',
+      ),
+    ),
   );
 
   register(

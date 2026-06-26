@@ -142,13 +142,13 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   It is built from the same link extraction as backlinks, served from the cached
   index, and excludes `.fsbrain/`. The pure builder lives in `@repo/shared`
   (`graph.ts`); the renderer (`apps/web` `KnowledgeGraph`) is lazy-loaded.
-- **MCP server** (`apps/mcp`) — a stdio server exposing 24 vault tools
+- **MCP server** (`apps/mcp`) — a stdio server exposing 25 vault tools
   (`list_notes`, `read_note`, `read_block`, `get_block_anchors`,
   `create_note`, `update_note`, `patch_note`, `search_notes`,
   `semantic_search`, `hybrid_search`, `get_context`, `think`, `get_backlinks`,
   `get_graph`, `recent_activity`, `recent_questions`, `create_folder`,
-  `move_path`, `delete_path`, `propose_edit`, `list_proposals`, `list_skills`,
-  `run_maintenance`, `run_feedback`). It runs
+  `move_path`, `delete_path`, `propose_edit`, `list_proposals`, `proposal_stats`,
+  `list_skills`, `run_maintenance`, `run_feedback`). It runs
   the storage API **in-process** by default, so it is a single
   self-contained command an MCP host (OpenClaw, Claude Desktop, Claude
   Code, Cursor) can spawn — `npm run start:agent` from the repo root, or

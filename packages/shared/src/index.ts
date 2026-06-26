@@ -127,6 +127,13 @@ export interface EditProposal {
   actor: string;
   action: ProposalAction;
   path: string;
+  /**
+   * Optional grouping key for review-queue learning, set by the filer (e.g.
+   * `maintenance:duplicate`, `feedback:x`). When absent (older proposals,
+   * ad-hoc `propose_edit`s) the proposal-stats helper falls back to
+   * `actor:action`, so the field is purely additive and back-compatible.
+   */
+  category?: string;
   /** Proposed content for `create` / `update`. */
   content?: string;
   /** Etag the proposal was based on (used to detect a stale `update`). */
@@ -149,6 +156,7 @@ export * from './maintenance.js';
 export * from './markdown.js';
 export * from './noteId.js';
 export * from './patch.js';
+export * from './proposalStats.js';
 export * from './questions.js';
 export * from './retrievalEval.js';
 export * from './search.js';

@@ -37,18 +37,26 @@ human-audited playbooks. Pairs naturally with backlog #19 (schema packs) —
 
 ## 2. Learn from the review queue
 
-Proposals record approve/reject outcomes, but nothing ever reads that signal.
-Mine it:
+✅ **Done.** Proposals recorded approve/reject outcomes, but nothing read that
+signal back; now a pure helper mines it.
 
-- Track approval rates per proposal category (broken-link stubs, duplicate
-  cross-links, future skill notes).
-- Auto-tune the dream cycle: if duplicate-detection proposals keep getting
-  rejected, raise the cosine-similarity threshold; if they're always
-  approved, get more aggressive.
+- Each filed proposal carries a `category` (`maintenance:<kind>`,
+  `feedback:<channel>`; ad-hoc proposals fall back to `actor:action`), and
+  `@repo/shared` `proposalStats.ts` (`summarizeOutcomes`, `recommendThreshold`)
+  tallies per-category approval rates.
+- `GET /api/proposals/stats` + the `proposal_stats` MCP tool return
+  `{ categories, recommendations }`; the tool description nudges the agent to
+  back off categories the human routinely rejects.
+- Auto-tunes the dream cycle: `runMaintenanceScan` reads the
+  `maintenance:duplicate` history and nudges the cosine threshold — up when
+  cross-links keep getting rejected, down when they're always approved —
+  guarded by a resolved-sample floor so a fresh vault uses the default.
+  Resolution stays human-only; only the propensity to propose tunes. Tests:
+  `apps/api` `__tests__/proposalStats.test.ts` (pure) +
+  `routes/proposalStats.test.ts` (endpoint + adoption).
 
-The proposal store is a labeled training set we already collect and discard.
-A deterministic, offline tuner fits the repo's "no LLM, pure helpers"
-constraint.
+The proposal store is a labeled training set we already collect; a
+deterministic, offline tuner fits the repo's "no LLM, pure helpers" constraint.
 
 ## 3. Question log → gap-driven growth
 
@@ -114,5 +122,5 @@ and makes the dream cycle feel genuinely alive.
 **CI → eval harness (#20) → skill notes (#1) → question log (#3) →
 review-queue tuning (#2).** Every self-improvement mechanism lands on top of
 a safety net, and each reuses the proposal/audit/think plumbing — no new
-subsystems. _CI, the eval harness, skill notes (#1), and the question log
-(#3) have shipped; review-queue tuning (#2) is next._
+subsystems. _CI, the eval harness, skill notes (#1), the question log (#3),
+and review-queue tuning (#2) have all shipped._

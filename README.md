@@ -6,7 +6,7 @@
 
 > **A local-first markdown vault you can hand to an AI agent — and it gets better
 > the more you use it.** Browse it like a **GitHub file tree**, edit it like
-> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **24 agent
+> **Notion**, and plug it into Claude, Cursor, or any **MCP** host as **25 agent
 > tools** — semantic & hybrid search, RAG context, and cited answers. The vault
 > **self-improves**: it learns your writing voice from your draft→final edits and
 > self-tidies broken links, orphans, and duplicates — every change lands in a
@@ -75,7 +75,7 @@ in your notes goes through a **review queue you approve**.
   can't fully answer, so you know what's missing.
 - **🔌 Plug in any AI agent (MCP).** A built-in
   [MCP](https://modelcontextprotocol.io) server hands the whole vault to agents
-  like Claude, Cursor, or OpenClaw as **24 tools** (read, search, patch,
+  like Claude, Cursor, or OpenClaw as **25 tools** (read, search, patch,
   propose…). **Every agent write is logged** to an audit trail, and edits land as
   **proposals you approve** — the agent suggests, only you commit.
 - **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
@@ -129,7 +129,7 @@ apps/api (Node HTTP server)
    └─ Search (text/semantic/hybrid), backlinks, graph, think, audit, proposals
 
 apps/mcp (MCP stdio server)
-   ├─ Exposes the vault to AI agents as 24 tools
+   ├─ Exposes the vault to AI agents as 25 tools
    └─ Embeds the API in-process — one self-contained command for an MCP host
 
 packages/shared
@@ -202,10 +202,10 @@ npm run start:agent      # launches the self-contained fsbrain-mcp on stdio
 ```
 
 `fsbrain-mcp` embeds the storage API in-process and auto-creates the vault
-at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 24
+at `~/.fsbrain/vault` (override with `CONTENT_ROOT=...`). It exposes 25
 vault tools (`list_notes`, `read_note`, `create_note`, `patch_note`,
 `semantic_search`, `hybrid_search`, `think`, `get_graph`, `propose_edit`,
-`run_maintenance`, `list_skills`, `run_feedback`, …) and records every agent write to
+`run_maintenance`, `list_skills`, `run_feedback`, `proposal_stats`, …) and records every agent write to
 `<vault>/.fsbrain/audit.jsonl` so you can always see what the agent did.
 
 **Copy-paste config snippets** for OpenClaw / Claude Desktop / Claude Code
@@ -264,6 +264,7 @@ CONTENT_ROOT=/absolute/path/to/vault PORT=3001 npm run dev:api
 
 - `GET /api/audit`
 - `GET /api/proposals` · `POST /api/proposals` · `POST /api/proposals/resolve` (human-only)
+- `GET /api/proposals/stats` (review-queue approval rates + threshold nudges)
 - `GET /api/maintenance` · `POST /api/maintenance/scan`
 - `GET /api/feedback` · `POST /api/feedback/scan`
 

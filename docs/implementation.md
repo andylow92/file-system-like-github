@@ -28,7 +28,7 @@ _Last updated: 2026-06-12 (outreach feedback loop → review proposals)_
 > create/update/missing/no-change/already-learned, multi-channel ordering) and
 > `routes/feedback.test.ts` (endpoint: preview vs file, attribution, idempotent
 > re-scan, x/linkedin/email); the MCP smoke + fresh-clone tests assert the
-> 24-tool surface.
+> 25-tool surface.
 
 > **Latest change.** The vault now keeps a **question log** — it learns what it
 > gets asked but cannot answer (the second self-improvement loop from
@@ -278,7 +278,7 @@ apps/web (React + Vite)          apps/api (Node HTTP)             packages/share
                                    index/ (VaultIndex: cached chunks+IDF,            (buildSemanticIndex,
                                            EventBus-invalidated, lazy rebuild)        queryRankedChunks)
 
-apps/mcp (MCP stdio server, 24 tools) — exposes the vault to agents: list/read/
+apps/mcp (MCP stdio server, 25 tools) — exposes the vault to agents: list/read/
   create/update/patch/search/semantic_search/hybrid_search/get_context/think/
   backlinks/get_graph/recent_activity/move/delete plus read_block,
   get_block_anchors, propose_edit + list_proposals + run_maintenance +
@@ -336,7 +336,7 @@ Key facts an agent must know:
 | Block anchors (`^id`) + stable note ids     |   ✅   | `blocks.ts`, `noteId.ts`, `/api/block[-anchors]`                                 |
 | Typed wikilinks (`[[T\|rel:supports]]`)     |   ✅   | `markdown.ts`, `Backlink.type`                                                   |
 | Visual knowledge graph (Graph tab + API)    |   ✅   | `graph.ts`, `GET /api/graph`, `get_graph`, `GraphView`/`KnowledgeGraph`          |
-| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (24 tools) — writes as `agent:mcp`                                    |
+| **MCP server** (agent tools)                |   ✅   | `apps/mcp` (25 tools) — writes as `agent:mcp`                                    |
 | Self-contained MCP launch (embedded API)    |   ✅   | `npm run start:agent` → bin `fsbrain-mcp`, see CONNECT.md                        |
 | Fresh-clone e2e MCP test (in `npm test`)    |   ✅   | `apps/mcp/src/__tests__/freshClone.test.ts`                                      |
 | Live layer (SSE + file watcher)             |   ✅   | `events/` EventBus + `fs.watch`, `GET /api/events`, `useVaultEvents`             |
@@ -347,6 +347,7 @@ Key facts an agent must know:
 | CI (test + lint + build + format on PRs)    |   ✅   | `.github/workflows/ci.yml` — mirrors the local quality gate                      |
 | Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals         |
 | Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`      |
+| Review-queue learning (self-tuning)         |   ✅   | `proposalStats.ts`, `GET /api/proposals/stats`, `proposal_stats`; tunes the scan |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -648,8 +649,8 @@ into infrastructure we already have rather than adding a new subsystem.
 A broader brainstorm of follow-on **self-improvement loops** (skill notes,
 review-queue tuning, a question log, implicit relevance feedback, freshness
 scoring) lives in [`improvement-ideas.md`](improvement-ideas.md) — skill notes
-(#1) and the question log (#3) have shipped; review-queue tuning (#2) is next
-in its sequence.
+(#1), the question log (#3), and review-queue tuning (#2) have shipped;
+implicit relevance feedback (#4) and freshness scoring (#5) remain.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 non-markdown attachments, editor ergonomics (palette/outline/daily

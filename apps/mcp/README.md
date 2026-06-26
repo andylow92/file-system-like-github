@@ -35,6 +35,7 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 | `delete_path`       | Delete a note or folder.                                                        |
 | `propose_edit`      | Propose a create/update/delete for human review.                                |
 | `list_proposals`    | List proposals + review status (resolve is human).                              |
+| `proposal_stats`    | Per-category approve/reject rates + threshold nudges (review-queue learning).   |
 | `list_skills`       | List skill notes (`type: skill`) — reusable procedural playbooks.               |
 | `run_maintenance`   | Run the dream-cycle scan; file broken-link/orphan/duplicate fixes as proposals. |
 | `run_feedback`      | Learn from reviewed draft→final outreach pairs; file lessons as proposals.      |
@@ -61,7 +62,7 @@ npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
 The server prints a one-line readiness banner on stderr:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=24 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=25 · actor=agent:mcp
 ```
 
 For active development with auto-reload:
@@ -102,7 +103,7 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 `src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
 against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
-It asserts `tools/list` returns all 24 expected names, round-trips
+It asserts `tools/list` returns all 25 expected names, round-trips
 `create_note` → `read_note` → `search_notes` → `semantic_search` →
 `hybrid_search` → `think` → `propose_edit` → `list_proposals` → `recent_activity`
 → `run_maintenance`, and confirms the write landed both on disk and in
