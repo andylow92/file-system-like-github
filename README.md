@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/web/public/logo.svg" alt="fsbrain — AI-native markdown vault" width="520" />
+</p>
+
 # fsbrain — an AI-native markdown vault (MCP server + second brain)
 
 > **A local-first markdown vault you can hand to an AI agent — and it gets better
