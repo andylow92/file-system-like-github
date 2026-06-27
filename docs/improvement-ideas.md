@@ -95,10 +95,23 @@ have a regression measure before it's allowed to adjust itself.
 
 ## 5. Freshness / decay scoring
 
-Track last-modified vs. how often a note is retrieved. "Stale but
-load-bearing" notes (old, heavily cited) are the highest-risk content —
-surface them as a maintenance finding ("review this?"). Cheap, deterministic,
-and makes the dream cycle feel genuinely alive.
+✅ **Done.** "Stale but load-bearing" notes — old **and** heavily cited — are
+the highest-risk content, so the dream-cycle scan now surfaces them as a
+`stale` maintenance finding ("is this still accurate?").
+
+- "Load-bearing" is proxied by **inbound `[[wikilink]]` count** (the signal
+  `scanVault` already computes); "last-modified" comes from each note's
+  **file mtime**. Reads aren't logged, so retrieval frequency isn't available —
+  inbound-citation count is the honest, fully-deterministic stand-in.
+- Added as a new `MaintenanceKind` in `@repo/shared` `maintenance.ts`, **opt-in**
+  via `scanVault`'s `now` + `modifiedAt` options (so every pre-existing caller is
+  unchanged); the API route derives `modifiedAt` from `fs.stat` mtimes. Defaults:
+  flag a note with ≥ 3 inbound links unchanged for > 90 days. **Report-only** (no
+  safe auto-edit), shown in the web Maintenance panel and the `run_maintenance`
+  tool output. Tests: `apps/api` `__tests__/maintenance.test.ts` (pure freshness
+  cases) + `routes/maintenance.test.ts` (mtime-aged via `utimes`).
+
+Cheap, deterministic, and makes the dream cycle feel genuinely alive.
 
 ---
 

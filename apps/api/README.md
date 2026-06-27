@@ -571,6 +571,13 @@ above. It runs fully offline (no model, no API key) over the cached `VaultIndex`
 - `duplicate` — a pair of notes whose note-level TF-IDF cosine is ≥ a threshold.
   Suggestion (conservative): an `update` proposal appending a
   `> See also [[other]]` cross-link — never a merge.
+- `stale` — a **load-bearing** note (≥ 3 inbound `[[wikilinks]]`, i.e. heavily
+  cited) whose file mtime is older than 90 days: old + relied-upon is the
+  highest-risk content, surfaced for an "is this still accurate?" review.
+  Report-only (no suggestion). The server feeds `scanVault` a `now` reference
+  and per-note mtimes (`modifiedAt`); a note with no readable mtime is never
+  flagged. (Reads aren't logged, so inbound-citation count is the deterministic
+  stand-in for "how often retrieved".)
 
 Each finding is `{ kind, paths, detail, score?, suggestion? }`, where
 `suggestion` (when present) is a safe, reversible `{ action, path, content?,

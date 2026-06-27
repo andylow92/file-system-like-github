@@ -1468,6 +1468,29 @@ async function currentNoteEtag(
 }
 
 /**
+ * Build a `logical path → last-modified ISO` map from each note's mtime, used to
+ * feed the maintenance scan's freshness ("stale but load-bearing") detection.
+ * A path that can't be stat'd is simply omitted, so it is never flagged stale.
+ */
+async function buildModifiedMap(
+  pathResolver: PathResolver,
+  paths: readonly string[],
+): Promise<Record<string, string>> {
+  const modifiedAt: Record<string, string> = {};
+  for (const logicalPath of paths) {
+    try {
+      const stat = await fs.stat(pathResolver.resolveMarkdownPath(logicalPath));
+      if (stat.isFile()) {
+        modifiedAt[logicalPath] = stat.mtime.toISOString();
+      }
+    } catch {
+      // Unreadable/missing — leave it out; the scan won't judge its freshness.
+    }
+  }
+  return modifiedAt;
+}
+
+/**
  * Run the dream-cycle maintenance scan over the cached corpus and file each
  * actionable finding's suggestion as an edit proposal (attributed to
  * `agent:maintenance`) for human review in the Review tab. Resolution stays
@@ -1513,7 +1536,18 @@ export async function runMaintenanceScan(deps: {
     duplicateThreshold = tuning?.recommended ?? DEFAULT_DUPLICATE_THRESHOLD;
   }
 
-  const findings = scanVault(documents, { ...deps.options, duplicateThreshold });
+  // Per-note mtimes drive freshness ("stale but load-bearing") detection.
+  const modifiedAt = await buildModifiedMap(
+    deps.pathResolver,
+    documents.map((doc) => doc.path),
+  );
+
+  const findings = scanVault(documents, {
+    now: new Date().toISOString(),
+    modifiedAt,
+    ...deps.options,
+    duplicateThreshold,
+  });
 
   // Block re-filing against pending + rejected proposals. Approved ones aren't
   // blocked: the fix already landed, so the finding resolves on its own (a
@@ -1563,9 +1597,17 @@ export async function runMaintenanceScan(deps: {
 }
 
 /** GET /api/maintenance — a dry preview: scan the cached corpus, file nothing. */
-async function handleMaintenancePreview({ res, vaultIndex }: RequestContext): Promise<void> {
+async function handleMaintenancePreview({
+  res,
+  vaultIndex,
+  pathResolver,
+}: RequestContext): Promise<void> {
   const documents = await vaultIndex.getDocuments();
-  const findings = scanVault(documents);
+  const modifiedAt = await buildModifiedMap(
+    pathResolver,
+    documents.map((doc) => doc.path),
+  );
+  const findings = scanVault(documents, { now: new Date().toISOString(), modifiedAt });
   sendJson<{ findings: MaintenanceFinding[] }>(res, 200, { success: true, data: { findings } });
 }
 

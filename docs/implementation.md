@@ -348,6 +348,7 @@ Key facts an agent must know:
 | Skill notes (procedural memory)             |   ✅   | `skills.ts`, `GET /api/skills`, `list_skills` tool; writes via proposals         |
 | Question log (demand-driven gaps)           |   ✅   | `questions.ts`, `questions.jsonl`, `GET /api/questions`, `recent_questions`      |
 | Review-queue learning (self-tuning)         |   ✅   | `proposalStats.ts`, `GET /api/proposals/stats`, `proposal_stats`; tunes the scan |
+| Freshness scoring (stale + load-bearing)    |   ✅   | `maintenance.ts` `stale` kind (mtime + inbound links) → report-only finding      |
 
 Legend: ✅ done · 🚧 in progress · ⬜ not started
 
@@ -649,8 +650,8 @@ into infrastructure we already have rather than adding a new subsystem.
 A broader brainstorm of follow-on **self-improvement loops** (skill notes,
 review-queue tuning, a question log, implicit relevance feedback, freshness
 scoring) lives in [`improvement-ideas.md`](improvement-ideas.md) — skill notes
-(#1), the question log (#3), and review-queue tuning (#2) have shipped;
-implicit relevance feedback (#4) and freshness scoring (#5) remain.
+(#1), the question log (#3), review-queue tuning (#2), and freshness scoring
+(#5) have shipped; implicit relevance feedback (#4) remains.
 
 Deferred (not a priority for the local/agent focus): authn/z + per-agent scopes,
 non-markdown attachments, editor ergonomics (palette/outline/daily

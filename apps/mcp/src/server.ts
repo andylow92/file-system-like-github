@@ -699,7 +699,9 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
   register(
     'run_maintenance',
     'Run the dream-cycle vault maintenance scan: detect near-duplicate notes, ' +
-      'broken [[wikilinks]], and orphan notes, and file each actionable finding ' +
+      'broken [[wikilinks]], orphan notes, and stale-but-load-bearing notes ' +
+      '(heavily linked but unchanged for a long time — flagged for an ' +
+      '"is this still accurate?" review), and file each actionable finding ' +
       'as an edit proposal for human review (actor `agent:maintenance`). ' +
       'Idempotent — re-running will not re-file an already-open proposal, so it ' +
       'is safe to call repeatedly. Resolution stays human-only in the Review ' +

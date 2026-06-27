@@ -1,7 +1,7 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, utimes } from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditProposal, MaintenanceFinding } from '@repo/shared';
@@ -158,6 +158,29 @@ describe('maintenance — scan → review proposals', () => {
     expect(proposalsFiled[0].action).toBe('update');
     expect(proposalsFiled[0].path).toBe('dupA.md');
     expect(proposalsFiled[0].content).toContain('> See also [[dupB]]');
+  });
+
+  it('flags a load-bearing note as stale once its mtime is old enough (report-only)', async () => {
+    // core.md is cited by three distinct notes → load-bearing (3 inbound).
+    await seed('core.md', '# Core\nFoundational reference. See [[alpha]].');
+    await seed('alpha.md', '# Alpha\nApplies the [[core]] idea to onboarding.');
+    await seed('beta.md', '# Beta\nExtends [[core]] for reporting workflows.');
+    await seed('gamma.md', '# Gamma\nUses [[core]] in the billing path.');
+
+    // Fresh seed → not stale yet.
+    const before = await api<ScanResult>('POST', '/api/maintenance/scan');
+    expect(before.body.data!.findings.some((f) => f.kind === 'stale')).toBe(false);
+
+    // Backdate core.md's mtime ~200 days into the past.
+    const old = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+    await utimes(path.join(contentRoot, 'core.md'), old, old);
+
+    const after = await api<ScanResult>('POST', '/api/maintenance/scan');
+    const stale = after.body.data!.findings.filter((f) => f.kind === 'stale');
+    expect(stale).toHaveLength(1);
+    expect(stale[0].paths).toEqual(['core.md']);
+    // Report-only: a stale finding never files a proposal.
+    expect(after.body.data!.proposalsFiled.some((p) => p.path === 'core.md')).toBe(false);
   });
 
   it('stamps a duplicate update with baseEtag so a stale approval is rejected', async () => {
