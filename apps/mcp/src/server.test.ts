@@ -75,6 +75,7 @@ describe('mcp server (self-contained)', () => {
           'list_skills',
           'move_path',
           'patch_note',
+          'proposal_stats',
           'propose_edit',
           'read_block',
           'read_note',

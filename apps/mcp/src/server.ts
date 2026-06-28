@@ -30,6 +30,7 @@ import type {
   AuditEntry,
   Backlink,
   BlockAnchor,
+  CategoryStat,
   ContextBundle,
   EditProposal,
   FeedbackFinding,
@@ -42,6 +43,7 @@ import type {
   SearchMatch,
   SemanticHit,
   SkillSummary,
+  ThresholdRecommendation,
 } from '@repo/shared';
 
 // Empty string also counts as "not set" — that's what the fresh-clone e2e test
@@ -654,6 +656,23 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
   );
 
   register(
+    'proposal_stats',
+    'Review-queue learning: per-category approve/reject tallies for the edit ' +
+      'proposals the human has resolved, plus any bounded threshold nudges the ' +
+      "scans derive from them. Use it to learn the human's taste before filing " +
+      'a kind of proposal they routinely reject — categories like ' +
+      '`maintenance:duplicate` or `feedback:x` with a low `approvalRate` mean ' +
+      'back off or raise your bar; a high rate means keep going. Read-only: it ' +
+      'files and resolves nothing. Returns { categories, recommendations }.',
+    {},
+    tool(async () =>
+      apiRequest<{ categories: CategoryStat[]; recommendations: ThresholdRecommendation[] }>(
+        '/api/proposals/stats',
+      ),
+    ),
+  );
+
+  register(
     'list_skills',
     "List the vault's **skill notes** — reusable procedural playbooks (notes " +
       'with frontmatter `type: skill`) describing how to perform a task: the ' +
@@ -680,7 +699,9 @@ function registerTools(server: McpServer, apiRequest: ReturnType<typeof createAp
   register(
     'run_maintenance',
     'Run the dream-cycle vault maintenance scan: detect near-duplicate notes, ' +
-      'broken [[wikilinks]], and orphan notes, and file each actionable finding ' +
+      'broken [[wikilinks]], orphan notes, and stale-but-load-bearing notes ' +
+      '(heavily linked but unchanged for a long time — flagged for an ' +
+      '"is this still accurate?" review), and file each actionable finding ' +
       'as an edit proposal for human review (actor `agent:maintenance`). ' +
       'Idempotent — re-running will not re-file an already-open proposal, so it ' +
       'is safe to call repeatedly. Resolution stays human-only in the Review ' +

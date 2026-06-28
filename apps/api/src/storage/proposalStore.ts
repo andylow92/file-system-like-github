@@ -14,6 +14,8 @@ export interface CreateProposalInput {
   actor: string;
   action: ProposalAction;
   path: string;
+  /** Optional grouping key for review-queue stats (e.g. `maintenance:duplicate`). */
+  category?: string;
   content?: string;
   baseEtag?: string;
   note?: string;
@@ -60,6 +62,7 @@ export function createProposalStore(rootPath: string): ProposalStore {
       action: input.action,
       path: input.path,
       status: 'pending',
+      ...(input.category ? { category: input.category } : {}),
       ...(input.content !== undefined ? { content: input.content } : {}),
       ...(input.baseEtag ? { baseEtag: input.baseEtag } : {}),
       ...(input.note ? { note: input.note } : {}),

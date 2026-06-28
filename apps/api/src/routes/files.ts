@@ -10,6 +10,7 @@ import type {
   AuditEntry,
   Backlink,
   BlockAnchor,
+  CategoryStat,
   ContextCandidate,
   EditProposal,
   FeedbackFinding,
@@ -19,6 +20,7 @@ import type {
   PatchOp,
   ProposalAction,
   RankedChunk,
+  ThresholdRecommendation,
   ScanFeedbackOptions,
   ScanVaultOptions,
   SearchMatch,
@@ -41,12 +43,15 @@ import {
   findNoteId,
   findTextMatch,
   listSkills,
+  DEFAULT_DUPLICATE_THRESHOLD,
   parseFrontmatter,
   parseNote,
   reciprocalRankFusion,
+  recommendThreshold,
   resolveWikilink,
   scanFeedback,
   scanVault,
+  summarizeOutcomes,
 } from '@repo/shared';
 
 import type { EventBus } from '../events/eventBus.js';
@@ -1227,6 +1232,7 @@ async function handleCreateProposal(context: RequestContext): Promise<void> {
   const content = requireOptionalString(body.content, 'content');
   const baseEtag = requireOptionalString(body.baseEtag, 'baseEtag');
   const note = requireOptionalString(body.note, 'note');
+  const category = requireOptionalString(body.category, 'category');
 
   if ((action === 'create' || action === 'update') && content === undefined) {
     throw new Error('"content" is required for create and update proposals');
@@ -1236,6 +1242,7 @@ async function handleCreateProposal(context: RequestContext): Promise<void> {
     actor,
     action,
     path: logicalPath,
+    category,
     content,
     baseEtag,
     note,
@@ -1252,6 +1259,31 @@ async function handleListProposals({ res, url, proposalStore }: RequestContext):
       : undefined;
   const proposals = await proposalStore.list({ status });
   sendJson(res, 200, { success: true, data: proposals });
+}
+
+export interface ProposalStatsResult {
+  /** Per-category approve/reject tallies, most-resolved first. */
+  categories: CategoryStat[];
+  /** Bounded threshold nudges the scans should adopt (empty when no signal). */
+  recommendations: ThresholdRecommendation[];
+}
+
+/**
+ * GET /api/proposals/stats — review-queue learning. Tally the proposal store's
+ * approve/reject outcomes per category and derive any bounded threshold nudges
+ * (today: the dream-cycle duplicate-detection cosine, which the maintenance
+ * scan adopts on its own). Read-only — it files nothing and resolves nothing.
+ */
+async function handleProposalStats({ res, proposalStore }: RequestContext): Promise<void> {
+  const proposals = await proposalStore.list();
+  const categories = summarizeOutcomes(proposals);
+  const duplicate = categories.find((stat) => stat.category === 'maintenance:duplicate');
+  const dupRec = duplicate ? recommendThreshold(duplicate, DEFAULT_DUPLICATE_THRESHOLD) : null;
+  const recommendations = dupRec ? [dupRec] : [];
+  sendJson<ProposalStatsResult>(res, 200, {
+    success: true,
+    data: { categories, recommendations },
+  });
 }
 
 /** Apply an approved proposal to the vault, recording it as the proposer's edit. */
@@ -1389,6 +1421,12 @@ const MAINTENANCE_ACTOR = 'agent:maintenance';
 export interface MaintenanceScanResult {
   findings: MaintenanceFinding[];
   proposalsFiled: EditProposal[];
+  /**
+   * The duplicate-threshold nudge applied this run, derived from the review
+   * queue's approve/reject history. Absent when there isn't enough resolved
+   * signal to tune (the scan used the default threshold).
+   */
+  tuning?: ThresholdRecommendation;
 }
 
 /** Broadcast a `proposal_created` event for a maintenance-filed proposal. */
@@ -1430,6 +1468,29 @@ async function currentNoteEtag(
 }
 
 /**
+ * Build a `logical path → last-modified ISO` map from each note's mtime, used to
+ * feed the maintenance scan's freshness ("stale but load-bearing") detection.
+ * A path that can't be stat'd is simply omitted, so it is never flagged stale.
+ */
+async function buildModifiedMap(
+  pathResolver: PathResolver,
+  paths: readonly string[],
+): Promise<Record<string, string>> {
+  const modifiedAt: Record<string, string> = {};
+  for (const logicalPath of paths) {
+    try {
+      const stat = await fs.stat(pathResolver.resolveMarkdownPath(logicalPath));
+      if (stat.isFile()) {
+        modifiedAt[logicalPath] = stat.mtime.toISOString();
+      }
+    } catch {
+      // Unreadable/missing — leave it out; the scan won't judge its freshness.
+    }
+  }
+  return modifiedAt;
+}
+
+/**
  * Run the dream-cycle maintenance scan over the cached corpus and file each
  * actionable finding's suggestion as an edit proposal (attributed to
  * `agent:maintenance`) for human review in the Review tab. Resolution stays
@@ -1454,13 +1515,44 @@ export async function runMaintenanceScan(deps: {
   options?: ScanVaultOptions;
 }): Promise<MaintenanceScanResult> {
   const documents = await deps.vaultIndex.getDocuments();
-  const findings = scanVault(documents, deps.options);
+
+  // Read the proposal store once — it drives both the re-file guard below and
+  // the review-queue threshold tuning here.
+  const existing = await deps.proposalStore.list();
+
+  // Auto-tune the duplicate-detection threshold from past review outcomes,
+  // unless the caller pinned one explicitly. If the human keeps rejecting
+  // duplicate cross-links the bar rises (fewer, more confident matches); if
+  // they keep approving it falls. Below the sample floor `recommendThreshold`
+  // returns null, so a fresh vault simply uses the default. Resolution stays
+  // human-only — this only changes how many duplicates are surfaced.
+  let duplicateThreshold = deps.options?.duplicateThreshold;
+  let tuning: ThresholdRecommendation | null = null;
+  if (duplicateThreshold === undefined) {
+    const dupStat = summarizeOutcomes(existing).find(
+      (stat) => stat.category === 'maintenance:duplicate',
+    );
+    tuning = dupStat ? recommendThreshold(dupStat, DEFAULT_DUPLICATE_THRESHOLD) : null;
+    duplicateThreshold = tuning?.recommended ?? DEFAULT_DUPLICATE_THRESHOLD;
+  }
+
+  // Per-note mtimes drive freshness ("stale but load-bearing") detection.
+  const modifiedAt = await buildModifiedMap(
+    deps.pathResolver,
+    documents.map((doc) => doc.path),
+  );
+
+  const findings = scanVault(documents, {
+    now: new Date().toISOString(),
+    modifiedAt,
+    ...deps.options,
+    duplicateThreshold,
+  });
 
   // Block re-filing against pending + rejected proposals. Approved ones aren't
   // blocked: the fix already landed, so the finding resolves on its own (a
   // created stub now exists; an approved cross-link makes the pair already
   // linked, so `scanVault` reports it without a suggestion).
-  const existing = await deps.proposalStore.list();
   const blockedKeys = new Set(
     existing
       .filter((proposal) => proposal.status === 'pending' || proposal.status === 'rejected')
@@ -1492,6 +1584,7 @@ export async function runMaintenanceScan(deps: {
       actor: MAINTENANCE_ACTOR,
       action: suggestion.action,
       path: suggestion.path,
+      category: `maintenance:${finding.kind}`,
       ...(suggestion.content !== undefined ? { content: suggestion.content } : {}),
       ...(baseEtag ? { baseEtag } : {}),
       note: suggestion.note,
@@ -1500,13 +1593,21 @@ export async function runMaintenanceScan(deps: {
     proposalsFiled.push(proposal);
   }
 
-  return { findings, proposalsFiled };
+  return { findings, proposalsFiled, ...(tuning ? { tuning } : {}) };
 }
 
 /** GET /api/maintenance — a dry preview: scan the cached corpus, file nothing. */
-async function handleMaintenancePreview({ res, vaultIndex }: RequestContext): Promise<void> {
+async function handleMaintenancePreview({
+  res,
+  vaultIndex,
+  pathResolver,
+}: RequestContext): Promise<void> {
   const documents = await vaultIndex.getDocuments();
-  const findings = scanVault(documents);
+  const modifiedAt = await buildModifiedMap(
+    pathResolver,
+    documents.map((doc) => doc.path),
+  );
+  const findings = scanVault(documents, { now: new Date().toISOString(), modifiedAt });
   sendJson<{ findings: MaintenanceFinding[] }>(res, 200, { success: true, data: { findings } });
 }
 
@@ -1598,6 +1699,7 @@ export async function runFeedbackScan(deps: {
       actor: FEEDBACK_ACTOR,
       action: suggestion.action,
       path: suggestion.path,
+      category: `feedback:${finding.channel}`,
       content: suggestion.content,
       ...(baseEtag ? { baseEtag } : {}),
       note: suggestion.note,
@@ -1744,6 +1846,11 @@ export async function handleFileRoutes(
 
   if (req.method === 'POST' && url.pathname === '/api/feedback/scan') {
     await executeHandler(context, handleFeedbackScan);
+    return { handled: true };
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/proposals/stats') {
+    await executeHandler(context, handleProposalStats);
     return { handled: true };
   }
 

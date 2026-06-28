@@ -12,32 +12,33 @@ feed and the audit log at `<CONTENT_ROOT>/.fsbrain/audit.jsonl`.
 
 ## Tools
 
-| Tool                | Description                                                                     |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `list_notes`        | List all note paths (optionally under a subtree).                               |
-| `read_note`         | Read a note by path or stable id (returns content + etag + `id`).               |
-| `read_block`        | Read a single `^block-id` block + surrounding context.                          |
-| `get_block_anchors` | List every `^block-id` anchor in a note.                                        |
-| `create_note`       | Create a new note.                                                              |
-| `update_note`       | Overwrite a note (pass `etag` for safe writes).                                 |
-| `patch_note`        | append/prepend/replace_section/replace_block/ensure_id, etag + dry-run.         |
-| `search_notes`      | Full-text and/or tag search.                                                    |
-| `semantic_search`   | Relevance-ranked retrieval (TF-IDF) for RAG.                                    |
-| `hybrid_search`     | Fuses keyword + semantic ranking via Reciprocal Rank Fusion.                    |
-| `get_context`       | Token-budgeted RAG context bundle (matches + focus-note neighbors).             |
-| `think`             | Cited answer kit (citations + passages) + offline gap analysis.                 |
-| `get_backlinks`     | Notes linking to a note via `[[wikilinks]]` (includes `rel:` type).             |
-| `get_graph`         | Whole vault wikilink graph (`nodes`/`edges`) for traversal.                     |
-| `recent_activity`   | Read the provenance/audit trail.                                                |
-| `recent_questions`  | Question log + recurring knowledge gaps (what the vault can't answer yet).      |
-| `create_folder`     | Create a folder.                                                                |
-| `move_path`         | Move/rename a note or folder.                                                   |
-| `delete_path`       | Delete a note or folder.                                                        |
-| `propose_edit`      | Propose a create/update/delete for human review.                                |
-| `list_proposals`    | List proposals + review status (resolve is human).                              |
-| `list_skills`       | List skill notes (`type: skill`) — reusable procedural playbooks.               |
-| `run_maintenance`   | Run the dream-cycle scan; file broken-link/orphan/duplicate fixes as proposals. |
-| `run_feedback`      | Learn from reviewed draft→final outreach pairs; file lessons as proposals.      |
+| Tool                | Description                                                                   |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `list_notes`        | List all note paths (optionally under a subtree).                             |
+| `read_note`         | Read a note by path or stable id (returns content + etag + `id`).             |
+| `read_block`        | Read a single `^block-id` block + surrounding context.                        |
+| `get_block_anchors` | List every `^block-id` anchor in a note.                                      |
+| `create_note`       | Create a new note.                                                            |
+| `update_note`       | Overwrite a note (pass `etag` for safe writes).                               |
+| `patch_note`        | append/prepend/replace_section/replace_block/ensure_id, etag + dry-run.       |
+| `search_notes`      | Full-text and/or tag search.                                                  |
+| `semantic_search`   | Relevance-ranked retrieval (TF-IDF) for RAG.                                  |
+| `hybrid_search`     | Fuses keyword + semantic ranking via Reciprocal Rank Fusion.                  |
+| `get_context`       | Token-budgeted RAG context bundle (matches + focus-note neighbors).           |
+| `think`             | Cited answer kit (citations + passages) + offline gap analysis.               |
+| `get_backlinks`     | Notes linking to a note via `[[wikilinks]]` (includes `rel:` type).           |
+| `get_graph`         | Whole vault wikilink graph (`nodes`/`edges`) for traversal.                   |
+| `recent_activity`   | Read the provenance/audit trail.                                              |
+| `recent_questions`  | Question log + recurring knowledge gaps (what the vault can't answer yet).    |
+| `create_folder`     | Create a folder.                                                              |
+| `move_path`         | Move/rename a note or folder.                                                 |
+| `delete_path`       | Delete a note or folder.                                                      |
+| `propose_edit`      | Propose a create/update/delete for human review.                              |
+| `list_proposals`    | List proposals + review status (resolve is human).                            |
+| `proposal_stats`    | Per-category approve/reject rates + threshold nudges (review-queue learning). |
+| `list_skills`       | List skill notes (`type: skill`) — reusable procedural playbooks.             |
+| `run_maintenance`   | Dream-cycle scan: broken-link/orphan/duplicate fixes + stale-note flags.      |
+| `run_feedback`      | Learn from reviewed draft→final outreach pairs; file lessons as proposals.    |
 
 `update_note` and `move_path` reject stale writes via the API's optimistic
 concurrency check. There is **no** `resolve` tool: edit-proposal resolution is
@@ -61,7 +62,7 @@ npm run start:agent        # from the repo root — runs `fsbrain-mcp` on stdio
 The server prints a one-line readiness banner on stderr:
 
 ```
-fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=24 · actor=agent:mcp
+fsbrain-mcp ready · mode=embedded · vault=/home/me/.fsbrain/vault · tools=25 · actor=agent:mcp
 ```
 
 For active development with auto-reload:
@@ -102,7 +103,7 @@ Copy-paste config snippets for OpenClaw / Claude Desktop / Claude Code / Cursor:
 
 `src/__tests__/freshClone.test.ts` spawns the server as a real stdio child
 against a temp `CONTENT_ROOT` and drives it via the official MCP SDK client.
-It asserts `tools/list` returns all 24 expected names, round-trips
+It asserts `tools/list` returns all 25 expected names, round-trips
 `create_note` → `read_note` → `search_notes` → `semantic_search` →
 `hybrid_search` → `think` → `propose_edit` → `list_proposals` → `recent_activity`
 → `run_maintenance`, and confirms the write landed both on disk and in

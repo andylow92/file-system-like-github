@@ -112,6 +112,65 @@ describe('scanVault — duplicate', () => {
   });
 });
 
+describe('scanVault — stale (freshness)', () => {
+  // Three distinct notes all cite `core.md` → it is load-bearing (3 inbound).
+  const corpus = [
+    doc('core.md', '# Core\nFoundational reference. See [[alpha]].'),
+    doc('alpha.md', '# Alpha\nApplies the [[core]] idea to onboarding.'),
+    doc('beta.md', '# Beta\nExtends [[core]] for reporting workflows.'),
+    doc('gamma.md', '# Gamma\nUses [[core]] in the billing path.'),
+  ];
+  const NOW = '2026-06-27T00:00:00.000Z';
+
+  it('flags a load-bearing note that has not changed in a long time (report-only)', () => {
+    const stale = scanVault(corpus, {
+      now: NOW,
+      modifiedAt: {
+        'core.md': '2026-01-01T00:00:00.000Z', // ~177 days old
+        'alpha.md': NOW,
+        'beta.md': NOW,
+        'gamma.md': NOW,
+      },
+    }).filter((f) => f.kind === 'stale');
+
+    expect(stale).toHaveLength(1);
+    expect(stale[0].paths).toEqual(['core.md']);
+    expect(stale[0].suggestion).toBeUndefined(); // no safe auto-edit
+    expect(stale[0].detail).toContain('3 inbound');
+  });
+
+  it('is opt-in: no `now` → no stale findings (back-compatible)', () => {
+    const findings = scanVault(corpus, {
+      modifiedAt: { 'core.md': '2020-01-01T00:00:00.000Z' },
+    });
+    expect(findings.some((f) => f.kind === 'stale')).toBe(false);
+  });
+
+  it('does not flag a recently-changed load-bearing note', () => {
+    const stale = scanVault(corpus, {
+      now: NOW,
+      modifiedAt: { 'core.md': '2026-06-01T00:00:00.000Z' }, // 26 days < 90
+    }).filter((f) => f.kind === 'stale');
+    expect(stale).toHaveLength(0);
+  });
+
+  it('skips a load-bearing note whose last-modified time is unknown', () => {
+    const stale = scanVault(corpus, { now: NOW, modifiedAt: {} }).filter((f) => f.kind === 'stale');
+    expect(stale).toHaveLength(0);
+  });
+
+  it('honors custom loadBearingMinInbound and staleAfterDays thresholds', () => {
+    // alpha has 1 inbound (from core). Lower the bar to 1 and the age to 10 days.
+    const stale = scanVault(corpus, {
+      now: NOW,
+      modifiedAt: { 'alpha.md': '2026-06-01T00:00:00.000Z' }, // 26 days
+      loadBearingMinInbound: 1,
+      staleAfterDays: 10,
+    }).filter((f) => f.kind === 'stale');
+    expect(stale.map((f) => f.paths[0])).toEqual(['alpha.md']);
+  });
+});
+
 describe('scanVault — clean vault, determinism, and empty corpus', () => {
   it('returns no findings for a healthy, connected vault', () => {
     const findings = scanVault([

@@ -37,18 +37,26 @@ human-audited playbooks. Pairs naturally with backlog #19 (schema packs) —
 
 ## 2. Learn from the review queue
 
-Proposals record approve/reject outcomes, but nothing ever reads that signal.
-Mine it:
+✅ **Done.** Proposals recorded approve/reject outcomes, but nothing read that
+signal back; now a pure helper mines it.
 
-- Track approval rates per proposal category (broken-link stubs, duplicate
-  cross-links, future skill notes).
-- Auto-tune the dream cycle: if duplicate-detection proposals keep getting
-  rejected, raise the cosine-similarity threshold; if they're always
-  approved, get more aggressive.
+- Each filed proposal carries a `category` (`maintenance:<kind>`,
+  `feedback:<channel>`; ad-hoc proposals fall back to `actor:action`), and
+  `@repo/shared` `proposalStats.ts` (`summarizeOutcomes`, `recommendThreshold`)
+  tallies per-category approval rates.
+- `GET /api/proposals/stats` + the `proposal_stats` MCP tool return
+  `{ categories, recommendations }`; the tool description nudges the agent to
+  back off categories the human routinely rejects.
+- Auto-tunes the dream cycle: `runMaintenanceScan` reads the
+  `maintenance:duplicate` history and nudges the cosine threshold — up when
+  cross-links keep getting rejected, down when they're always approved —
+  guarded by a resolved-sample floor so a fresh vault uses the default.
+  Resolution stays human-only; only the propensity to propose tunes. Tests:
+  `apps/api` `__tests__/proposalStats.test.ts` (pure) +
+  `routes/proposalStats.test.ts` (endpoint + adoption).
 
-The proposal store is a labeled training set we already collect and discard.
-A deterministic, offline tuner fits the repo's "no LLM, pure helpers"
-constraint.
+The proposal store is a labeled training set we already collect; a
+deterministic, offline tuner fits the repo's "no LLM, pure helpers" constraint.
 
 ## 3. Question log → gap-driven growth
 
@@ -87,10 +95,23 @@ have a regression measure before it's allowed to adjust itself.
 
 ## 5. Freshness / decay scoring
 
-Track last-modified vs. how often a note is retrieved. "Stale but
-load-bearing" notes (old, heavily cited) are the highest-risk content —
-surface them as a maintenance finding ("review this?"). Cheap, deterministic,
-and makes the dream cycle feel genuinely alive.
+✅ **Done.** "Stale but load-bearing" notes — old **and** heavily cited — are
+the highest-risk content, so the dream-cycle scan now surfaces them as a
+`stale` maintenance finding ("is this still accurate?").
+
+- "Load-bearing" is proxied by **inbound `[[wikilink]]` count** (the signal
+  `scanVault` already computes); "last-modified" comes from each note's
+  **file mtime**. Reads aren't logged, so retrieval frequency isn't available —
+  inbound-citation count is the honest, fully-deterministic stand-in.
+- Added as a new `MaintenanceKind` in `@repo/shared` `maintenance.ts`, **opt-in**
+  via `scanVault`'s `now` + `modifiedAt` options (so every pre-existing caller is
+  unchanged); the API route derives `modifiedAt` from `fs.stat` mtimes. Defaults:
+  flag a note with ≥ 3 inbound links unchanged for > 90 days. **Report-only** (no
+  safe auto-edit), shown in the web Maintenance panel and the `run_maintenance`
+  tool output. Tests: `apps/api` `__tests__/maintenance.test.ts` (pure freshness
+  cases) + `routes/maintenance.test.ts` (mtime-aged via `utimes`).
+
+Cheap, deterministic, and makes the dream cycle feel genuinely alive.
 
 ---
 
@@ -114,5 +135,5 @@ and makes the dream cycle feel genuinely alive.
 **CI → eval harness (#20) → skill notes (#1) → question log (#3) →
 review-queue tuning (#2).** Every self-improvement mechanism lands on top of
 a safety net, and each reuses the proposal/audit/think plumbing — no new
-subsystems. _CI, the eval harness, skill notes (#1), and the question log
-(#3) have shipped; review-queue tuning (#2) is next._
+subsystems. _CI, the eval harness, skill notes (#1), the question log (#3),
+and review-queue tuning (#2) have all shipped._
