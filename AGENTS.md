@@ -63,6 +63,7 @@ the in-process API. Pick the tool that matches your intent:
 | Delete a note or folder                                | `delete_path`       | `DELETE /api/path`           |
 | Propose a create/update/delete for human review        | `propose_edit`      | `POST /api/proposals`        |
 | List proposals + their status                          | `list_proposals`    | `GET /api/proposals`         |
+| Review-queue approval rates + threshold nudges         | `proposal_stats`    | `GET /api/proposals/stats`   |
 | List skill notes (procedural playbooks)                | `list_skills`       | `GET /api/skills`            |
 | Run the dream-cycle maintenance scan                   | `run_maintenance`   | `POST /api/maintenance/scan` |
 | Learn from reviewed draft→final outreach pairs         | `run_feedback`      | `POST /api/feedback/scan`    |
@@ -116,6 +117,14 @@ Done and on `main`-track (details + status tables in `docs/implementation.md`):
   `agent:` resolver (403). This is convention-level (X-Actor is unauthenticated);
   airtight enforcement would need authn/z, intentionally out of scope for this
   local, single-user tool.
+- **Review-queue learning** — every filed proposal carries a `category`
+  (`maintenance:<kind>`, `feedback:<channel>`; ad-hoc ones fall back to
+  `actor:action`). `proposal_stats` (`GET /api/proposals/stats`) tallies
+  per-category approve/reject rates so an agent can learn the human's taste —
+  back off categories that keep getting rejected. The pure helper
+  (`@repo/shared` `proposalStats.ts`) also derives bounded threshold nudges the
+  dream-cycle scan adopts on its own (see below). Resolution stays human-only;
+  only the propensity to propose tunes.
 - **Granular agent writes** — `PATCH /api/file` (or the `patch_note` MCP
   tool) applies `append`, `prepend`, `replace_section`, `replace_block`, or
   `ensure_id` ops without rewriting the whole note. It reuses the `etag`
@@ -203,16 +212,21 @@ tools=… · actor=…`) so a host log immediately shows whether the spawn
   adds a synthesized prose `answer`.
 - **Dream-cycle maintenance** — a deterministic, offline scan
   (`@repo/shared` `maintenance.ts`, `scanVault`) finds vault-hygiene problems —
-  **broken `[[wikilinks]]`**, **orphan notes**, and **near-duplicate notes**
-  (note-level TF-IDF cosine) — and files each actionable one as an **edit
-  proposal** the human approves in the Review tab (reusing the `ProposalStore` +
-  `EventBus`). `GET /api/maintenance` previews; `POST /api/maintenance/scan` (and
-  the `run_maintenance` MCP tool) files suggestions as a distinct
-  `agent:maintenance` actor and is **idempotent** — it dedupes against pending
-  _and_ rejected proposals, so re-running never spams the queue or re-surfaces a
-  declined fix. On-demand by default (optional `MAINTENANCE_INTERVAL_MS` timer).
-  Resolution stays human-only; contradiction
-  detection is a deferred follow-up (it needs an LLM, out of the offline scope).
+  **broken `[[wikilinks]]`**, **orphan notes**, **near-duplicate notes**
+  (note-level TF-IDF cosine), and **stale-but-load-bearing notes** (heavily
+  linked yet unchanged for > 90 days — report-only, "is this still accurate?";
+  the route feeds `scanVault` per-note mtimes + a `now` reference) — and files
+  each actionable one as an **edit proposal** the human approves in the Review
+  tab (reusing the `ProposalStore` + `EventBus`). `GET /api/maintenance`
+  previews; `POST /api/maintenance/scan` (and the `run_maintenance` MCP tool)
+  files suggestions as a distinct `agent:maintenance` actor and is
+  **idempotent** — it dedupes against pending _and_ rejected proposals, so
+  re-running never spams the queue or re-surfaces a declined fix. The
+  duplicate-detection threshold **self-tunes** from the review queue's
+  `maintenance:duplicate` approve/reject history (see "Review-queue learning").
+  On-demand by default (optional `MAINTENANCE_INTERVAL_MS` timer). Resolution
+  stays human-only; contradiction detection is a deferred follow-up (it needs an
+  LLM, out of the offline scope).
 - **Retrieval eval harness** — a golden `query → expected-note` fixture
   (`apps/api/src/__tests__/fixtures/retrievalCorpus.ts`) is run against the
   real `/api/search`, `/api/semantic-search`, and `/api/hybrid-search` stacks

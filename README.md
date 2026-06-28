@@ -79,8 +79,11 @@ in your notes goes through a **review queue you approve**.
   propose…). **Every agent write is logged** to an audit trail, and edits land as
   **proposals you approve** — the agent suggests, only you commit.
 - **🧹 Self-tidying vault (maintenance).** A "dream-cycle" scan finds **broken
-  links, orphaned notes, and near-duplicates** and files each fix as a proposal.
-  Re-running is safe — it never spams your review queue.
+  links, orphaned notes, near-duplicates, and stale-but-load-bearing notes**
+  (heavily linked yet long unchanged — "is this still accurate?") and files each
+  fix as a proposal. Re-running is safe — it never spams your review queue, and
+  it **learns your taste**: the duplicate-detection bar self-tunes from which
+  proposals you approve vs. reject.
 - **🪄 NEW — Learns from your edits (feedback loop).** When an agent drafts
   outreach — an **X post, LinkedIn message, or email** — and you rewrite it
   before sending, that edit is valuable signal. A scan compares the **draft vs.

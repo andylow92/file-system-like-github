@@ -5,7 +5,29 @@
 > Keep it accurate: update the status tables when you finish a unit of work.
 > Routed from [`AGENTS.md`](../AGENTS.md).
 
-_Last updated: 2026-06-12 (outreach feedback loop → review proposals)_
+_Last updated: 2026-06-28 (review-queue learning + freshness scoring)_
+
+> **Latest change.** Two more self-improvement loops from
+> [`improvement-ideas.md`](improvement-ideas.md) (#2, #5), both pure/offline/
+> deterministic and human-gated. **(1) Review-queue learning.** Every filed
+> proposal now carries a `category` (`maintenance:<kind>`, `feedback:<channel>`;
+> ad-hoc ones fall back to `actor:action`). A pure helper in `@repo/shared`
+> (`proposalStats.ts` — `summarizeOutcomes`, `recommendThreshold`) tallies
+> per-category approve/reject rates and derives **bounded, sample-floor-guarded**
+> threshold nudges. `GET /api/proposals/stats` + the `proposal_stats` MCP tool
+> (25th) return `{ categories, recommendations }`; `runMaintenanceScan`
+> **self-tunes** its duplicate-detection cosine from the `maintenance:duplicate`
+> history (raise when rejected, lower when approved), echoed as `tuning`.
+> **(2) Freshness scoring.** `scanVault` gains a `stale` finding — a load-bearing
+> note (≥ 3 inbound `[[wikilinks]]`) unchanged for > 90 days, surfaced report-only
+> for an "is this still accurate?" review. Opt-in via new `now` + `modifiedAt`
+> options (the API derives mtimes via `fs.stat`); omit `now` and every prior
+> caller is unchanged. Reads aren't logged, so inbound-citation count is the
+> deterministic stand-in for retrieval frequency. Resolution stays human-only
+> throughout. Covered by `apps/api` `__tests__/proposalStats.test.ts` and
+> `routes/proposalStats.test.ts`, plus freshness cases in
+> `__tests__/maintenance.test.ts` and an `utimes`-aged case in
+> `routes/maintenance.test.ts`.
 
 > **Latest change.** The vault now runs an **outreach feedback loop** — it learns
 > from human review of its own drafts. A note with frontmatter `type: feedback`
@@ -580,13 +602,16 @@ into infrastructure we already have rather than adding a new subsystem.
     brain gives the answer," with built-in gap analysis._
 17. **Dream-cycle maintenance → proposals.** ✅ **Done.** A scan
     (`@repo/shared` `maintenance.ts` — `scanVault`) flags **broken
-    `[[wikilinks]]`**, **orphan notes**, and **near-duplicate notes** (note-level
-    TF-IDF cosine ≥ threshold), then files each actionable one as a **proposal** a
+    `[[wikilinks]]`**, **orphan notes**, **near-duplicate notes** (note-level
+    TF-IDF cosine ≥ threshold), and **stale-but-load-bearing notes** (added later
+    as freshness scoring #5 — heavily linked yet unchanged for > 90 days,
+    report-only), then files each actionable one as a **proposal** a
     human approves in the Review tab — reusing the `ProposalStore` + `EventBus`,
     no new subsystem. Each finding carries a safe, reversible suggestion that maps
     1:1 onto a proposal (broken link → `create` a stub; duplicate → `update`
-    appending a `> See also [[other]]` cross-link, never a merge; orphan is
-    report-only). `GET /api/maintenance` previews (files nothing);
+    appending a `> See also [[other]]` cross-link, never a merge; orphan and
+    stale are report-only). The duplicate threshold **self-tunes** from the
+    review queue's approve/reject history (review-queue learning #2). `GET /api/maintenance` previews (files nothing);
     `POST /api/maintenance/scan` + the `run_maintenance` MCP tool file each
     suggestion as `agent:maintenance`, **deduped against pending + rejected
     proposals** so re-runs are idempotent and never re-surface a declined fix; an
