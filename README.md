@@ -2,6 +2,11 @@
   <img src="apps/web/public/logo.svg" alt="fsbrain — AI-native markdown vault" width="520" />
 </p>
 
+<p align="center">
+  <strong>Own the context. Rent the memory.</strong><br />
+  <em>Your notes stay plain <code>.md</code> files you own — bring any AI model and swap it whenever you like.</em>
+</p>
+
 # fsbrain — an AI-native markdown vault (MCP server + second brain)
 
 > **A local-first markdown vault you can hand to an AI agent — and it gets better
